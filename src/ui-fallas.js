@@ -79,6 +79,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const [inicio, setInicio] = useState(aLocal(ini.inicio || Date.now()));
   const [eta, setEta] = useState(ini.eta ? 'custom' : 'sin');
   const [etaCustom, setEtaCustom] = useState(ini.eta ? aLocal(ini.eta) : aLocal(Date.now() + 2 * U.HORA));
+  const [numero, setNumero] = useState(ini.numero || '');
   const [referencia, setReferencia] = useState(ini.referencia || '');
   const [detalle, setDetalle] = useState(ini.detalle || '');
   const [sug, setSug] = useState([]);
@@ -171,6 +172,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   }
 
   const etaTs = eta === 'sin' ? null : eta === 'custom' ? deLocal(etaCustom) : Date.now() + Number(eta) * U.MIN;
+  const numeroLimpio = numero.trim().toUpperCase().replace(/\s+/g, '');
   const motivoOk = motivo && (motivo !== 'OTRO' || (motivoTexto.trim() && clienteTexto.trim()));
   const listo = nodos.length > 0 && motivoOk;
   const borrador = {
@@ -191,6 +193,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
     if (motivo !== edicion.motivo) d.push('cambió el motivo');
     if ((etaTs || null) !== (edicion.eta || null)) d.push('cambió la hora estimada');
     if (aLocal(edicion.inicio) !== inicio) d.push('cambió la hora de inicio');
+    if (numeroLimpio !== (edicion.numero || '')) d.push(numeroLimpio ? 'número de falla ' + numeroLimpio : 'quitó el número de falla');
     if (referencia !== (edicion.referencia || '') || detalle !== (edicion.detalle || '')) d.push('actualizó notas');
     const t = d.join(', ');
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Sin cambios';
@@ -199,7 +202,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   async function guardar() {
     setGuardando(true);
     try {
-      const datos = { nodos, motivo, motivoTexto: motivo === 'OTRO' ? motivoTexto.trim() : '', clienteTexto: motivo === 'OTRO' ? clienteTexto.trim() : '', referencia: referencia.trim(), detalle: detalle.trim(), inicio: deLocal(inicio) || Date.now(), eta: etaTs };
+      const datos = { nodos, motivo, motivoTexto: motivo === 'OTRO' ? motivoTexto.trim() : '', clienteTexto: motivo === 'OTRO' ? clienteTexto.trim() : '', numero: numeroLimpio, referencia: referencia.trim(), detalle: detalle.trim(), inicio: deLocal(inicio) || Date.now(), eta: etaTs };
       let f;
       if (edicion) f = await A.editarFalla(edicion.id, datos, cambiosDetalle());
       else f = await A.publicarFalla(datos);
@@ -270,10 +273,11 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       </div>
 
       <div class="paso">
-        <div class="paso-cab"><span class="paso-num">4</span><div><h3>Referencia y notas internas</h3><p>Solo las ve Workforce HN.</p></div></div>
+        <div class="paso-cab"><span class="paso-num">4</span><div><h3>Número de falla y notas internas</h3><p>Solo las ve Workforce HN.</p></div></div>
         <div class="fila-campos">
+          <label class="campo"><span>Número de falla</span><input class="input numero-falla" value=${numero} onInput=${(e) => setNumero(e.currentTarget.value)} placeholder="Ejemplo: F1254585" autocapitalize="characters" spellcheck="false" maxlength="30" /></label>
           <label class="campo"><span>Referencia del correo o ticket</span><input class="input" value=${referencia} onInput=${(e) => setReferencia(e.currentTarget.value)} placeholder="Ejemplo: Correo NOC #9114" /></label>
-          <label class="campo"><span>Notas</span><input class="input" value=${detalle} onInput=${(e) => setDetalle(e.currentTarget.value)} placeholder="Ejemplo: ENEE reporta corte en el circuito" /></label>
+          <label class="campo" style="grid-column:1 / -1"><span>Notas</span><input class="input" value=${detalle} onInput=${(e) => setDetalle(e.currentTarget.value)} placeholder="Ejemplo: ENEE reporta corte en el circuito" /></label>
         </div>
       </div>
     </div>
@@ -383,6 +387,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     </div>
     <${BarraTec} hfc=${imp.hfc} gpon=${imp.gpon} leyenda=${true} />
     <dl class="meta">
+      ${f.numero && html`<dt>N.º de falla</dt><dd class="fuerte numero-falla">${f.numero}</dd>`}
       <dt>Inicio</dt><dd>${U.cuandoCorto(f.inicio, now)}</dd>
       ${activa && html`<dt>Estimada</dt><dd>${f.eta ? U.cuandoCorto(f.eta, now) + (f.eta < now ? ' (ya pasó)' : '') : 'Sin hora'}</dd>`}
       <dt>Publicó</dt><dd>${f.publicadaPor.nombre}, ${U.cuandoCorto(f.publicadaEn, now)}</dd>
@@ -446,11 +451,11 @@ function Historial() {
   const lista = s.fallas.filter((f) => f.publicadaEn >= desde
     && (!mot || f.motivo === mot)
     && (!tec || (tec === 'HFC' ? (f.impacto.hfc >= f.impacto.gpon) : (f.impacto.gpon > f.impacto.hfc)))
-    && (!q || f.id.includes(q) || f.nodos.some((n) => n.includes(q)) || f.publicadaPor.nombre.toUpperCase().includes(q)))
+    && (!q || f.id.includes(q) || (f.numero || '').includes(q.replace(/\s+/g, '')) || f.nodos.some((n) => n.includes(q)) || f.publicadaPor.nombre.toUpperCase().includes(q)))
     .sort((a, b) => b.publicadaEn - a.publicadaEn);
   function exportar() {
-    U.descargarCsv('fallas-alertas.csv', [['ID', 'Estado', 'Motivo', 'Nodos', 'Clientes', 'HFC', 'GPON', 'Inicio', 'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Duración (h)', 'Referencia']].concat(
-      lista.map((f) => [f.id, f.estado === 'ACTIVA' ? 'Activa' : 'Resuelta', nombreMotivo(f), f.nodos.join(' '), f.impacto.total, f.impacto.hfc, f.impacto.gpon,
+    U.descargarCsv('fallas-alertas.csv', [['ID', 'Número de falla', 'Estado', 'Motivo', 'Nodos', 'Clientes', 'HFC', 'GPON', 'Inicio', 'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Duración (h)', 'Referencia']].concat(
+      lista.map((f) => [f.id, f.numero || '', f.estado === 'ACTIVA' ? 'Activa' : 'Resuelta', nombreMotivo(f), f.nodos.join(' '), f.impacto.total, f.impacto.hfc, f.impacto.gpon,
         new Date(f.inicio).toLocaleString('es-HN'), new Date(f.publicadaEn).toLocaleString('es-HN'), f.publicadaPor.nombre,
         f.cerradaEn ? new Date(f.cerradaEn).toLocaleString('es-HN') : '', f.cerradaPor ? f.cerradaPor.nombre : '',
         U.n1(U.horas((f.cerradaEn || s.now) - f.inicio)), f.referencia || ''])));
@@ -458,7 +463,7 @@ function Historial() {
   return html`<div class="panel">
     <div class="panel-cuerpo">
       <div class="filtros">
-        <input class="input" style="min-width:220px" placeholder="Buscar nodo, ID o persona" value=${txt} onInput=${(e) => setTxt(e.currentTarget.value)} aria-label="Buscar" />
+        <input class="input" style="min-width:260px" placeholder="Buscar nodo, ID, número de falla o persona" value=${txt} onInput=${(e) => setTxt(e.currentTarget.value)} aria-label="Buscar" />
         <select class="select" value=${per} onChange=${(e) => setPer(e.currentTarget.value)} aria-label="Periodo">
           <option value="7">Últimos 7 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option><option value="todo">Todo</option>
         </select>
@@ -475,7 +480,7 @@ function Historial() {
         <table class="tabla">
           <thead><tr><th>ID</th><th>Motivo</th><th>Nodos</th><th class="der">Clientes</th><th>Tecnología</th><th>Inicio</th><th class="der">Duración</th><th>Publicó</th><th>Cerró</th><th></th></tr></thead>
           <tbody>${lista.slice(0, 300).map((f) => html`<tr key=${f.id}>
-            <td class="num fuerte">${f.id}</td>
+            <td class="num fuerte">${f.id}${f.numero && html`<small class="numero-falla">${f.numero}</small>`}</td>
             <td>${cortoMotivo(f)}</td>
             <td class="codigo" style="max-width:220px">${U.listaNatural(f.nodos, 3)}</td>
             <td class="der">${U.n(f.impacto.total)}</td>

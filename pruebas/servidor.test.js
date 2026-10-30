@@ -181,19 +181,33 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const nodosPrueba = Model.ejemplos(Model.cargarCatalogo(catJson));
   r = g.post({ accion: 'falla', token: tTienda, datos: { op: 'publicar', falla: { nodos: nodosPrueba, motivo: 'FIBRA' } } });
   ok(!r.ok && r.codigo === 'PERMISO', 'Tiendas no puede publicar fallas');
-  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: nodosPrueba.concat(['NOEXISTE99']), motivo: 'FIBRA', eta: Date.now() + 4 * 3600000, referencia: 'Correo NOC #9150' } } });
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: nodosPrueba.concat(['NOEXISTE99']), motivo: 'FIBRA', eta: Date.now() + 4 * 3600000,
+    numero: ' f 1254585 ', referencia: 'Correo NOC #9150', detalle: 'ENEE reporta corte en el circuito' } } });
   const imp = Model.impacto(Model.cargarCatalogo(catJson), nodosPrueba);
   ok(r.ok && r.datos.falla.impacto.total === imp.total && r.datos.falla.impacto.hfc === imp.hfc && r.datos.falla.nodos.length === nodosPrueba.length,
     `publica la falla con ${imp.total} clientes (HFC ${imp.hfc}, GPON ${imp.gpon}) e ignora nodos inexistentes`, r.datos && r.datos.falla && r.datos.falla.impacto);
   const f1 = r.datos.falla;
   ok(/^F-\d{6}-01$/.test(f1.id), 'ID de falla con fecha de Honduras: ' + f1.id);
+  ok(f1.numero === 'F1254585', 'guarda el número de falla en mayúsculas y sin espacios: ' + f1.numero);
+  const hFallas = g.E.activo.getSheetByName('Fallas');
+  ok(hFallas.getRange(1, 20).getValue() === 'Número de falla' && hFallas.getRange(2, 20).getValue() === 'F1254585', 'la hoja Fallas tiene la columna Número de falla');
+  r = g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } });
+  ok(r.ok && r.datos.fallas.find((f) => f.id === f1.id).numero === 'F1254585', 'Workforce ve el número de falla');
+  const paraAsesor = JSON.stringify(g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: -1 } }).datos.fallas);
+  const paraTienda = JSON.stringify(g.post({ accion: 'cargar', token: tTienda, datos: { baseVersion: -1 } }).datos.fallas);
+  ok(paraAsesor.includes(f1.id) && ['F1254585', 'NOC #9150', 'ENEE reporta', 'historial', '@claro.com.hn'].every((x) => !paraAsesor.includes(x) && !paraTienda.includes(x)) && paraAsesor.includes('Ana López'),
+    'Concentrix y Tiendas no reciben el número de falla, la referencia, las notas internas ni correos (sí quién publicó)', paraAsesor.slice(0, 300));
   r = g.post({ accion: 'estado', token: tAgente });
   ok(r.ok && r.datos.cambio && r.datos.cambio.tipo === 'FALLA_PUBLICADA' && r.datos.cambio.por.nombre === 'Ana López', 'estado avisa el cambio y quién lo hizo', r.datos);
   const cli = enNodo(nodosPrueba[0]);
   r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });
   ok(r.ok && r.datos.fallas.some((f) => f.id === f1.id), 'la búsqueda trae la falla del nodo del cliente');
+  ok(!JSON.stringify(r.datos).includes('F1254585') && !JSON.stringify(r.datos).includes('NOC #9150'), 'y tampoco trae el número de falla ni la referencia');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'editar', id: f1.id, falla: { nodos: nodosPrueba.slice(0, 2), eta: null }, detalle: 'Quitó ' + nodosPrueba[2] } });
   ok(r.ok && r.datos.falla.nodos.length === 2 && r.datos.falla.eta === null && r.datos.falla.historial.length === 2, 'editar quita un nodo y la hora estimada', r.datos && r.datos.falla);
+  ok(r.ok && r.datos.falla.numero === 'F1254585', 'editar sin tocar el número lo conserva');
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'editar', id: f1.id, falla: { numero: 'F1254590' }, detalle: 'Número de falla F1254590' } });
+  ok(r.ok && r.datos.falla.numero === 'F1254590' && hFallas.getRange(2, 20).getValue() === 'F1254590', 'cambiar el número de falla');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id, nota: 'Empalme terminado' } });
   ok(r.ok && r.datos.falla.estado === 'CERRADA' && r.datos.falla.cerradaPor.nombre === 'Ana López', 'cerrar la falla');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id } });
@@ -568,6 +582,19 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = stats2(hoyHN + 34 * DIA, false);
   ok(hc2.getSheetByName('Consultas').getLastRow() - 1 === 10 && r.ok && r.datos.consultas === 30, 'con el tope de filas, deja solo las más recientes y el resumen conserva el total', [hc2.getSheetByName('Consultas').getLastRow() - 1, r.datos && r.datos.consultas]);
   g2.E.ahora = null;
+
+  /* ---------- Hoja Fallas de antes del número de falla ---------- */
+  console.log('\n12. Hoja Fallas de la versión anterior (sin la columna Número de falla)');
+  const hf2 = g2.E.activo.getSheetByName('Fallas');
+  const fViejas = g2.post({ accion: 'cargar', token: tw2, datos: { baseVersion: -1 } }).datos.fallas;
+  hf2.deleteColumns(20, hf2.getMaxColumns() - 19);           // como quedaría una hoja de 19 columnas exactas
+  r = g2.post({ accion: 'cargar', token: tw2, datos: { baseVersion: -1 } });
+  ok(r.ok && r.datos.fallas.length === fViejas.length && r.datos.fallas.every((f) => f.numero === ''), 'las fallas guardadas antes se leen bien, sin número', r.ok ? r.datos.fallas.length : r);
+  r = g2.post({ accion: 'falla', token: tw2, datos: { op: 'publicar', falla: { nodos: [fViejas[0].nodos[0]], motivo: 'ENERGIA', numero: 'F1254585' } } });
+  ok(r.ok && hf2.getMaxColumns() === 20 && hf2.getRange(1, 20).getValue() === 'Número de falla' && r.datos.falla.numero === 'F1254585',
+    'al guardar la primera falla con el código nuevo, la hoja recibe la columna Número de falla', r.ok ? hf2.getMaxColumns() : r);
+  r = g2.post({ accion: 'cargar', token: tw2, datos: { baseVersion: -1 } });
+  ok(r.ok && r.datos.fallas.length === fViejas.length + 1 && r.datos.fallas.filter((f) => f.numero === 'F1254585').length === 1, 'las fallas viejas y la nueva conviven bien');
 
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);

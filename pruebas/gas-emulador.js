@@ -174,6 +174,12 @@ function crearEntorno(opciones = {}) {
       this.filas.splice(pos - 1, n);
       this.maxRows -= n;
     }
+    insertColumnsAfter(pos, n) {
+      this.libro.revisarCeldas(n * this.maxRows);
+      for (const f of this.filas) if (f && f.length > pos) f.splice(pos, 0, ...new Array(n));
+      this.maxCols += n;
+      return this;
+    }
     deleteColumns(pos, n) {
       if (pos < 1 || pos + n - 1 > this.maxCols) throw new Error('Those columns are out of bounds.');
       for (const f of this.filas) if (f) f.splice(pos - 1, n);

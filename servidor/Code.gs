@@ -66,7 +66,8 @@ const COL_BASE = ['CONTRATO', 'PRODUCT_ID', 'GRUPO_NODO', 'OLT', 'NAP', 'CATEGOR
 // y sirve para que la carga siguiente suba solo lo que cambió.
 const COL_OPCIONALES = ['MEGAS', 'TELEFONO', 'HUELLA'];
 const COL_FALLAS = ['ID', 'Estado', 'Motivo', 'Motivo (otro)', 'Explicación al cliente', 'Nodos', 'Inicio', 'Solución estimada',
-  'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Nota de cierre', 'Referencia', 'Notas internas', 'Clientes', 'HFC', 'GPON', 'Datos (no editar)'];
+  'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Nota de cierre', 'Referencia', 'Notas internas', 'Clientes', 'HFC', 'GPON', 'Datos (no editar)',
+  'Número de falla'];   // llegó después: va al final para no mover las columnas de las fallas que ya existen
 const COL_USUARIOS = ['Correo de Genesys', 'Nombre', 'Rol (workforce, jefatura, concentrix o bloqueado)', 'Activo (SÍ o NO)', 'Notas'];
 const COL_CARGAS = ['Fecha', 'Subió', 'Archivo', 'Servicios', 'HFC', 'GPON', 'Nodos', 'Contratos nuevos', 'Ya no aparecen', 'Cambios de nodo'];
 const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo', 'Contrato', 'Nodo', 'Resultado', 'Falla'];
@@ -502,7 +503,7 @@ function filaAFalla_(f, n) {
     inicio: d.inicio || 0, eta: d.eta || null, publicadaEn: d.publicadaEn || 0, publicadaPor: d.publicadaPor || { u: '', nombre: String(f[9] || '') },
     cerradaEn: d.cerradaEn || null, cerradaPor: d.cerradaPor || null, notaCierre: String(f[12] || ''), referencia: String(f[13] || ''),
     detalle: String(f[14] || ''), impacto: d.impacto || { total: Number(f[15]) || 0, hfc: Number(f[16]) || 0, gpon: Number(f[17]) || 0, corp: 0, deps: [], munis: [] },
-    historial: d.historial || [], _fila: n
+    numero: String(f[19] == null ? '' : f[19]), historial: d.historial || [], _fila: n
   };
 }
 function fallaAFila_(f) {
@@ -512,16 +513,36 @@ function fallaAFila_(f) {
     fecha(f.cerradaEn), f.cerradaPor ? f.cerradaPor.nombre : '', f.notaCierre, f.referencia, f.detalle,
     f.impacto.total, f.impacto.hfc, f.impacto.gpon,
     JSON.stringify({ estado: f.estado, motivo: f.motivo, nodos: f.nodos, inicio: f.inicio, eta: f.eta, publicadaEn: f.publicadaEn,
-      publicadaPor: f.publicadaPor, cerradaEn: f.cerradaEn, cerradaPor: f.cerradaPor, impacto: f.impacto, historial: f.historial })];
+      publicadaPor: f.publicadaPor, cerradaEn: f.cerradaEn, cerradaPor: f.cerradaPor, impacto: f.impacto, historial: f.historial }),
+    f.numero || ''];
+}
+/* La columna "Número de falla" se agregó después: si la hoja Fallas no la tiene, se le pone al final */
+function columnaNumeroFallas_(h) {
+  const n = COL_FALLAS.length;
+  if (h.getMaxColumns() < n) h.insertColumnsAfter(h.getMaxColumns(), n - h.getMaxColumns());
+  const cab = h.getRange(1, n);
+  if (String(cab.getValue()) !== COL_FALLAS[n - 1]) {
+    cab.setValue(COL_FALLAS[n - 1]).setFontWeight('bold');
+    h.getRange(2, n, Math.max(1, h.getMaxRows() - 1), 1).setNumberFormat('@');
+  }
 }
 function leerFallas_(h) {
   h = h || hoja_(ALERTAS.HOJAS.fallas);
   const ult = h.getLastRow();
   if (ult < 2) return [];
-  return h.getRange(2, 1, ult - 1, COL_FALLAS.length).getValues()
+  return h.getRange(2, 1, ult - 1, Math.min(COL_FALLAS.length, h.getMaxColumns())).getValues()
     .map((f, i) => (f[0] ? filaAFalla_(f, i + 2) : null)).filter(Boolean);
 }
 function sinFila_(f) { const c = {}; Object.keys(f).forEach((k) => { if (k !== '_fila') c[k] = f[k]; }); return c; }
+/* Lo que recibe quien atiende (Concentrix y Tiendas): sin número de falla, referencia, notas internas,
+   historial ni correos. Esa parte solo la ve Workforce HN. */
+function fallaPublica_(f) {
+  return {
+    id: f.id, estado: f.estado, motivo: f.motivo, motivoTexto: f.motivoTexto, clienteTexto: f.clienteTexto, nodos: f.nodos,
+    inicio: f.inicio, eta: f.eta, publicadaEn: f.publicadaEn, publicadaPor: { nombre: (f.publicadaPor && f.publicadaPor.nombre) || '' },
+    cerradaEn: f.cerradaEn, impacto: f.impacto
+  };
+}
 
 /* Las fallas que ven los asesores: activas y cerradas hace menos de 36 horas */
 function fallasVisibles_() {
@@ -535,7 +556,7 @@ function fallasVisibles_() {
     const txt = JSON.stringify(recientes);
     if (txt.length < 95000) cache_().put('fallasRecientes', txt, 600);
   }
-  return recientes.filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && ahora - f.cerradaEn < ALERTAS.HORAS_VISIBLE * 3600000));
+  return recientes.filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && ahora - f.cerradaEn < ALERTAS.HORAS_VISIBLE * 3600000)).map(fallaPublica_);
 }
 
 function accionFalla_(d, ses) {
@@ -580,6 +601,7 @@ function accionFalla_(d, ses) {
         texto = 'reabrió la falla ' + f.id;
       } else throw fallo_('DATOS', 'Operación no válida.');
     }
+    columnaNumeroFallas_(h);
     const fila = fallaAFila_(f);
     if (f._fila) h.getRange(f._fila, 1, 1, fila.length).setValues([fila]);
     else h.appendRow(fila);
@@ -615,7 +637,8 @@ function validarFalla_(x, ahora, nueva) {
   if (eta != null && (!isFinite(eta) || eta <= inicio)) eta = null;
   return {
     nodos: nodos, motivo: motivo, motivoTexto: motivoTexto, clienteTexto: clienteTexto, inicio: inicio, eta: eta,
-    referencia: texto_(x.referencia, 120), detalle: texto_(x.detalle, 300), impacto: impacto_(cat, nodos, idx)
+    numero: texto_(x.numero, 30).toUpperCase().replace(/\s+/g, ''), referencia: texto_(x.referencia, 120), detalle: texto_(x.detalle, 300),
+    impacto: impacto_(cat, nodos, idx)
   };
 }
 

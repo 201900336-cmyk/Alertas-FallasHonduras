@@ -499,6 +499,10 @@ button { cursor: pointer; }
 table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tabla th { text-align: left; font-weight: 650; color: var(--ink-3); font-size: 12.5px; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
 .tabla td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tabla small.numero-falla { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.input.numero-falla { text-transform: uppercase; }
+.input.numero-falla::placeholder { text-transform: none; }
+.numero-falla { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .tabla tr:last-child td { border-bottom: 0; }
 .tabla tbody tr:hover td { background: var(--surface-2); }
 .tabla .der { text-align: right; font-variant-numeric: tabular-nums; }

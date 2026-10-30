@@ -274,7 +274,7 @@ function BackendLocal() {
         const x = d.falla;
         f = {
           id: Model.nuevoId(fallas, ahora), nodos: x.nodos.slice(), motivo: x.motivo, motivoTexto: x.motivoTexto || '', clienteTexto: x.clienteTexto || '',
-          detalle: x.detalle || '', referencia: x.referencia || '', inicio: x.inicio || ahora, eta: x.eta || null, estado: 'ACTIVA',
+          detalle: x.detalle || '', referencia: x.referencia || '', numero: x.numero || '', inicio: x.inicio || ahora, eta: x.eta || null, estado: 'ACTIVA',
           publicadaEn: ahora, publicadaPor: por, cerradaEn: null, cerradaPor: null, notaCierre: '', impacto: resumir(Model.impacto(c.cat, x.nodos)),
           historial: [{ accion: 'PUBLICADA', en: ahora, por, detalle: U.plural(x.nodos.length, '1 nodo', x.nodos.length + ' nodos') }]
         };
