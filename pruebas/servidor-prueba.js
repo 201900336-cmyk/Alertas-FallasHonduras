@@ -108,7 +108,12 @@ const servidor = http.createServer((req, res) => {
     const filas = h.getRange(2, 1, h.getLastRow() - 1, 3).getValues().filter((f) => f[2] === nodo);
     json({ contrato: filas.length ? String(filas[Math.min(k, filas.length - 1)][0]) : null }); return;
   }
-  if (url.pathname === '/test/estado') { json({ props: [...g.E.props.keys()], celdas: g.E.activo.celdas(), filasBase: (g.E.activo.getSheetByName('Base') || { getLastRow: () => 0 }).getLastRow(), cuota: g.E.cuota }); return; }
+  if (url.pathname === '/test/estado') {
+    const hb = g.E.activo.getSheetByName('Base');
+    const conDatos = hb && hb.getLastRow() > 1 ? hb.getRange(2, 1, hb.getLastRow() - 1, 1).getValues().filter((f) => String(f[0])).length : 0;
+    json({ props: [...g.E.props.keys()], celdas: g.E.activo.celdas(), filasBase: hb ? hb.getLastRow() : 0, filasConDatos: conDatos, cuota: g.E.cuota });
+    return;
+  }
   if (url.pathname === '/app/config.js') {
     res.writeHead(200, { 'Content-Type': TIPOS['.js'] });
     res.end(`window.ALERTAS_CONFIG = { api: 'http://localhost:${PUERTO}/exec', genesysLogin: 'http://localhost:${PUERTO}/genesys', segundosRevision: 2 };`);

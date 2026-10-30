@@ -111,6 +111,7 @@ function crearEntorno(opciones = {}) {
     setNumberFormat(f) { this.hoja.formatos.push({ r1: this.r, c1: this.c, r2: this.r + this.nr - 1, c2: this.c + this.nc - 1, f }); return this; }
     setFontWeight() { return this; }
     clear() { for (let i = 0; i < this.nr; i++) { const f = this.hoja.filas[this.r - 1 + i]; if (f) for (let j = 0; j < this.nc; j++) f[this.c - 1 + j] = undefined; } return this; }
+    clearContent() { return this.clear(); }
     createTextFinder(t) { return new TextFinder(this, t); }
   }
 
@@ -147,6 +148,18 @@ function crearEntorno(opciones = {}) {
     getRange(a, b, c, d) {
       if (typeof a === 'string') throw new Error('Emulador: notación A1 no soportada');
       return new Rango(this, a, b, c || 1, d || 1);
+    }
+    /* Solo la forma que usa Alertas: ['A10:Q12', ...] (una sola llamada a la hoja para todos los rangos) */
+    getRangeList(lista) {
+      const col = (l) => l.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+      const rangos = lista.map((a1) => {
+        const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(a1);
+        if (!m) throw new Error('Emulador: notación A1 no soportada: ' + a1);
+        const r1 = Number(m[2]), r2 = Number(m[4]), c1 = col(m[1]), c2 = col(m[3]);
+        if (r2 < r1 || c2 < c1) throw new Error('Emulador: rango invertido ' + a1);
+        return new Rango(this, r1, c1, r2 - r1 + 1, c2 - c1 + 1);
+      });
+      return { getRanges: () => rangos.slice(), clearContent() { E.cuota.escriturasHoja++; rangos.forEach((r) => r.clear()); return this; } };
     }
     insertRowsAfter(pos, n) {
       this.libro.revisarCeldas(n * this.maxCols);

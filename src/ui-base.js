@@ -24,6 +24,11 @@ function leerBase(buffer, nombre, alProgreso) {
   });
 }
 
+function duracion(ms) {
+  const s = Math.max(1, Math.round(ms / 1000));
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min' + (s % 60 ? ' ' + (s % 60) + ' s' : '');
+}
+
 function contarTec(base, t) {
   const k = base.dicts.tecnologia.indexOf(t); if (k < 0) return 0;
   let n = 0; const c = base.cols.tecnologia; for (let i = 0; i < c.length; i++) if (c[i] === k) n++;
@@ -54,19 +59,21 @@ function VistaBase() {
     } catch (e) { setEst({ fase: 'error', msg: e.message || String(e), archivo: file.name }); }
   }
   async function publicar() {
-    const base = est.base;
+    const base = est.base, t0 = Date.now();
     setEst((e) => Object.assign({}, e, { fase: 'publicando', paso: { fase: 'preparando' } }));
     try {
       const res = await A.subirBase(base, (paso) => setEst((e) => (e && e.fase === 'publicando' ? Object.assign({}, e, { paso }) : e)));
       const c = res && res.comparacion;
       setEst(null);
-      tostada('Base actualizada: ' + U.n(base.filas) + ' servicios' + (c ? ', ' + U.n(c.nuevos) + ' contratos nuevos' : ''));
+      tostada('Base actualizada en ' + duracion(Date.now() - t0) + (res && res.modo === 'cambios' ? ', solo con los cambios' : '') + ': '
+        + U.n(base.filas) + ' servicios' + (c ? ', ' + U.n(c.nuevos) + ' contratos nuevos' : '') + '.');
     } catch (e) {
       setEst((x) => Object.assign({}, x, { fase: 'listo', errorPublicar: e.message }));
     }
   }
   const paso = est && est.paso;
-  const pct = paso && paso.fase === 'subiendo' ? Math.round((paso.hechas / paso.total) * 100) : paso && paso.fase === 'guardando' ? 100 : 0;
+  const pct = !paso ? 0 : paso.fase === 'subiendo' ? Math.round((paso.hechas / paso.total) * 100)
+    : paso.fase === 'guardando' ? 100 : paso.fase === 'cambios' ? 60 : paso.fase === 'comparando' ? 15 : 0;
 
   return html`<div>
     <div class="titulo-vista"><div><h1>Base de clientes</h1><p>${local
@@ -123,7 +130,7 @@ function VistaBase() {
               ? html`<div class="nota"><${Ico} n="info" s=${18} /><span>Trae teléfonos: ${U.n(est.conCelular)} de ${U.n(est.base.filas)} servicios tienen celular para avisar por SMS. Los números quedan con 504 adelante.</span></div>`
               : html`<div class="nota"><${Ico} n="info" s=${18} /><span>Esta base no trae la columna TELEFONO, así que no se van a poder descargar los celulares para SMS.</span></div>`}
             ${s.meta.demo && html`<div class="nota"><${Ico} n="alerta" s=${18} /><span>Al publicar se borran los datos de demostración: fallas, consultas e historial ficticios.</span></div>`}
-            <div class="sub">${local ? '' : 'Se sube por partes y tarda unos minutos. Las búsquedas siguen funcionando con la base anterior hasta que termine. '}Al publicar, todos los que estén usando Alertas recibirán el aviso para actualizar. Quedará registrado que la subiste tú.</div>
+            <div class="sub">${local ? '' : 'Solo se sube lo que cambió desde la base anterior (contratos nuevos, los que ya no vienen y los que cambiaron), así que tarda menos de un minuto. La primera vez, o si el Excel trae columnas distintas, se sube completa y tarda unos minutos. Las búsquedas siguen funcionando mientras tanto. '}Al publicar, todos los que estén usando Alertas recibirán el aviso para actualizar. Quedará registrado que la subiste tú.</div>
             <div style="display:flex;gap:10px">
               <button class="btn btn-borde" onClick=${() => setEst(null)}>Cancelar</button>
               <button class="btn btn-primario" style="flex:1" onClick=${publicar}>${est.errorPublicar ? 'Intentar de nuevo' : 'Publicar base'}</button>
@@ -131,8 +138,12 @@ function VistaBase() {
           </div>
         </div>`}
         ${est && est.fase === 'publicando' && html`<div class="zona-carga">
-          <h3>${paso.fase === 'preparando' ? 'Preparando la base…' : paso.fase === 'subiendo' ? 'Subiendo ' + U.n(paso.hechas) + ' de ' + U.n(paso.total) : 'Guardando y reemplazando la base anterior…'}</h3>
+          <h3>${paso.fase === 'preparando' ? 'Preparando la base…'
+            : paso.fase === 'comparando' ? 'Comparando con la base actual…'
+            : paso.fase === 'cambios' ? 'Subiendo solo los cambios…'
+            : paso.fase === 'subiendo' ? 'Subiendo ' + U.n(paso.hechas) + ' de ' + U.n(paso.total) : 'Guardando y reemplazando la base anterior…'}</h3>
           <div class="progreso" role="progressbar" aria-valuenow=${pct} aria-valuemin="0" aria-valuemax="100"><i style=${'width:' + pct + '%'}></i></div>
+          ${paso.fase === 'cambios' && html`<p class="num">${U.n(paso.agregar)} ${U.plural(paso.agregar, 'fila nueva o con cambios', 'filas nuevas o con cambios')} y ${U.n(paso.quitar)} ${U.plural(paso.quitar, 'que ya no viene', 'que ya no vienen')}</p>`}
           <p>No cierres esta pestaña hasta que termine.</p>
         </div>`}
       </section>

@@ -1865,8 +1865,52 @@ const Model = (() => {
     const d = s.replace(/\D+/g, '');
     return /^[\d\s\-.]+$/.test(s) && d.length >= 13 && d.length <= 14 ? d : s;
   }
-  /* Las 14 de siempre y, si vienen en el Excel, MEGAS y TELEFONO (teléfonos ya con 504) */
-  function columnasCarga(base) { return COLUMNAS.slice(0, 14).concat(base.tieneMegas ? ['MEGAS'] : [], base.tieneTelefono ? ['TELEFONO'] : []); }
+  /* Las 14 de siempre; MEGAS y TELEFONO (teléfonos ya con 504) si vienen en el Excel; y al final la HUELLA */
+  function columnasCarga(base) { return COLUMNAS.slice(0, 14).concat(base.tieneMegas ? ['MEGAS'] : [], base.tieneTelefono ? ['TELEFONO'] : [], ['HUELLA']); }
+  /* Huella de una fila: un código corto (53 bits, cyrb53) calculado con todos sus datos. Si la fila no
+     cambió de una semana a otra, su huella es la misma y no hace falta volver a subirla. */
+  const imul = Math.imul;
+  function huellaFila(f) {
+    const t = 'h1\u001e' + f.join('\u001f');
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < t.length; i++) {
+      const ch = t.charCodeAt(i);
+      h1 = imul(h1 ^ ch, 2654435761);
+      h2 = imul(h2 ^ ch, 1597334677);
+    }
+    h1 = imul(h1 ^ (h1 >>> 16), 2246822507);
+    h1 ^= imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = imul(h2 ^ (h2 >>> 16), 2246822507);
+    h2 ^= imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  /* Qué subir para que la base interna quede igual al Excel nuevo.
+     viejas: la huella de cada fila de la base, en orden ('' si la fila está vacía; la primera es la fila 2).
+     filasDe(desde, hasta): las filas del Excel nuevo, con su huella al final.
+     Devuelve las filas a agregar y las filas de la hoja a vaciar (con la huella que deben tener), o null
+     si hay más de maxAgregar filas nuevas (entonces conviene la carga completa). */
+  function planCambios(viejas, total, filasDe, maxAgregar) {
+    const donde = new Map();
+    for (let i = 0; i < viejas.length; i++) {
+      const h = viejas[i];
+      if (!h) continue;
+      const l = donde.get(h);
+      if (l) l.push(i + 2); else donde.set(h, [i + 2]);
+    }
+    const agregar = [];
+    for (let d = 0; d < total; d += 5000) {
+      const filas = filasDe(d, Math.min(total, d + 5000));
+      for (let k = 0; k < filas.length; k++) {
+        const f = filas[k], l = donde.get(f[f.length - 1]);
+        if (l && l.length) l.pop();
+        else { agregar.push(f); if (agregar.length > maxAgregar) return null; }
+      }
+    }
+    const quitar = [];
+    donde.forEach((l, h) => { for (let k = 0; k < l.length; k++) quitar.push([l[k], h]); });
+    quitar.sort((a, b) => a[0] - b[0]);
+    return { agregar, quitar: quitar.map((x) => x[0]), esperadas: quitar.map((x) => x[1]) };
+  }
   function filasCarga(base, desde, hasta) {
     const C = base.cols, D = base.dicts, out = [];
     for (let i = desde; i < hasta; i++) {
@@ -1875,6 +1919,7 @@ const Model = (() => {
         D.municipio[C.municipio[i]], D.colonia[C.colonia[i]], C.nombre[i], dniNormal(C.dni[i])];
       if (base.tieneMegas) f.push(D.megas[C.megas[i]]);
       if (base.tieneTelefono) f.push(C.telefono ? C.telefono[i] || '' : '');
+      f.push(huellaFila(f));
       out.push(f);
     }
     return out;
@@ -1963,7 +2008,7 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, registroRemoto,
+    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto,
     dniNormal, diasAIso, isoADias };
 })();
 
@@ -2241,6 +2286,7 @@ const RT = Object.assign({ api: '', genesysLogin: '' }, window.ALERTAS_CONFIG ||
 const MODO_DEMO = /[?&]demo(=|&|$)/.test(location.search) || !RT.api;
 if (RT.segundosRevision > 0) CONFIG.segundosRevision = RT.segundosRevision;
 
+const MAX_CAMBIOS = 20000;   // igual que ALERTAS.MAX_CAMBIOS en el servidor
 function errorAlertas(codigo, mensaje) { const e = new Error(mensaje); e.codigo = codigo; return e; }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const sesionGuardada = (clave) => { try { const v = JSON.parse(sessionStorage.getItem(clave) || 'null'); return v && v.expira > Date.now() && CONFIG.roles[v.usuario.rol] ? v : null; } catch (e) { return null; } };
@@ -2360,27 +2406,64 @@ function BackendRemoto() {
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
 
+    /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
+       (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
+       servidor dice que la base no coincide con lo que se comparó (COMPLETA). */
     async subirBase(base, catalogoJson, alProgreso) {
-      const ini = await llamar('base', { op: 'iniciar', total: base.filas, columnas: Model.columnasCarga(base), archivo: base.archivo }, 120000);
-      try {
-        for (let d = 0; d < base.filas; d += ini.filasPorLote) {
-          const filas = Model.filasCarga(base, d, Math.min(base.filas, d + ini.filasPorLote));
-          for (let intento = 0; ; intento++) {
-            try { await llamar('base', { op: 'lote', id: ini.id, desde: d, filas }, 180000); break; } catch (e) {
-              if (intento >= 2 || !/RED|SERVIDOR/.test(e.codigo)) throw e;
-              await esperar(2500 * (intento + 1));
-            }
-          }
-          alProgreso({ fase: 'subiendo', hechas: Math.min(base.filas, d + ini.filasPorLote), total: base.filas });
+      for (let intento = 0; intento < 2; intento++) {
+        try {
+          const r = await subirCambios(base, catalogoJson, alProgreso);
+          if (r) return r;
+          break;
+        } catch (e) {
+          if (e.codigo === 'COMPLETA') break;
+          // Si se cortó a medias, repetir es seguro: la comparación nueva ve lo que ya quedó guardado
+          if (intento === 0 && /RED|SERVIDOR/.test(e.codigo)) { await esperar(2500); continue; }
+          throw e;
         }
-        alProgreso({ fase: 'guardando' });
-        return await llamar('base', { op: 'finalizar', id: ini.id, catalogo: catalogoJson }, 330000);
-      } catch (e) {
-        llamar('base', { op: 'cancelar', id: ini.id }).catch(() => {});
-        throw e;
       }
+      return subirCompleta(base, catalogoJson, alProgreso);
     }
   };
+
+  async function subirCambios(base, catalogoJson, alProgreso) {
+    alProgreso({ fase: 'comparando' });
+    const hz = await llamar('base', { op: 'huella' }, 120000);
+    const columnas = Model.columnasCarga(base);
+    if (!hz || hz.huellas == null || (hz.columnas || []).join('|') !== columnas.join('|')) return null;
+    const viejas = hz.huellas ? hz.huellas.split(',') : [];
+    await esperar(20);
+    const plan = Model.planCambios(viejas, base.filas, (d, h) => Model.filasCarga(base, d, h), MAX_CAMBIOS);
+    if (!plan) return null;
+    // Las filas que salen quedan vacías; cuando ya son muchas, la carga completa ordena la base de nuevo
+    if (hz.vacias + plan.quitar.length > 0.08 * (viejas.length + plan.agregar.length)) return null;
+    alProgreso({ fase: 'cambios', agregar: plan.agregar.length, quitar: plan.quitar.length });
+    return llamar('base', {
+      op: 'cambios', baseVersion: hz.baseVersion, columnas, archivo: base.archivo, total: base.filas,
+      quitar: plan.quitar, esperadas: plan.esperadas, agregar: plan.agregar, catalogo: catalogoJson
+    }, 330000);
+  }
+
+  async function subirCompleta(base, catalogoJson, alProgreso) {
+    const ini = await llamar('base', { op: 'iniciar', total: base.filas, columnas: Model.columnasCarga(base), archivo: base.archivo }, 120000);
+    try {
+      for (let d = 0; d < base.filas; d += ini.filasPorLote) {
+        const filas = Model.filasCarga(base, d, Math.min(base.filas, d + ini.filasPorLote));
+        for (let intento = 0; ; intento++) {
+          try { await llamar('base', { op: 'lote', id: ini.id, desde: d, filas }, 180000); break; } catch (e) {
+            if (intento >= 2 || !/RED|SERVIDOR/.test(e.codigo)) throw e;
+            await esperar(2500 * (intento + 1));
+          }
+        }
+        alProgreso({ fase: 'subiendo', hechas: Math.min(base.filas, d + ini.filasPorLote), total: base.filas });
+      }
+      alProgreso({ fase: 'guardando' });
+      return await llamar('base', { op: 'finalizar', id: ini.id, catalogo: catalogoJson }, 330000);
+    } catch (e) {
+      llamar('base', { op: 'cancelar', id: ini.id }).catch(() => {});
+      throw e;
+    }
+  }
 }
 
 /* ==========================================================================
@@ -3801,6 +3884,11 @@ function leerBase(buffer, nombre, alProgreso) {
   });
 }
 
+function duracion(ms) {
+  const s = Math.max(1, Math.round(ms / 1000));
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min' + (s % 60 ? ' ' + (s % 60) + ' s' : '');
+}
+
 function contarTec(base, t) {
   const k = base.dicts.tecnologia.indexOf(t); if (k < 0) return 0;
   let n = 0; const c = base.cols.tecnologia; for (let i = 0; i < c.length; i++) if (c[i] === k) n++;
@@ -3831,19 +3919,21 @@ function VistaBase() {
     } catch (e) { setEst({ fase: 'error', msg: e.message || String(e), archivo: file.name }); }
   }
   async function publicar() {
-    const base = est.base;
+    const base = est.base, t0 = Date.now();
     setEst((e) => Object.assign({}, e, { fase: 'publicando', paso: { fase: 'preparando' } }));
     try {
       const res = await A.subirBase(base, (paso) => setEst((e) => (e && e.fase === 'publicando' ? Object.assign({}, e, { paso }) : e)));
       const c = res && res.comparacion;
       setEst(null);
-      tostada('Base actualizada: ' + U.n(base.filas) + ' servicios' + (c ? ', ' + U.n(c.nuevos) + ' contratos nuevos' : ''));
+      tostada('Base actualizada en ' + duracion(Date.now() - t0) + (res && res.modo === 'cambios' ? ', solo con los cambios' : '') + ': '
+        + U.n(base.filas) + ' servicios' + (c ? ', ' + U.n(c.nuevos) + ' contratos nuevos' : '') + '.');
     } catch (e) {
       setEst((x) => Object.assign({}, x, { fase: 'listo', errorPublicar: e.message }));
     }
   }
   const paso = est && est.paso;
-  const pct = paso && paso.fase === 'subiendo' ? Math.round((paso.hechas / paso.total) * 100) : paso && paso.fase === 'guardando' ? 100 : 0;
+  const pct = !paso ? 0 : paso.fase === 'subiendo' ? Math.round((paso.hechas / paso.total) * 100)
+    : paso.fase === 'guardando' ? 100 : paso.fase === 'cambios' ? 60 : paso.fase === 'comparando' ? 15 : 0;
 
   return html`<div>
     <div class="titulo-vista"><div><h1>Base de clientes</h1><p>${local
@@ -3900,7 +3990,7 @@ function VistaBase() {
               ? html`<div class="nota"><${Ico} n="info" s=${18} /><span>Trae teléfonos: ${U.n(est.conCelular)} de ${U.n(est.base.filas)} servicios tienen celular para avisar por SMS. Los números quedan con 504 adelante.</span></div>`
               : html`<div class="nota"><${Ico} n="info" s=${18} /><span>Esta base no trae la columna TELEFONO, así que no se van a poder descargar los celulares para SMS.</span></div>`}
             ${s.meta.demo && html`<div class="nota"><${Ico} n="alerta" s=${18} /><span>Al publicar se borran los datos de demostración: fallas, consultas e historial ficticios.</span></div>`}
-            <div class="sub">${local ? '' : 'Se sube por partes y tarda unos minutos. Las búsquedas siguen funcionando con la base anterior hasta que termine. '}Al publicar, todos los que estén usando Alertas recibirán el aviso para actualizar. Quedará registrado que la subiste tú.</div>
+            <div class="sub">${local ? '' : 'Solo se sube lo que cambió desde la base anterior (contratos nuevos, los que ya no vienen y los que cambiaron), así que tarda menos de un minuto. La primera vez, o si el Excel trae columnas distintas, se sube completa y tarda unos minutos. Las búsquedas siguen funcionando mientras tanto. '}Al publicar, todos los que estén usando Alertas recibirán el aviso para actualizar. Quedará registrado que la subiste tú.</div>
             <div style="display:flex;gap:10px">
               <button class="btn btn-borde" onClick=${() => setEst(null)}>Cancelar</button>
               <button class="btn btn-primario" style="flex:1" onClick=${publicar}>${est.errorPublicar ? 'Intentar de nuevo' : 'Publicar base'}</button>
@@ -3908,8 +3998,12 @@ function VistaBase() {
           </div>
         </div>`}
         ${est && est.fase === 'publicando' && html`<div class="zona-carga">
-          <h3>${paso.fase === 'preparando' ? 'Preparando la base…' : paso.fase === 'subiendo' ? 'Subiendo ' + U.n(paso.hechas) + ' de ' + U.n(paso.total) : 'Guardando y reemplazando la base anterior…'}</h3>
+          <h3>${paso.fase === 'preparando' ? 'Preparando la base…'
+            : paso.fase === 'comparando' ? 'Comparando con la base actual…'
+            : paso.fase === 'cambios' ? 'Subiendo solo los cambios…'
+            : paso.fase === 'subiendo' ? 'Subiendo ' + U.n(paso.hechas) + ' de ' + U.n(paso.total) : 'Guardando y reemplazando la base anterior…'}</h3>
           <div class="progreso" role="progressbar" aria-valuenow=${pct} aria-valuemin="0" aria-valuemax="100"><i style=${'width:' + pct + '%'}></i></div>
+          ${paso.fase === 'cambios' && html`<p class="num">${U.n(paso.agregar)} ${U.plural(paso.agregar, 'fila nueva o con cambios', 'filas nuevas o con cambios')} y ${U.n(paso.quitar)} ${U.plural(paso.quitar, 'que ya no viene', 'que ya no vienen')}</p>`}
           <p>No cierres esta pestaña hasta que termine.</p>
         </div>`}
       </section>

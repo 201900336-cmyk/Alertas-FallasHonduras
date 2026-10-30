@@ -11,6 +11,7 @@ const RT = Object.assign({ api: '', genesysLogin: '' }, window.ALERTAS_CONFIG ||
 const MODO_DEMO = /[?&]demo(=|&|$)/.test(location.search) || !RT.api;
 if (RT.segundosRevision > 0) CONFIG.segundosRevision = RT.segundosRevision;
 
+const MAX_CAMBIOS = 20000;   // igual que ALERTAS.MAX_CAMBIOS en el servidor
 function errorAlertas(codigo, mensaje) { const e = new Error(mensaje); e.codigo = codigo; return e; }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const sesionGuardada = (clave) => { try { const v = JSON.parse(sessionStorage.getItem(clave) || 'null'); return v && v.expira > Date.now() && CONFIG.roles[v.usuario.rol] ? v : null; } catch (e) { return null; } };
@@ -130,27 +131,64 @@ function BackendRemoto() {
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
 
+    /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
+       (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
+       servidor dice que la base no coincide con lo que se comparó (COMPLETA). */
     async subirBase(base, catalogoJson, alProgreso) {
-      const ini = await llamar('base', { op: 'iniciar', total: base.filas, columnas: Model.columnasCarga(base), archivo: base.archivo }, 120000);
-      try {
-        for (let d = 0; d < base.filas; d += ini.filasPorLote) {
-          const filas = Model.filasCarga(base, d, Math.min(base.filas, d + ini.filasPorLote));
-          for (let intento = 0; ; intento++) {
-            try { await llamar('base', { op: 'lote', id: ini.id, desde: d, filas }, 180000); break; } catch (e) {
-              if (intento >= 2 || !/RED|SERVIDOR/.test(e.codigo)) throw e;
-              await esperar(2500 * (intento + 1));
-            }
-          }
-          alProgreso({ fase: 'subiendo', hechas: Math.min(base.filas, d + ini.filasPorLote), total: base.filas });
+      for (let intento = 0; intento < 2; intento++) {
+        try {
+          const r = await subirCambios(base, catalogoJson, alProgreso);
+          if (r) return r;
+          break;
+        } catch (e) {
+          if (e.codigo === 'COMPLETA') break;
+          // Si se cortó a medias, repetir es seguro: la comparación nueva ve lo que ya quedó guardado
+          if (intento === 0 && /RED|SERVIDOR/.test(e.codigo)) { await esperar(2500); continue; }
+          throw e;
         }
-        alProgreso({ fase: 'guardando' });
-        return await llamar('base', { op: 'finalizar', id: ini.id, catalogo: catalogoJson }, 330000);
-      } catch (e) {
-        llamar('base', { op: 'cancelar', id: ini.id }).catch(() => {});
-        throw e;
       }
+      return subirCompleta(base, catalogoJson, alProgreso);
     }
   };
+
+  async function subirCambios(base, catalogoJson, alProgreso) {
+    alProgreso({ fase: 'comparando' });
+    const hz = await llamar('base', { op: 'huella' }, 120000);
+    const columnas = Model.columnasCarga(base);
+    if (!hz || hz.huellas == null || (hz.columnas || []).join('|') !== columnas.join('|')) return null;
+    const viejas = hz.huellas ? hz.huellas.split(',') : [];
+    await esperar(20);
+    const plan = Model.planCambios(viejas, base.filas, (d, h) => Model.filasCarga(base, d, h), MAX_CAMBIOS);
+    if (!plan) return null;
+    // Las filas que salen quedan vacías; cuando ya son muchas, la carga completa ordena la base de nuevo
+    if (hz.vacias + plan.quitar.length > 0.08 * (viejas.length + plan.agregar.length)) return null;
+    alProgreso({ fase: 'cambios', agregar: plan.agregar.length, quitar: plan.quitar.length });
+    return llamar('base', {
+      op: 'cambios', baseVersion: hz.baseVersion, columnas, archivo: base.archivo, total: base.filas,
+      quitar: plan.quitar, esperadas: plan.esperadas, agregar: plan.agregar, catalogo: catalogoJson
+    }, 330000);
+  }
+
+  async function subirCompleta(base, catalogoJson, alProgreso) {
+    const ini = await llamar('base', { op: 'iniciar', total: base.filas, columnas: Model.columnasCarga(base), archivo: base.archivo }, 120000);
+    try {
+      for (let d = 0; d < base.filas; d += ini.filasPorLote) {
+        const filas = Model.filasCarga(base, d, Math.min(base.filas, d + ini.filasPorLote));
+        for (let intento = 0; ; intento++) {
+          try { await llamar('base', { op: 'lote', id: ini.id, desde: d, filas }, 180000); break; } catch (e) {
+            if (intento >= 2 || !/RED|SERVIDOR/.test(e.codigo)) throw e;
+            await esperar(2500 * (intento + 1));
+          }
+        }
+        alProgreso({ fase: 'subiendo', hechas: Math.min(base.filas, d + ini.filasPorLote), total: base.filas });
+      }
+      alProgreso({ fase: 'guardando' });
+      return await llamar('base', { op: 'finalizar', id: ini.id, catalogo: catalogoJson }, 330000);
+    } catch (e) {
+      llamar('base', { op: 'cancelar', id: ini.id }).catch(() => {});
+      throw e;
+    }
+  }
 }
 
 /* ==========================================================================

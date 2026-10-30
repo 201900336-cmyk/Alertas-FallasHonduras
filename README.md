@@ -117,7 +117,7 @@ Luego, en el Sheet: **Alertas > 2. Conectar Genesys**.
 
 1. Abre la página, **Entrar con Genesys** (con un usuario de Workforce) y ve a **Base**.
 2. Arrastra el Excel semanal (`.xlsx` o `.csv`). La página lo lee en tu computadora y te muestra el resumen.
-3. **Publicar base.** Se sube por partes; con unos 160 mil servicios toma unos minutos. No cierres la pestaña mientras sube.
+3. **Publicar base.** La primera vez se sube completa, por partes: con unos 160 mil servicios toma unos minutos. No cierres la pestaña mientras sube.
 
 Con cientos de personas consultando, conviene subir la base fuera de las horas pico (temprano en la mañana o en la noche): mientras sube, las búsquedas pueden tardar un poco más.
 
@@ -125,7 +125,18 @@ Columnas obligatorias: `CONTRATO`, `GRUPO_NODO`, `TECNOLOGIA`, `NOMBRE_CLIENTE` 
 
 `TELEFONO` (también se reconoce como `TELEFONOS`, `CELULAR` o `MOVIL`) solo se usa para la descarga de celulares para SMS. Puede traer varios números por cliente, separados por espacio, coma, punto y coma o barra, con o sin 504 y con o sin guion: Alertas se queda con los números hondureños de 8 dígitos y les pone 504 adelante. Al revisar el Excel, la página dice cuántos servicios traen celular.
 
-Cada carga nueva **reemplaza** la anterior: la base vieja se borra, queda la nueva y la hoja **Cargas** registra quién la subió, cuándo y qué cambió (contratos nuevos, los que ya no aparecen y cambios de nodo). Todos los que estén usando Alertas reciben el aviso para actualizar.
+Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** registra quién la subió, cuándo y qué cambió (contratos nuevos, los que ya no aparecen y cambios de nodo). Todos los que estén usando Alertas reciben el aviso para actualizar.
+
+**Desde la segunda carga, solo se sube lo que cambió.** Alertas compara el Excel nuevo con la base interna y sube solo los contratos nuevos, los que ya no vienen y las filas con algún dato distinto. Entre la base del 26 y la del 29 de octubre de 2026 eso fue menos del 1 % de las filas, así que tarda menos de un minuto en vez de varios.
+
+- **Cómo compara:** la columna **HUELLA** guarda un código corto calculado con los datos de cada fila. Si la fila no cambió, su código es el mismo.
+- **Mientras se actualiza:** las búsquedas siguen funcionando. Primero se agregan las filas nuevas al final y después se vacían las que salen.
+- **Si se corta a medias:** al intentarlo de nuevo, termina lo que faltó sin duplicar filas.
+- **Cuándo va completa:**
+  - el Excel trae columnas distintas;
+  - cambian más de 20 mil filas;
+  - las filas vacías que dejan las salidas pasan del 8 % (más o menos cada 3 o 4 meses; la carga completa vuelve a ordenar la base);
+  - alguien editó la hoja **Base** a mano y ya no coincide. Esa hoja no se edita: la escribe Alertas.
 
 ---
 
@@ -198,7 +209,7 @@ Alertas está pensado para unas **300 personas de Concentrix y 200 de Tiendas** 
 - Si en algún momento Google rechaza una solicitud por estar saturado, la página la **reintenta sola** (hasta dos veces) antes de mostrar un error.
 - Una búsqueda tarda **1 a 2 segundos** (lo que tarda Apps Script en responder).
 - **La bitácora** guarda el detalle de 30 días (con un tope de 600 mil filas) y un resumen por día para las estadísticas de 7, 30 y 90 días. Así el archivo de consultas se mantiene lejos del límite de 10 millones de celdas de Google, aun con 25 mil consultas diarias. En las estadísticas de varios días, los clientes distintos son una estimación (≈) con un error típico de alrededor de 2 %.
-- La base admite hasta unos **300 mil servicios**: mientras sube una nueva conviven la vieja y la nueva en el mismo archivo.
+- La base admite hasta unos **300 mil servicios**: en una carga completa conviven la vieja y la nueva en el mismo archivo. Las cargas por cambios escriben solo unos cientos o miles de filas, en un par de envíos.
 - Cuotas diarias de Apps Script (cuenta gratuita / Workspace): 20,000 / 100,000 llamadas a Genesys (cada ingreso usa 2) y 50,000 / 500,000 lecturas de propiedades. Alertas guarda casi todo en caché para no acercarse a esos números.
 
 **Recomendación:** antes de abrirlo a todos, haz un piloto de una semana con Workforce, un grupo de asesores y algunas tiendas. En Apps Script, el panel **Ejecuciones** muestra cuánto tarda cada solicitud y si hubo errores. Si la operación crece mucho más, el servidor puede pasar a un servicio corporativo sin cambiar la página.
@@ -223,12 +234,15 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 109 pruebas del servidor en un emulador de Apps Script
+npm test                           # 129 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
+npm test -- base.xlsx siguiente.xlsx
+                                   # además, la carga por cambios de una base real a la de la semana siguiente
 node pruebas/servidor-prueba.js 8787 demo
                                    # servidor local con Genesys simulado: http://localhost:8787/app/
-python3 pruebas/e2e.py 8787 base.xlsx capturas/
-                                   # prueba completa en el navegador (requiere: pip install playwright)
+python3 pruebas/e2e.py 8787 base.xlsx capturas/ [siguiente.xlsx]
+                                   # prueba completa en el navegador (requiere: pip install playwright);
+                                   # con siguiente.xlsx (y su .json con lo que cambió) prueba la carga por cambios
 ```
 
 El `.gitignore` bloquea `.xlsx`, `.csv` y capturas para que la base nunca termine en el repositorio.

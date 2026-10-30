@@ -253,8 +253,52 @@ const Model = (() => {
     const d = s.replace(/\D+/g, '');
     return /^[\d\s\-.]+$/.test(s) && d.length >= 13 && d.length <= 14 ? d : s;
   }
-  /* Las 14 de siempre y, si vienen en el Excel, MEGAS y TELEFONO (teléfonos ya con 504) */
-  function columnasCarga(base) { return COLUMNAS.slice(0, 14).concat(base.tieneMegas ? ['MEGAS'] : [], base.tieneTelefono ? ['TELEFONO'] : []); }
+  /* Las 14 de siempre; MEGAS y TELEFONO (teléfonos ya con 504) si vienen en el Excel; y al final la HUELLA */
+  function columnasCarga(base) { return COLUMNAS.slice(0, 14).concat(base.tieneMegas ? ['MEGAS'] : [], base.tieneTelefono ? ['TELEFONO'] : [], ['HUELLA']); }
+  /* Huella de una fila: un código corto (53 bits, cyrb53) calculado con todos sus datos. Si la fila no
+     cambió de una semana a otra, su huella es la misma y no hace falta volver a subirla. */
+  const imul = Math.imul;
+  function huellaFila(f) {
+    const t = 'h1\u001e' + f.join('\u001f');
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < t.length; i++) {
+      const ch = t.charCodeAt(i);
+      h1 = imul(h1 ^ ch, 2654435761);
+      h2 = imul(h2 ^ ch, 1597334677);
+    }
+    h1 = imul(h1 ^ (h1 >>> 16), 2246822507);
+    h1 ^= imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = imul(h2 ^ (h2 >>> 16), 2246822507);
+    h2 ^= imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  /* Qué subir para que la base interna quede igual al Excel nuevo.
+     viejas: la huella de cada fila de la base, en orden ('' si la fila está vacía; la primera es la fila 2).
+     filasDe(desde, hasta): las filas del Excel nuevo, con su huella al final.
+     Devuelve las filas a agregar y las filas de la hoja a vaciar (con la huella que deben tener), o null
+     si hay más de maxAgregar filas nuevas (entonces conviene la carga completa). */
+  function planCambios(viejas, total, filasDe, maxAgregar) {
+    const donde = new Map();
+    for (let i = 0; i < viejas.length; i++) {
+      const h = viejas[i];
+      if (!h) continue;
+      const l = donde.get(h);
+      if (l) l.push(i + 2); else donde.set(h, [i + 2]);
+    }
+    const agregar = [];
+    for (let d = 0; d < total; d += 5000) {
+      const filas = filasDe(d, Math.min(total, d + 5000));
+      for (let k = 0; k < filas.length; k++) {
+        const f = filas[k], l = donde.get(f[f.length - 1]);
+        if (l && l.length) l.pop();
+        else { agregar.push(f); if (agregar.length > maxAgregar) return null; }
+      }
+    }
+    const quitar = [];
+    donde.forEach((l, h) => { for (let k = 0; k < l.length; k++) quitar.push([l[k], h]); });
+    quitar.sort((a, b) => a[0] - b[0]);
+    return { agregar, quitar: quitar.map((x) => x[0]), esperadas: quitar.map((x) => x[1]) };
+  }
   function filasCarga(base, desde, hasta) {
     const C = base.cols, D = base.dicts, out = [];
     for (let i = desde; i < hasta; i++) {
@@ -263,6 +307,7 @@ const Model = (() => {
         D.municipio[C.municipio[i]], D.colonia[C.colonia[i]], C.nombre[i], dniNormal(C.dni[i])];
       if (base.tieneMegas) f.push(D.megas[C.megas[i]]);
       if (base.tieneTelefono) f.push(C.telefono ? C.telefono[i] || '' : '');
+      f.push(huellaFila(f));
       out.push(f);
     }
     return out;
@@ -351,6 +396,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, registroRemoto,
+    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto,
     dniNormal, diasAIso, isoADias };
 })();

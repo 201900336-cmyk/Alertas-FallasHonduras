@@ -40,6 +40,7 @@ const ALERTAS = {
   DIAS_ESTADISTICAS: 90,         // periodo más largo que muestra Estadísticas
   DIAS_FALLAS_CARGA: 120,        // historial de fallas que recibe Workforce al entrar
   FILAS_POR_LOTE: 5000,
+  MAX_CAMBIOS: 20000,            // filas nuevas o cambiadas que se suben en una carga por cambios; si son más, va completa
   ALERTA_MIN: 60, ALERTA_CLIENTES: 3, ALERTA_REPORTES: 2,
   ITERACIONES_CLAVE: 1500,
   HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS' },
@@ -60,8 +61,10 @@ const ALERTAS = {
 };
 
 const COL_BASE = ['CONTRATO', 'PRODUCT_ID', 'GRUPO_NODO', 'OLT', 'NAP', 'CATEGORIA_CLIENTE', 'FECHA_INICIO', 'TECNOLOGIA', 'PLAY',
-  'DEPARTAMENTO', 'MUNICIPIO', 'COLONIA', 'NOMBRE_CLIENTE', 'DNI', 'MEGAS', 'TELEFONO'];
-const COL_OPCIONALES = ['MEGAS', 'TELEFONO'];   // pueden venir o no, después de las 14 de siempre
+  'DEPARTAMENTO', 'MUNICIPIO', 'COLONIA', 'NOMBRE_CLIENTE', 'DNI', 'MEGAS', 'TELEFONO', 'HUELLA'];
+// Pueden venir o no, después de las 14 de siempre. HUELLA la calcula la página con los datos de cada fila
+// y sirve para que la carga siguiente suba solo lo que cambió.
+const COL_OPCIONALES = ['MEGAS', 'TELEFONO', 'HUELLA'];
 const COL_FALLAS = ['ID', 'Estado', 'Motivo', 'Motivo (otro)', 'Explicación al cliente', 'Nodos', 'Inicio', 'Solución estimada',
   'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Nota de cierre', 'Referencia', 'Notas internas', 'Clientes', 'HFC', 'GPON', 'Datos (no editar)'];
 const COL_USUARIOS = ['Correo de Genesys', 'Nombre', 'Rol (workforce, jefatura, concentrix o bloqueado)', 'Activo (SÍ o NO)', 'Notas'];
@@ -688,18 +691,137 @@ function resumenBase_() {
 }
 
 /* ============================================================================
- *  Carga de la base semanal (por partes)
- *  1. iniciar: crea Base_nueva con el tamaño exacto
- *  2. lote: escribe 5,000 filas por vez
- *  3. finalizar: compara con la anterior, borra la anterior y deja la nueva como Base
+ *  Carga de la base semanal
+ *
+ *  Por cambios (la normal, cuando ya hay base con HUELLA):
+ *   huella:  la página recibe la huella de cada fila y la compara con el Excel nuevo
+ *   cambios: agrega al final las filas nuevas o cambiadas y vacía las que ya no vienen.
+ *            Revisa antes que la base sea la misma que comparó la página; si algo no
+ *            cuadra responde COMPLETA y la página hace la carga completa.
+ *
+ *  Completa (la primera vez, si cambian las columnas o si hay muchas filas vacías):
+ *   iniciar:   crea Base_nueva con el tamaño exacto
+ *   lote:      escribe 5,000 filas por vez
+ *   finalizar: compara con la anterior, borra la anterior y deja la nueva como Base
  * ========================================================================== */
 
 function accionBase_(d, ses) {
+  if (d.op === 'huella') return baseHuella_(d, ses);
+  if (d.op === 'cambios') return baseCambios_(d, ses);
   if (d.op === 'iniciar') return baseIniciar_(d, ses);
   if (d.op === 'lote') return baseLote_(d, ses);
   if (d.op === 'finalizar') return baseFinalizar_(d, ses);
   if (d.op === 'cancelar') return baseCancelar_(d, ses);
   throw fallo_('DATOS', 'Operación no válida.');
+}
+
+/* La huella de cada fila, en el orden de la hoja ('' en las filas vacías) */
+function baseHuella_(d, ses) {
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.base);
+  if (!h || h.getLastRow() < 2) return { huellas: null };
+  const cols = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(String);
+  const iH = cols.indexOf('HUELLA') + 1;
+  if (!iH) return { huellas: null, columnas: cols };
+  const n = h.getLastRow() - 1;
+  const v = h.getRange(2, iH, n, 1).getValues();
+  let vacias = 0;
+  const lista = v.map((f) => { const x = String(f[0]); if (!x) vacias++; return x; });
+  return { columnas: cols, huellas: lista.join(','), filas: n, vacias: vacias, baseVersion: estado_().baseVersion || 0 };
+}
+
+function baseCambios_(d, ses) {
+  const columnas = Array.isArray(d.columnas) ? d.columnas.map(String) : [];
+  const quitar = Array.isArray(d.quitar) ? d.quitar.map((x) => Math.floor(Number(x))) : [];
+  const esperadas = Array.isArray(d.esperadas) ? d.esperadas.map(String) : [];
+  const agregar = Array.isArray(d.agregar) ? d.agregar : [];
+  const total = Math.floor(Number(d.total) || 0);
+  if (quitar.length !== esperadas.length || agregar.length > ALERTAS.MAX_CAMBIOS || quitar.length > 600000 || total < 1 || total > 600000) throw fallo_('DATOS', 'Los cambios no son válidos.');
+  for (let k = 1; k < quitar.length; k++) if (!(quitar[k] > quitar[k - 1])) throw fallo_('DATOS', 'Los cambios no son válidos.');
+  const { cat, txt } = catalogoRecibido_(d);
+  const nc = columnas.length, iC = columnas.indexOf('CONTRATO'), iN = columnas.indexOf('GRUPO_NODO'), iH = columnas.indexOf('HUELLA');
+  if (iC < 0 || iN < 0 || iH < 0) throw fallo_('COMPLETA', 'La base no tiene huella.');
+  const nuevas = agregar.map((f) => {
+    if (!Array.isArray(f) || f.length !== nc) throw fallo_('DATOS', 'Una fila nueva no tiene las columnas esperadas.');
+    const g = f.map((v) => String(v == null ? '' : v).slice(0, 300));
+    if (!g[iC] || !g[iH]) throw fallo_('DATOS', 'Una fila nueva no trae contrato.');
+    return g;
+  });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw fallo_('OCUPADO', 'El servidor está ocupado. Intenta de nuevo.');
+  try {
+    const ss = libro_();
+    const previa = cargaActual_();
+    if (previa && previa.por.u !== ses.u && Date.now() - previa.inicio < 30 * 60000) throw fallo_('OCUPADO', previa.por.nombre + ' está subiendo una base en este momento.');
+    if (previa) { const hn = ss.getSheetByName(ALERTAS.HOJAS.nueva); if (hn) ss.deleteSheet(hn); props_().deleteProperty('CARGA'); }
+    if ((estado_().baseVersion || 0) !== Math.floor(Number(d.baseVersion) || 0)) throw fallo_('COMPLETA', 'La base cambió mientras se comparaba.');
+    const h = ss.getSheetByName(ALERTAS.HOJAS.base);
+    if (!h || h.getLastRow() < 2) throw fallo_('COMPLETA', 'Todavía no hay base.');
+    const cols = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(String);
+    if (cols.join('|') !== columnas.join('|')) throw fallo_('COMPLETA', 'Las columnas de la base cambiaron.');
+    const ult = h.getLastRow(), n = ult - 1;
+    const hu = h.getRange(2, iH + 1, n, 1).getValues();
+    let llenas = 0;
+    for (let i = 0; i < n; i++) if (String(hu[i][0])) llenas++;
+    for (let k = 0; k < quitar.length; k++) {
+      const r = quitar[k];
+      if (!(r >= 2 && r <= ult) || !esperadas[k] || String(hu[r - 2][0]) !== esperadas[k]) throw fallo_('COMPLETA', 'La base interna no coincide con la comparación.');
+    }
+    if (llenas - quitar.length + nuevas.length !== total) throw fallo_('COMPLETA', 'Las cuentas de filas no cuadran.');
+    const vc = h.getRange(2, iC + 1, n, 1).getValues(), vn = h.getRange(2, iN + 1, n, 1).getValues();
+    // 1. Primero las filas nuevas, al final: así ningún cliente que sigue en la base deja de aparecer
+    if (nuevas.length) {
+      const r0 = ult + 1, falta = r0 + nuevas.length - 1 - h.getMaxRows();
+      if (falta > 0) h.insertRowsAfter(h.getMaxRows(), falta);
+      const rg = h.getRange(r0, 1, nuevas.length, nc);
+      rg.setNumberFormat('@');
+      rg.setValues(nuevas);
+    }
+    // 2. Después se vacían las que ya no vienen (o que cambiaron, porque su versión nueva ya está al final)
+    const tramos = tramos_(quitar), letra = letraColumna_(nc);
+    for (let i = 0; i < tramos.length; i += 500) h.getRangeList(tramos.slice(i, i + 500).map((t) => 'A' + t[0] + ':' + letra + t[1])).clearContent();
+    const comp = compararCambios_(vc, vn, quitar, nuevas, iC, iN);
+    const res = cerrarCarga_(ss, txt, cat, { total: total, columnas: columnas, archivo: texto_(d.archivo, 120), por: { u: ses.u, nombre: ses.n } }, comp);
+    return Object.assign(res, { modo: 'cambios', agregadas: nuevas.length, quitadas: quitar.length });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* [[2,4],[9,9]] para las filas 2,3,4,9 (ya ordenadas) */
+function tramos_(filas) {
+  const out = [];
+  filas.forEach((r) => { const t = out[out.length - 1]; if (t && r === t[1] + 1) t[1] = r; else out.push([r, r]); });
+  return out;
+}
+function letraColumna_(n) {
+  let s = '';
+  for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+}
+/* Contratos nuevos, los que ya no aparecen y cambios de nodo, con la base de antes y los cambios */
+function compararCambios_(vc, vn, quitar, nuevas, iC, iN) {
+  const fuera = {};
+  quitar.forEach((r) => { fuera[r - 2] = true; });
+  const antes = {}, despues = {};
+  for (let i = 0; i < vc.length; i++) {
+    const c = String(vc[i][0]);
+    if (!c) continue;
+    const nodo = String(vn[i][0]);
+    if (!(c in antes)) antes[c] = nodo;
+    if (!fuera[i] && !(c in despues)) despues[c] = nodo;
+  }
+  nuevas.forEach((f) => { if (!(f[iC] in despues)) despues[f[iC]] = f[iN]; });
+  let nuevos = 0, bajas = 0, cambios = 0;
+  Object.keys(despues).forEach((c) => { if (!(c in antes)) nuevos++; else if (antes[c] !== despues[c]) cambios++; });
+  Object.keys(antes).forEach((c) => { if (!(c in despues)) bajas++; });
+  return { nuevos: nuevos, bajas: bajas, cambiosNodo: cambios };
+}
+function catalogoRecibido_(d) {
+  const cat = d.catalogo;
+  if (!cat || !Array.isArray(cat.nodos) || !Array.isArray(cat.deps) || !Array.isArray(cat.munis)) throw fallo_('DATOS', 'Falta el resumen por nodo.');
+  const txt = JSON.stringify(cat);
+  if (txt.length > 3000000) throw fallo_('DATOS', 'El resumen por nodo es demasiado grande.');
+  return { cat: cat, txt: txt };
 }
 
 function cargaActual_() { const raw = props_().getProperty('CARGA'); return raw ? JSON.parse(raw) : null; }
@@ -759,10 +881,7 @@ function baseFinalizar_(d, ses) {
   const carga = cargaActual_();
   if (!carga || carga.id !== d.id) throw fallo_('DATOS', 'La carga ya no está activa. Empieza de nuevo.');
   if (carga.por.u !== ses.u) throw fallo_('PERMISO', 'Esta carga la empezó otra persona.');
-  const cat = d.catalogo;
-  if (!cat || !Array.isArray(cat.nodos) || !Array.isArray(cat.deps) || !Array.isArray(cat.munis)) throw fallo_('DATOS', 'Falta el resumen por nodo.');
-  const txt = JSON.stringify(cat);
-  if (txt.length > 3000000) throw fallo_('DATOS', 'El resumen por nodo es demasiado grande.');
+  const { cat, txt } = catalogoRecibido_(d);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw fallo_('OCUPADO', 'El servidor está ocupado. Intenta de nuevo.');
   try {
@@ -776,34 +895,39 @@ function baseFinalizar_(d, ses) {
     const comp = compararBases_(anterior, nueva, carga.total, contratosNuevos);
     if (anterior) ss.deleteSheet(anterior);
     nueva.setName(ALERTAS.HOJAS.base);
-    // Catálogo por nodo en la hoja oculta
-    let hc = ss.getSheetByName(ALERTAS.HOJAS.catalogo);
-    if (!hc) { hc = ss.insertSheet(ALERTAS.HOJAS.catalogo); hc.hideSheet(); }
-    hc.clear();
-    const piezas = [];
-    for (let p = 0; p < txt.length; p += 45000) piezas.push([txt.slice(p, p + 45000)]);
-    if (hc.getMaxRows() < piezas.length) hc.insertRowsAfter(hc.getMaxRows(), piezas.length - hc.getMaxRows());
-    hc.getRange(1, 1, piezas.length, 1).setNumberFormat('@');
-    hc.getRange(1, 1, piezas.length, 1).setValues(piezas);
-    const r = cat.resumen || {};
-    const resumen = {
-      filas: carga.total, contratos: r.contratos || 0, hfc: r.hfc || 0, gpon: r.gpon || 0, nodos: cat.nodos.length, olts: r.olts || 0,
-      virtuales: r.virtuales || 0, tieneMegas: carga.columnas.indexOf('MEGAS') >= 0, archivo: carga.archivo, en: Date.now(), por: carga.por
-    };
-    props_().setProperty('BASE_RESUMEN', JSON.stringify(resumen));
-    cache_().put('resumen', JSON.stringify(resumen), 21600);
-    hoja_(ALERTAS.HOJAS.cargas).appendRow([new Date(), carga.por.nombre, carga.archivo, carga.total, resumen.hfc, resumen.gpon, resumen.nodos,
-      comp ? comp.nuevos : '', comp ? comp.bajas : '', comp ? comp.cambiosNodo : '']);
-    const e0 = estado_();
-    const e = subirVersion_({ tipo: 'BASE_ACTUALIZADA', texto: 'actualizó la base de clientes (' + carga.total.toLocaleString('en-US') + ' servicios)', por: carga.por, en: Date.now() },
-      { baseVersion: (e0.baseVersion || 0) + 1 });
-    guardarCatalogoCache_(txt, e.baseVersion);
+    const res = cerrarCarga_(ss, txt, cat, { total: carga.total, columnas: carga.columnas, archivo: carga.archivo, por: carga.por }, comp);
     props_().deleteProperty('CARGA');
-    cache_().remove('alertas');
-    return { comparacion: comp, version: e.version, baseVersion: e.baseVersion, resumen: resumen };
+    return res;
   } finally {
     lock.releaseLock();
   }
+}
+
+/* Lo que se hace al terminar cualquier carga: catálogo por nodo, resumen, registro en Cargas y aviso a todos */
+function cerrarCarga_(ss, txt, cat, info, comp) {
+  let hc = ss.getSheetByName(ALERTAS.HOJAS.catalogo);
+  if (!hc) { hc = ss.insertSheet(ALERTAS.HOJAS.catalogo); hc.hideSheet(); }
+  hc.clear();
+  const piezas = [];
+  for (let p = 0; p < txt.length; p += 45000) piezas.push([txt.slice(p, p + 45000)]);
+  if (hc.getMaxRows() < piezas.length) hc.insertRowsAfter(hc.getMaxRows(), piezas.length - hc.getMaxRows());
+  hc.getRange(1, 1, piezas.length, 1).setNumberFormat('@');
+  hc.getRange(1, 1, piezas.length, 1).setValues(piezas);
+  const r = cat.resumen || {};
+  const resumen = {
+    filas: info.total, contratos: r.contratos || 0, hfc: r.hfc || 0, gpon: r.gpon || 0, nodos: cat.nodos.length, olts: r.olts || 0,
+    virtuales: r.virtuales || 0, tieneMegas: info.columnas.indexOf('MEGAS') >= 0, archivo: info.archivo, en: Date.now(), por: info.por
+  };
+  props_().setProperty('BASE_RESUMEN', JSON.stringify(resumen));
+  cache_().put('resumen', JSON.stringify(resumen), 21600);
+  hoja_(ALERTAS.HOJAS.cargas).appendRow([new Date(), info.por.nombre, info.archivo, info.total, resumen.hfc, resumen.gpon, resumen.nodos,
+    comp ? comp.nuevos : '', comp ? comp.bajas : '', comp ? comp.cambiosNodo : '']);
+  const e0 = estado_();
+  const e = subirVersion_({ tipo: 'BASE_ACTUALIZADA', texto: 'actualizó la base de clientes (' + info.total.toLocaleString('en-US') + ' servicios)', por: info.por, en: Date.now() },
+    { baseVersion: (e0.baseVersion || 0) + 1 });
+  guardarCatalogoCache_(txt, e.baseVersion);
+  cache_().remove('alertas');
+  return { comparacion: comp, version: e.version, baseVersion: e.baseVersion, resumen: resumen };
 }
 
 function compararBases_(anterior, nueva, total, nc) {

@@ -1,5 +1,6 @@
 /* Prueba del servidor (servidor/Code.gs) en el emulador, con una base real o de demostración.
-   Uso: node --max-old-space-size=4096 pruebas/servidor.test.js [ruta-al-excel.xlsx]   */
+   Uso: node --max-old-space-size=4096 pruebas/servidor.test.js [ruta-al-excel.xlsx] [excel-de-la-semana-siguiente.xlsx]
+   Con dos archivos, además prueba la carga por cambios de una base real a la siguiente.   */
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const { crearEntorno } = require('./gas-emulador');
@@ -359,6 +360,131 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.filas.length > 0 && !JSON.stringify(r.datos).includes(b2.cols.telefono[iTel].split(' ')[0].slice(3)), 'la búsqueda de un asesor no trae teléfonos', r.datos && r.datos.filas[0]);
   r = g.post({ accion: 'base', token: tWf, datos: { op: 'iniciar', total: 10, columnas: Model.columnasCarga(base).slice(0, 14).concat(['OTRA']) } });
   ok(!r.ok && r.codigo === 'DATOS', 'una columna desconocida en la base se rechaza', r);
+
+  /* ---------- Carga por cambios ---------- */
+  console.log('\n9c. Carga por cambios (solo lo que cambió)');
+  const SEP = '\u001f';
+  const filasHoja = () => {
+    const h = g.E.activo.getSheetByName('Base');
+    return h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().filter((f) => String(f[0])).map((f) => f.map(String).join(SEP)).sort();
+  };
+  const comoHoja = (filas) => filas.map((f) => f.map((v) => String(v == null ? '' : v).slice(0, 300)).join(SEP)).sort();
+  const igual = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  function porCambios(filas, token, columnas, nombre, ajuste) {
+    const hz = g.post({ accion: 'base', token, datos: { op: 'huella' } });
+    if (!hz.ok || hz.datos.huellas == null) return { ok: false, hz };
+    const plan = Model.planCambios(hz.datos.huellas.split(','), filas.length, (d, h) => filas.slice(d, h), 20000);
+    const datos = { op: 'cambios', baseVersion: hz.datos.baseVersion, columnas, archivo: nombre, total: filas.length,
+      quitar: plan.quitar, esperadas: plan.esperadas, agregar: plan.agregar, catalogo: catJson };
+    if (ajuste) ajuste(datos);
+    const w0 = g.E.cuota.escriturasHoja;
+    const x = g.post({ accion: 'base', token, datos });
+    return Object.assign(x, { plan, hz: hz.datos, escrituras: g.E.cuota.escriturasHoja - w0 });
+  }
+  const cols3 = Model.columnasCarga(b2);
+  const iCo = cols3.indexOf('CONTRATO'), iNo = cols3.indexOf('GRUPO_NODO'), iPr = cols3.indexOf('PRODUCT_ID');
+  const conHuella = (f) => { const x = f.slice(0, -1); x.push(Model.huellaFila(x)); return x; };
+  const filas2 = Model.filasCarga(b2, 0, b2.filas);
+  r = g.post({ accion: 'base', token: tAgente, datos: { op: 'huella' } });
+  ok(!r.ok && r.codigo === 'PERMISO', 'Concentrix no puede pedir la huella de la base', r);
+  r = g.post({ accion: 'base', token: tWf, datos: { op: 'huella' } });
+  ok(r.ok && r.datos.huellas.split(',').length === b2.filas && r.datos.vacias === 0 && r.datos.columnas[r.datos.columnas.length - 1] === 'HUELLA'
+    && r.datos.huellas.split(',').every((h, i) => h === filas2[i][filas2[i].length - 1]), 'la carga completa guarda la huella de cada fila', r.ok && [r.datos.filas, r.datos.vacias]);
+
+  // Semana 3: salen 150 filas, 40 clientes de un solo servicio cambian de nodo, entran 90 contratos nuevos
+  const porContrato = new Map();
+  filas2.forEach((f) => porContrato.set(f[iCo], (porContrato.get(f[iCo]) || 0) + 1));
+  const nodosDistintos = [...new Set(filas2.map((f) => f[iNo]))];
+  const sale = new Set(), cambia = new Set();
+  for (let i = 500; sale.size < 150 && i < filas2.length; i += 7) sale.add(i);
+  for (let i = 3; cambia.size < 40 && i < filas2.length; i += 53) if (!sale.has(i) && porContrato.get(filas2[i][iCo]) === 1) cambia.add(i);
+  const filas3 = [];
+  filas2.forEach((f, i) => {
+    if (sale.has(i)) return;
+    if (cambia.has(i)) { const x = f.slice(); x[iNo] = nodosDistintos.find((n) => n !== f[iNo]); filas3.push(conHuella(x)); return; }
+    filas3.push(f);
+  });
+  const existentes = new Set(filas2.map((f) => f[iCo]));
+  const nuevosContratos = [];
+  for (let k = 0; nuevosContratos.length < 90; k++) { const c = String(99000000 + k * 37); if (!existentes.has(c)) nuevosContratos.push(c); }
+  nuevosContratos.forEach((c, k) => { const x = filas2[(k * 101) % filas2.length].slice(); x[iCo] = c; x[iPr] = String(77000000 + k); filas3.splice((k * 997) % filas3.length, 0, conHuella(x)); });
+  const contratosAntes = new Set(filas2.map((f) => f[iCo])), contratosDespues = new Set(filas3.map((f) => f[iCo]));
+  const bajasEsperadas = [...contratosAntes].filter((c) => !contratosDespues.has(c)).length;
+  const cambiosAntes = g.E.cuota.escriturasHoja;
+  r = porCambios(filas3, tWf, cols3, 'semana 3.xlsx');
+  ok(r.ok && r.datos.modo === 'cambios' && r.datos.agregadas === 130 && r.datos.quitadas === 190,
+    `sube solo lo que cambió: ${r.datos && r.datos.agregadas} filas nuevas o con cambios y ${r.datos && r.datos.quitadas} que salen, de ${filas3.length}`, r.datos || r);
+  ok(r.ok && igual(filasHoja(), comoHoja(filas3)), 'la base interna queda idéntica al Excel nuevo, fila por fila');
+  ok(r.ok && r.escrituras <= 4, `con ${r.escrituras} escrituras en la hoja (la carga completa usa ${Math.ceil(b2.filas / 5000) + 3} o más)`);
+  ok(r.ok && r.datos.comparacion.nuevos === 90 && r.datos.comparacion.bajas === bajasEsperadas && r.datos.comparacion.cambiosNodo === 40,
+    `compara con la anterior: ${JSON.stringify(r.datos && r.datos.comparacion)}`, [bajasEsperadas]);
+  const cNuevo = nuevosContratos[3], iSale = [...sale][4], iCambia = [...cambia][2];
+  let rb = g.post({ accion: 'buscar', token: tAgente, datos: { q: cNuevo } });
+  ok(rb.ok && rb.datos.estado === 'ok' && rb.datos.filas[0].contrato === cNuevo, 'un contrato nuevo ya se encuentra');
+  const cSale = filas2[iSale][iCo];
+  rb = g.post({ accion: 'buscar', token: tAgente, datos: { q: cSale } });
+  ok(rb.ok && (contratosDespues.has(cSale) ? rb.datos.filas.length === filas3.filter((f) => f[iCo] === cSale).length : rb.datos.estado === 'no'), 'un contrato que salió ya no aparece');
+  rb = g.post({ accion: 'buscar', token: tAgente, datos: { q: filas2[iCambia][iCo] } });
+  ok(rb.ok && rb.datos.filas.length === 1 && rb.datos.filas[0].nodo === filas3.find((f) => f[iCo] === filas2[iCambia][iCo])[iNo] && rb.datos.filas[0].nodo !== filas2[iCambia][iNo],
+    'un cliente que cambió de nodo sale con el nodo nuevo (y una sola vez)', rb.datos && rb.datos.filas);
+  let est3 = g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos;
+  ok(est3.resumen.filas === filas3.length && est3.cargas.length >= 3 && est3.cargas[est3.cargas.length - 1].nuevos === 90, 'el resumen y el historial de cargas quedan al día', [est3.resumen.filas, est3.cargas.length]);
+  ok(g.post({ accion: 'estado', token: tAgente }).datos.cambio.tipo === 'BASE_ACTUALIZADA', 'todos reciben el aviso de la base nueva');
+  r = g.post({ accion: 'base', token: tWf, datos: { op: 'huella' } });
+  ok(r.ok && r.datos.vacias === 190, `las filas que salen quedan vacías (${r.datos && r.datos.vacias}); al pasar del 8 % la página hace la carga completa`);
+  r = porCambios(filas3, tWf, cols3, 'semana 3 otra vez.xlsx');
+  ok(r.ok && r.datos.agregadas === 0 && r.datos.quitadas === 0 && igual(filasHoja(), comoHoja(filas3)), 'subir el mismo Excel otra vez no cambia nada', r.datos);
+
+  // Lo que debe hacer que la página vaya por la carga completa
+  const antesDeFallar = filasHoja();
+  const filas4 = filas3.filter((f, i) => i % 50 !== 0);
+  r = porCambios(filas4, tWf, cols3, 'x', (d) => { d.esperadas[0] = 'zzzz'; });
+  ok(!r.ok && r.codigo === 'COMPLETA' && igual(filasHoja(), antesDeFallar), 'si la base interna no coincide con la comparación, no toca nada y pide la carga completa', r);
+  r = porCambios(filas4, tWf, cols3, 'x', (d) => { d.baseVersion--; });
+  ok(!r.ok && r.codigo === 'COMPLETA', 'si otra carga cambió la base mientras tanto, pide la carga completa', r);
+  r = porCambios(filas4, tWf, cols3, 'x', (d) => { d.columnas = d.columnas.filter((c) => c !== 'TELEFONO'); d.agregar = d.agregar.map((f) => f.filter((v, j) => cols3[j] !== 'TELEFONO')); });
+  ok(!r.ok && r.codigo === 'COMPLETA', 'si el Excel trae otras columnas, pide la carga completa', r);
+  r = porCambios(filas4, tWf, cols3, 'x', (d) => { d.total++; });
+  ok(!r.ok && r.codigo === 'COMPLETA' && igual(filasHoja(), antesDeFallar), 'si las cuentas de filas no cuadran, no toca nada', r);
+  r = porCambios(filas4, tAgente, cols3, 'x');
+  ok(!r.ok, 'Concentrix no puede subir cambios');
+
+  // Si la carga se corta a medias (ya agregó las filas nuevas pero no vació las viejas), repetirla la completa
+  const hz4 = g.post({ accion: 'base', token: tWf, datos: { op: 'huella' } }).datos;
+  const plan4 = Model.planCambios(hz4.huellas.split(','), filas4.length, (d, h) => filas4.slice(d, h), 20000);
+  const filas5 = filas4.map((f, i) => (i % 400 === 0 ? conHuella(Object.assign(f.slice(), { [iNo]: nodosDistintos[0] === f[iNo] ? nodosDistintos[1] : nodosDistintos[0] })) : f));
+  const plan5 = Model.planCambios(hz4.huellas.split(','), filas5.length, (d, h) => filas5.slice(d, h), 20000);
+  const hb5 = g.E.activo.getSheetByName('Base');
+  const falta5 = hb5.getLastRow() + plan5.agregar.length - hb5.getMaxRows();
+  if (falta5 > 0) hb5.insertRowsAfter(hb5.getMaxRows(), falta5);
+  hb5.getRange(hb5.getLastRow() + 1, 1, plan5.agregar.length, cols3.length).setNumberFormat('@').setValues(plan5.agregar.map((f) => f.map(String)));
+  r = porCambios(filas5, tWf, cols3, 'semana 4.xlsx');
+  ok(r.ok && r.datos.agregadas === 0 && r.datos.quitadas === plan5.quitar.length && igual(filasHoja(), comoHoja(filas5)),
+    `si se cortó a medias, al repetir termina sin duplicar filas (${plan4.quitar.length} que salen, ${plan5.agregar.length} ya agregadas)`, r.datos || r);
+
+  r = g.post({ accion: 'base', token: tWfTemp, datos: { op: 'iniciar', total: 10, columnas: cols3, archivo: 'otra.xlsx' } });
+  const rOcupado = porCambios(filas5, tWf, cols3, 'x');
+  ok(r.ok && !rOcupado.ok && rOcupado.codigo === 'OCUPADO' && /Mario Rivera/.test(rOcupado.error), 'si otra persona está subiendo la base completa, espera', rOcupado);
+  g.post({ accion: 'base', token: tWfTemp, datos: { op: 'cancelar', id: r.datos.id } });
+
+  /* ---------- Carga por cambios con dos bases reales seguidas ---------- */
+  if (process.argv[3]) {
+    console.log('\n9d. De una base real a la siguiente');
+    const buf2 = fs.readFileSync(process.argv[3]);
+    const bSig = await P.parseFile(buf2.buffer.slice(buf2.byteOffset, buf2.byteOffset + buf2.byteLength), path.basename(process.argv[3]));
+    const bAnt = base;
+    // Se comparan las mismas columnas: si solo una trae MEGAS o TELEFONO, se dejan fuera
+    for (const k of ['tieneMegas', 'tieneTelefono']) if (!bAnt[k] || !bSig[k]) { bAnt[k] = false; bSig[k] = false; }
+    t1 = Date.now();
+    r = await subir(bAnt, tWf, catJson, path.basename(archivo));
+    ok(r.ok, `carga completa de ${path.basename(archivo)}: ${bAnt.filas} filas en ${r.lotes} lotes`, r);
+    const filasSig = Model.filasCarga(bSig, 0, bSig.filas);
+    t1 = Date.now();
+    r = porCambios(filasSig, tWf, Model.columnasCarga(bSig), path.basename(process.argv[3]));
+    ok(r.ok && r.datos.modo === 'cambios', `${path.basename(process.argv[3])} por cambios: ${r.datos && r.datos.agregadas} filas nuevas o con cambios y ${r.datos && r.datos.quitadas} que salen (${(100 * ((r.datos && r.datos.agregadas) || 0) / bSig.filas).toFixed(1)} % de la base), ${r.escrituras} escrituras`, r.datos || r);
+    ok(r.ok && igual(filasHoja(), comoHoja(filasSig)), `la base interna queda idéntica al Excel nuevo (${bSig.filas} filas)`);
+    ok(r.ok && r.datos.comparacion, 'comparación: ' + JSON.stringify(r.datos && r.datos.comparacion));
+  }
 
   /* ---------- Limpieza ---------- */
   console.log('\n10. Mantenimiento de cada hora');

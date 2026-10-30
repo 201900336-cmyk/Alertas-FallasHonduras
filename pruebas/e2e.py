@@ -6,6 +6,8 @@ from playwright.sync_api import sync_playwright
 PUERTO = sys.argv[1] if len(sys.argv) > 1 else '8787'
 EXCEL = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] != '-' else None
 OUT = (sys.argv[3] if len(sys.argv) > 3 else 'capturas') + '/'
+# Opcional: el Excel de la semana siguiente (con un .json al lado que dice qué cambió) para probar la carga por cambios
+EXCEL2 = sys.argv[4] if len(sys.argv) > 4 else None
 os.makedirs(OUT, exist_ok=True)
 APP = f'http://localhost:{PUERTO}/app/'
 fallos = []
@@ -133,6 +135,7 @@ with sync_playwright() as p:
         t0 = time.time(); x.click('text=Publicar base')
         x.wait_for_timeout(1500); x.screenshot(path=OUT + 'e08_subiendo.png')
         x.wait_for_selector('text=Base actualizada', timeout=600000)
+        ok('solo con los cambios' not in x.locator('.tostadas').inner_text(), 'la primera carga con columnas nuevas se sube completa')
         e = http('/test/estado')
         ok(e['filasBase'] == servicios + 1, f'la base real quedó completa en la base interna ({e["filasBase"] - 1} filas, {time.time() - t0:.0f} s en el emulador)', e)
         ok(x.locator('.tabla tbody tr').count() >= 2, 'el historial muestra las dos cargas')
@@ -177,6 +180,29 @@ with sync_playwright() as p:
         else:
             tarjeta.locator('button.sms').click(); x.wait_for_selector('text=no trae la columna TELEFONO', timeout=15000)
             ok(True, 'con una base sin teléfonos, avisa que falta la columna TELEFONO')
+        if EXCEL2:
+            print('8b. La base de la semana siguiente: solo los cambios')
+            info = json.load(open(EXCEL2 + '.json'))
+            x.goto(APP + '#base'); x.wait_for_selector('.zona-carga input[type=file]')
+            x.wait_for_timeout(5000)    # que se vaya la tostada de la carga anterior
+            x.set_input_files('.zona-carga input[type=file]', EXCEL2)
+            x.wait_for_selector('text=Lista para publicar', timeout=120000)
+            ok('Solo se sube lo que cambió' in x.locator('.panel', has_text='Lista para publicar').inner_text(), 'explica que solo se sube lo que cambió')
+            w0 = http('/test/estado')['cuota']['escriturasHoja']
+            t0 = time.time(); x.click('text=Publicar base')
+            x.wait_for_selector('.tostada:has-text("solo con los cambios")', timeout=120000)
+            tost = x.locator('.tostada', has_text='solo con los cambios').inner_text()
+            e = http('/test/estado')
+            ok(e['filasConDatos'] == info['filas'], f'la base interna quedó con las {info["filas"]} filas del Excel nuevo ({time.time() - t0:.1f} s en el emulador): "{tost}"', e)
+            ok(e['cuota']['escriturasHoja'] - w0 <= 6, f'con {e["cuota"]["escriturasHoja"] - w0} escrituras en la hoja (la carga completa usó más de 30)')
+            x.screenshot(path=OUT + 'e11c_cambios.png', full_page=True)
+            a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+            a.fill('.buscador-caja input', info['nuevo']); a.keyboard.press('Enter'); a.wait_for_selector('.cliente-ids:has-text("' + info['nuevo'] + '")', timeout=15000)
+            ok(True, 'Concentrix ya encuentra un contrato nuevo de esa semana')
+            a.fill('.buscador-caja input', info['quitado']); a.keyboard.press('Enter'); a.wait_for_selector('.no-encontrado', timeout=15000)
+            ok(True, 'y ya no encuentra uno que salió')
+            a.fill('.buscador-caja input', info['cambiado']); a.keyboard.press('Enter'); a.wait_for_selector('.cliente-ids:has-text("' + info['cambiado'] + '")', timeout=15000)
+            ok(a.locator('article.cliente .nodo-codigo').first.inner_text().strip() == info['nodoNuevo'], f'un cliente que cambió de nodo sale con el nodo nuevo ({info["nodoNuevo"]})')
         x.goto(APP + '#stats'); x.wait_for_selector('.kpis', timeout=60000); x.wait_for_timeout(800)
         x.screenshot(path=OUT + 'e12_stats.png', full_page=True)
         ok(x.locator('.kpi .v').first.inner_text() != '0', 'estadísticas con las consultas del servidor')
