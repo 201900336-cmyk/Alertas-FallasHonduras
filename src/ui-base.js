@@ -71,7 +71,7 @@ function VistaBase() {
   return html`<div>
     <div class="titulo-vista"><div><h1>Base de clientes</h1><p>${local
       ? 'El Excel semanal de BI con el contrato, nodo y OLT de cada cliente. En demostración se guarda solo en esta PC.'
-      : 'El Excel semanal de BI con el contrato, nodo y OLT de cada cliente. Se guarda en el Sheet privado de Alertas y reemplaza la base anterior.'}</p></div></div>
+      : 'El Excel semanal de BI con el contrato, nodo y OLT de cada cliente. Se guarda en la base interna de Alertas y reemplaza la base anterior.'}</p></div></div>
     <div class="base-grid">
       <section class="panel">
         <div class="panel-cab"><h3>Base actual</h3>${s.meta.demo && html`<span class="der marca-estado" data-s="RESUELTA">Demostración</span>`}</div>

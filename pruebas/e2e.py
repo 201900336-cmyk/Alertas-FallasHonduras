@@ -17,7 +17,9 @@ def http(path):
 
 with sync_playwright() as p:
     b = p.chromium.launch()
-    ctx = b.new_context(viewport={'width': 1440, 'height': 900}, locale='es-HN', timezone_id='America/Tegucigalpa')
+    # Sin animaciones: la portada animada en varias pestañas a la vez cargaba de más al navegador de prueba
+    # y a veces Playwright no alcanzaba a ver el botón de entrar (la página sí estaba lista).
+    ctx = b.new_context(viewport={'width': 1440, 'height': 900}, locale='es-HN', timezone_id='America/Tegucigalpa', reduced_motion='reduce')
     errores = []
     def pagina():
         pg = ctx.new_page()
@@ -132,7 +134,7 @@ with sync_playwright() as p:
         x.wait_for_timeout(1500); x.screenshot(path=OUT + 'e08_subiendo.png')
         x.wait_for_selector('text=Base actualizada', timeout=600000)
         e = http('/test/estado')
-        ok(e['filasBase'] == servicios + 1, f'la base real quedó completa en el Sheet ({e["filasBase"] - 1} filas, {time.time() - t0:.0f} s en el emulador)', e)
+        ok(e['filasBase'] == servicios + 1, f'la base real quedó completa en la base interna ({e["filasBase"] - 1} filas, {time.time() - t0:.0f} s en el emulador)', e)
         ok(x.locator('.tabla tbody tr').count() >= 2, 'el historial muestra las dos cargas')
         x.screenshot(path=OUT + 'e09_base.png', full_page=True)
         a.wait_for_selector('.aviso', timeout=20000)

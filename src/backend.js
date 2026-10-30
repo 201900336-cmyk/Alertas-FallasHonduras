@@ -1,7 +1,7 @@
 /* ==========================================================================
    ALERTAS · Conexión con los datos
    --------------------------------------------------------------------------
-   Remoto: el servidor de Apps Script sobre el Sheet privado. Es el modo real.
+   Remoto: el servidor de Apps Script con la base interna. Es el modo real.
    Local:  todo en este navegador, con datos de demostración. Se usa con ?demo
            en la dirección, o si config.js todavía no tiene la URL del servidor.
    Las dos formas responden igual, así la interfaz no sabe cuál está usando.

@@ -141,18 +141,18 @@ function cfg_() {
 function limpiarCfg_() { cache_().remove('cfg'); }
 function secreto_() {
   const s = cfg_().SECRETO;
-  if (!s) throw fallo_('CONFIG', 'El servidor no está configurado. En el Sheet usa el menú Alertas > Configurar por primera vez.');
+  if (!s) throw fallo_('CONFIG', 'El servidor no está configurado. En la base interna usa el menú Alertas > Configurar por primera vez.');
   return s;
 }
 
 function libro_() {
   const id = cfg_().BASE_ID;
-  if (!id) throw fallo_('CONFIG', 'El servidor no está configurado. En el Sheet usa el menú Alertas > Configurar por primera vez.');
+  if (!id) throw fallo_('CONFIG', 'El servidor no está configurado. En la base interna usa el menú Alertas > Configurar por primera vez.');
   return SpreadsheetApp.openById(id);
 }
 function hoja_(nombre) {
   const h = libro_().getSheetByName(nombre);
-  if (!h) throw fallo_('CONFIG', 'Falta la hoja ' + nombre + '. Usa el menú Alertas > Configurar por primera vez.');
+  if (!h) throw fallo_('CONFIG', 'Falta la tabla ' + nombre + ' en la base interna. Usa el menú Alertas > Configurar por primera vez.');
   return h;
 }
 function libroConsultas_() {
@@ -206,7 +206,7 @@ function accionLogin_(d) {
 
 function loginGenesys_(d) {
   const g = cfg_().GENESYS || {};
-  if (!g.region || !ALERTAS.REGIONES[g.region] || !g.clientId) throw fallo_('CONFIG', 'Genesys todavía no está conectado. En el Sheet usa Alertas > Conectar Genesys.');
+  if (!g.region || !ALERTAS.REGIONES[g.region] || !g.clientId) throw fallo_('CONFIG', 'Genesys todavía no está conectado. En la base interna usa el menú Alertas > Conectar Genesys.');
   const token = String(d.accessToken || '');
   if (!token || token.length > 5000) throw fallo_('DATOS', 'Falta la sesión de Genesys.');
   const pedir = (ruta) => UrlFetchApp.fetch('https://api.' + g.region + '/api/v2/' + ruta, {
@@ -239,7 +239,7 @@ function loginGenesys_(d) {
   if (!org) throw fallo_('ACCESO', 'Genesys no indicó tu organización. Revisa los permisos del cliente OAuth de Alertas (guía, paso de Genesys).');
   let orgId = String(g.orgId || '').toLowerCase();
   if (!orgId) {
-    if (!clienteVerificado) throw fallo_('CONFIG', 'Falta el ID de la organización de Genesys. Workforce HN: en el Sheet usa Alertas > Conectar Genesys.');
+    if (!clienteVerificado) throw fallo_('CONFIG', 'Falta el ID de la organización de Genesys. Workforce HN: en la base interna usa el menú Alertas > Conectar Genesys.');
     orgId = aprenderOrganizacion_(org);   // primer ingreso con un token que sí salió del cliente OAuth de Alertas
   }
   if (org.id !== orgId) throw fallo_('ACCESO', 'Tu usuario de Genesys no pertenece a la organización conectada a Alertas.');

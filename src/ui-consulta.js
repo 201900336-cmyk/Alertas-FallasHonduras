@@ -104,7 +104,7 @@ function SinBase() {
     <h1>Todavía no hay base de clientes</h1>
     <p>${puedeSubir ? 'Sube la base semanal de contratos por nodo para empezar' + (local ? ', o prueba la herramienta con datos ficticios.' : '.') : 'Workforce HN debe subir la base semanal de contratos por nodo antes de poder consultar clientes.'}</p>
     ${puedeSubir && html`<div class="opciones-inicio">
-      <div class="panel opcion"><h3>Subir la base</h3><p>${local ? 'El Excel semanal de BI con contrato, nodo, OLT y datos del cliente. En demostración se guarda solo en esta PC.' : 'El Excel semanal de BI. Se guarda en el Sheet privado de Alertas y reemplaza la base anterior.'}</p>
+      <div class="panel opcion"><h3>Subir la base</h3><p>${local ? 'El Excel semanal de BI con contrato, nodo, OLT y datos del cliente. En demostración se guarda solo en esta PC.' : 'El Excel semanal de BI. Se guarda en la base interna de Alertas y reemplaza la base anterior.'}</p>
         <button class="btn btn-primario" onClick=${() => ir('base')}><${Ico} n="subir" s=${16} />Ir a Base de clientes</button></div>
       ${local && html`<div class="panel opcion"><h3>Probar con datos de demostración</h3><p>Clientes, fallas y consultas inventados para conocer la herramienta o presentarla.</p>
         <button class="btn btn-borde" onClick=${() => A.cargarDemo()}>Cargar demostración</button></div>`}

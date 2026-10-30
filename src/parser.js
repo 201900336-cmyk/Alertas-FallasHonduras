@@ -229,7 +229,7 @@ const ALERTAS_PARSER = (() => {
     const entries = readZipEntries(u8);
     const find = (n) => entries[n] || entries[Object.keys(entries).find((k) => k.toLowerCase() === n.toLowerCase())];
 
-    const wbE = find('xl/workbook.xml'); if (!wbE) throw new Error('No encontré la hoja de cálculo dentro del archivo.');
+    const wbE = find('xl/workbook.xml'); if (!wbE) throw new Error('El archivo no parece un Excel válido.');
     const wbXml = await entryText(u8, wbE);
     const date1904 = /date1904="(1|true)"/.test(wbXml);
     const sheetM = wbXml.match(/<sheet\b[^>]*>/);
@@ -333,7 +333,7 @@ const ALERTAS_PARSER = (() => {
       buf += t; if (buf.length > 262144) flushRows(false);
     }, bump);
     flushRows(true);
-    if (!builder) throw new Error('La hoja está vacía.');
+    if (!builder) throw new Error('El Excel está vacío.');
     onProgress && onProgress(1);
     return { builder, header, map, sst: sst.length };
   }
