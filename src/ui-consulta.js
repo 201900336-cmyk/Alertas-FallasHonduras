@@ -393,7 +393,7 @@ function MapaVivo({ mf }) {
   return html`<section class="panel" aria-label="Mapa de fallas activas">
     <div class="panel-cab"><div><h3>Fallas activas por departamento</h3>
       <div class="sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados en ' + U.plural(deps, '1 departamento', deps + ' departamentos') : 'No hay fallas activas en este momento'}</div></div></div>
-    <div class="panel-cuerpo"><${MapaHonduras} valores=${valores} fallas=${fallasDep} vacio="Sin fallas activas en el país." apilado=${true} /></div>
+    <div class="panel-cuerpo"><${MapaHonduras} valores=${valores} fallas=${fallasDep} vacio="Sin fallas activas en el país." apilado=${true} nombres=${true} /></div>
   </section>`;
 }
 

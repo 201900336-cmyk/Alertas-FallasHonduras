@@ -1,8 +1,10 @@
 /* ==========================================================================
    ALERTAS · Portada (pantalla de entrada)
    Honduras de noche: la red entre ciudades, una tormenta eléctrica sobre la
-   costa norte y, en ciclo de 18 s, tres fallas de ejemplo (rayo, nodo en rojo,
-   departamento marcado). Abajo a la derecha, el zoom a Tegucigalpa y sus colonias.
+   costa norte y, en ciclo de 18 s, tres fallas de ejemplo. En cada una: el rayo,
+   el nodo en rojo y el departamento marcado; una cuadrilla que sale de una ciudad
+   cercana, los técnicos trabajando en el sitio y el servicio restablecido.
+   A la derecha del mapa, el zoom a Tegucigalpa y sus colonias.
    Es una ilustración: no muestra datos reales ni conteos.
    ========================================================================== */
 
@@ -10,7 +12,7 @@ const Portada = (() => {
   /* Ciudades sobre el mapa (proyección del mapa: x = (lon + 89.35) * 160.77, y = (16.52 - lat) * 166.38).
      [x, y, nombre visible, posición de la etiqueta]. Tegucigalpa va sin nombre: lo lleva el zoom de abajo. */
   const N = {
-    teg: [346.9, 407.2, '', 'izq'], sps: [213.0, 169.0, 'San Pedro Sula', 'izq'], lce: [412.8, 126.5, 'La Ceiba', 'izq'],
+    teg: [346.9, 407.2, '', 'izq'], sps: [213.0, 169.0, 'San Pedro Sula', 'izq'], lce: [412.8, 126.5, 'La Ceiba', 'arriba-izq'],
     cho: [347.1, 535.6, 'Choluteca', 'der'], roa: [452.2, 34.0, 'Roatán', 'der'], jut: [503.3, 308.4, 'Juticalpa', 'der'],
     ple: [897.6, 208.5, 'Puerto Lempira', 'izq'],
     src: [91.1, 291.7], com: [274.9, 342.7], dan: [444.8, 413.7], pro: [249.2, 186.3], tru: [546.6, 100.4], tel: [302.8, 122.6],
@@ -24,38 +26,72 @@ const Portada = (() => {
     ['src', 'gra', 's'], ['gra', 'esp', 's'], ['esp', 'sig', 's'], ['sps', 'sig', 'f'], ['sig', 'com', 'f'], ['com', 'lpz', 's'], ['com', 'teg', 'f'],
     ['teg', 'dan', 's'], ['teg', 'nac', 'f'], ['nac', 'cho', 'f'], ['teg', 'jut', 'f'], ['jut', 'cat', 's'], ['cat', 'ple', 'r']
   ];
-  /* Las tres escenas del ciclo */
+  /* Las tres escenas del ciclo. desde: la ciudad de donde sale la cuadrilla; tec: dónde trabajan los técnicos (respecto al nodo) */
   const ESCENAS = [
-    { n: 'lce', depto: 'ATLANTIDA', motivo: 'Falla de energía comercial', lugar: 'La Ceiba, Atlántida', pos: 'der',
+    { n: 'lce', depto: 'ATLANTIDA', motivo: 'Falla de energía comercial', lugar: 'La Ceiba, Atlántida', pos: 'der', desde: 'tel', tec: [-4, 30],
       rayo: [[380, -38], [392, -6], [382, 18], [400, 44], [392, 68], [409, 92], [402, 110], [412, 124]], rama: [[400, 44], [422, 58], [415, 80]] },
-    { n: 'sps', depto: 'CORTES', motivo: 'Reemplazo de equipo', lugar: 'San Pedro Sula, Cortés', pos: 'abajo',
+    { n: 'sps', depto: 'CORTES', motivo: 'Reemplazo de equipo', lugar: 'San Pedro Sula, Cortés', pos: 'abajo', desde: 'pro', tec: [-12, -28],
       rayo: [[254, -38], [240, 0], [249, 26], [229, 58], [238, 86], [220, 114], [228, 138], [213, 166]], rama: [[238, 86], [256, 100], [250, 122]] },
-    { n: 'teg', depto: 'FRANCISCO MORAZAN', motivo: 'Corte de fibra óptica', lugar: 'Tegucigalpa, Col. Kennedy', pos: 'izq' }
+    { n: 'teg', depto: 'FRANCISCO MORAZAN', motivo: 'Corte de fibra óptica', lugar: 'Tegucigalpa, Col. Kennedy', pos: 'izq', desde: 'dan', tec: [4, 32] }
   ];
+  const ESTADOS = [['Cuadrilla en camino', 'pt-e-camino'], ['Técnicos trabajando', 'pt-e-trabajo'], ['Servicio restablecido', 'pt-e-listo']];
+  const retraso = (i) => (1.2 + i * 6) + 's';
 
   const linea = (a, b) => 'M' + N[a][0] + ' ' + N[a][1] + 'L' + N[b][0] + ' ' + N[b][1];
   const trazo = (pts) => 'M' + pts.map((p) => p.join(' ')).join('L');
 
   function Reticula() {
     // Paralelos y meridianos de cada grado, apenas visibles
-    const d = [56.3, 217, 377.8, 538.6, 699.3, 860.1].map((x) => 'M' + x + ' -40V715').join('')
+    const d = [56.3, 217, 377.8, 538.6, 699.3, 860.1].map((x) => 'M' + x + ' -12V600').join('')
       + [86.5, 252.9, 419.3, 585.7].map((y) => 'M0 ' + y + 'H1000').join('');
     return html`<path class="pt-reticula" d=${d} />`;
   }
 
   function Alerta(e, i) {
     const [x, y] = N[e.n];
-    const w = Math.round(Math.max(e.motivo.length * 9.7, e.lugar.length * 7.8) + 34), h = 58;
+    const w = Math.round(Math.max(e.motivo.length * 9.7, e.lugar.length * 7.8, 172) + 34), h = 84;
     const bx = e.pos === 'der' ? x + 20 : e.pos === 'izq' ? x - 20 - w : x - 46;
     const by = e.pos === 'abajo' ? y + 22 : y - 29;
-    return html`<g class=${'pt-alerta esc esc-' + (i + 1)}>
-      <circle class="pt-onda" cx=${x} cy=${y} r="9" />
-      <circle class="pt-onda o2" cx=${x} cy=${y} r="9" />
-      <circle class="pt-foco" cx=${x} cy=${y} r="6.5" />
+    return html`<g class=${'pt-alerta esc esc-' + (i + 1)} style=${'--d:' + retraso(i)}>
+      <g class="pt-activo">
+        <circle class="pt-onda" cx=${x} cy=${y} r="9" />
+        <circle class="pt-onda o2" cx=${x} cy=${y} r="9" />
+        <circle class="pt-foco" cx=${x} cy=${y} r="6.5" />
+      </g>
+      <g class="pt-ok">
+        <circle class="pt-ok-fondo" cx=${x} cy=${y} r="9" />
+        <path class="pt-ok-check" d=${'M' + (x - 4) + ' ' + y + 'l2.8 2.9l5.4-5.8'} />
+      </g>
       <rect class="pt-rotulo" x=${bx} y=${by} width=${w} height=${h} rx="8" />
       <rect class="pt-rotulo-barra" x=${bx} y=${by + 10} width="3.5" height=${h - 20} rx="1.75" />
       <text class="pt-rotulo-m" x=${bx + 17} y=${by + 25}>${e.motivo}</text>
       <text class="pt-rotulo-l" x=${bx + 17} y=${by + 45}>${e.lugar}</text>
+      ${ESTADOS.map(([t, c]) => html`<text class=${'pt-rotulo-e ' + c} x=${bx + 17} y=${by + 69} key=${c}>${t}</text>`)}
+    </g>`;
+  }
+
+  /* Insignias de 23 unidades: camión de la cuadrilla y casco de técnico */
+  const CAMION = 'M-7.5 -4.5h8.5v7.5h-8.5zM1.6 -2.2h3.4l2.5 2.8v2.9h-5.9zM-4.4 3.2a1.7 1.7 0 1 0 0.01 0zM4.3 3.2a1.7 1.7 0 1 0 0.01 0z';
+  const CASCO = 'M-6.8 1.2a6.8 6.6 0 0 1 13.6 0zM-8.6 1.4h17.2v2.4h-17.2zM-1 -5.3h2v3.2h-2z';
+  function Insignia({ icono, clase }) {
+    return html`<g class=${clase}><circle class="pt-insignia" r="11.5" /><path class="pt-insignia-icono" d=${icono} /></g>`;
+  }
+
+  /* La cuadrilla: sale de una ciudad cercana por la red, llega al sitio y los técnicos trabajan */
+  function Cuadrilla(e, i) {
+    const [x0, y0] = N[e.desde], [x1, y1] = N[e.n];
+    const dx = x1 - x0, dy = y1 - y0, largo = Math.hypot(dx, dy), k = Math.max(0, (largo - 24) / largo);
+    const xs = +(x0 + dx * k).toFixed(1), ys = +(y0 + dy * k).toFixed(1);
+    const [tx, ty] = [x1 + e.tec[0], y1 + e.tec[1]];
+    return html`<g class=${'pt-cuadrilla esc esc-' + (i + 1)} style=${'--d:' + retraso(i)}>
+      <path class="pt-ruta" d=${'M' + x0 + ' ' + y0 + 'L' + xs + ' ' + ys} pathLength="100" />
+      <g class="pt-viaje" style=${'--x0:' + x0 + 'px;--y0:' + y0 + 'px;--x1:' + xs + 'px;--y1:' + ys + 'px'}>
+        <${Insignia} icono=${CAMION} clase="pt-camion" />
+      </g>
+      <g class="pt-tecnico" transform=${'translate(' + tx + ' ' + ty + ')'}>
+        <${Insignia} icono=${CASCO} clase="" />
+        <path class="pt-chispa" d="M10 -10l5 -5M13 -4h6M4 -13v-6" />
+      </g>
     </g>`;
   }
 
@@ -66,25 +102,34 @@ const Portada = (() => {
     for (let j = 0; j <= 16; j++) calles.push('M620 ' + (430 + j * 21) + 'H1050');
     const rio = 'M736 486C760 540 720 575 770 610S793 668 761 693';
     const colonias = [['Comayagüela', 698, 650], ['El Centro', 786, 548], ['Palmira', 852, 536], ['Miraflores', 910, 572], ['Loarque', 790, 684]];
-    return html`<g class="pt-urbe">
+    // Dibujado en 680..990 x 440..705 y llevado a la derecha del mapa (Nicaragua), donde no tapa ningún departamento
+    return html`<g class="pt-urbe" transform="translate(712 345) scale(0.9) translate(-680 -440)">
       <rect class="pt-urbe-marco" x="680" y="440" width="310" height="265" rx="14" />
       <text class="pt-urbe-titulo" x="698" y="471">Tegucigalpa</text>
       <g clip-path="url(#pt-recorte-urbe)">
         <rect class="pt-urbe-fondo" x="692" y="486" width="286" height="207" />
         <g transform="rotate(-12 835 590)">
           <path class="pt-urbe-calles" d=${calles.join('')} />
-          <rect class="pt-urbe-zona esc esc-3" x="852" y="618" width="96" height="52" rx="4" />
+          <rect class="pt-urbe-zona esc esc-3" style=${'--d:' + retraso(2)} x="852" y="618" width="96" height="52" rx="4" />
         </g>
         <path class="pt-urbe-avenida" d="M700 655C760 690 880 690 978 612M790 520C840 515 900 505 978 498M862 486C876 540 898 600 905 693" />
         <path class="pt-urbe-rio-borde" d=${rio} />
         <path class="pt-urbe-rio" d=${rio} />
         ${colonias.map(([t, x, y]) => html`<text class="pt-urbe-colonia" x=${x} y=${y}>${t}</text>`)}
         <text class="pt-urbe-colonia" x="872" y="682">Col. Kennedy</text>
-        <g class="esc esc-3">
-          <circle class="pt-onda" cx="910" cy="629" r="7" />
-          <circle class="pt-onda o2" cx="910" cy="629" r="7" />
-          <circle class="pt-foco" cx="910" cy="629" r="5.5" />
+        <g class="esc esc-3" style=${'--d:' + retraso(2)}>
+          <g class="pt-activo">
+            <circle class="pt-onda" cx="910" cy="629" r="7" />
+            <circle class="pt-onda o2" cx="910" cy="629" r="7" />
+            <circle class="pt-foco" cx="910" cy="629" r="5.5" />
+          </g>
           <text class="pt-urbe-colonia roja" x="872" y="682">Col. Kennedy</text>
+          <path class="pt-ruta" d="M792 560L884 618" pathLength="100" />
+          <g class="pt-viaje" style="--x0:792px;--y0:560px;--x1:884px;--y1:618px"><${Insignia} icono=${CAMION} clase="pt-camion" /></g>
+          <g class="pt-tecnico" transform="translate(934 610)">
+            <${Insignia} icono=${CASCO} clase="" />
+            <path class="pt-chispa" d="M10 -10l5 -5M13 -4h6M4 -13v-6" />
+          </g>
         </g>
       </g>
     </g>`;
@@ -94,7 +139,7 @@ const Portada = (() => {
     const deps = (typeof HN_MAPA !== 'undefined' && HN_MAPA.deps) || {};
     const claves = Object.keys(deps);
     const [tx, ty] = N.teg;
-    return html`<svg viewBox="0 -40 1000 755" preserveAspectRatio="xMidYMid meet" focusable="false">
+    return html`<svg viewBox="0 -12 1000 612" preserveAspectRatio="xMidYMax meet" focusable="false">
       <defs>
         <radialGradient id="pt-nube"><stop offset="0" stop-color="#c9cdd2" stop-opacity=".2" /><stop offset=".6" stop-color="#8a9099" stop-opacity=".08" /><stop offset="1" stop-color="#8a9099" stop-opacity="0" /></radialGradient>
         <radialGradient id="pt-nucleo"><stop offset="0" stop-color="#e3241b" stop-opacity=".42" /><stop offset="1" stop-color="#e3241b" stop-opacity="0" /></radialGradient>
@@ -106,7 +151,7 @@ const Portada = (() => {
       <${Reticula} />
       <g class="pt-costa">${claves.map((k) => html`<path d=${deps[k].d} />`)}</g>
       <g class="pt-deptos">${claves.map((k) => html`<path d=${deps[k].d} />`)}</g>
-      ${ESCENAS.map((e, i) => deps[e.depto] && html`<path class=${'pt-tinte esc esc-' + (i + 1)} d=${deps[e.depto].d} />`)}
+      ${ESCENAS.map((e, i) => deps[e.depto] && html`<path class=${'pt-tinte esc esc-' + (i + 1)} style=${'--d:' + retraso(i)} d=${deps[e.depto].d} />`)}
       <g class="pt-tormenta">
         <ellipse cx="300" cy="38" rx="270" ry="112" fill="url(#pt-nube)" />
         <ellipse cx="300" cy="38" rx="270" ry="112" fill="url(#pt-gotas)" mask="url(#pt-mascara-nube)" opacity=".3" />
@@ -117,15 +162,16 @@ const Portada = (() => {
         style=${'animation-duration:' + (2.4 + ((i * 0.53) % 2)).toFixed(2) + 's;animation-delay:-' + ((i * 0.91) % 3).toFixed(2) + 's'} />`)}</g>
       <g class="pt-lupa">
         <circle cx=${tx} cy=${ty} r="27" />
-        <path d=${'M' + (tx + 22) + ' ' + (ty - 16) + 'L680 452M' + (tx + 20) + ' ' + (ty + 18) + 'L680 694'} />
+        <path d=${'M' + (tx + 22) + ' ' + (ty - 16) + 'L712 356M' + (tx + 20) + ' ' + (ty + 18) + 'L712 572'} />
       </g>
       <g>${Object.keys(N).map((k) => {
         const [x, y, nombre, pos] = N[k];
         return html`<g>
           ${pos && html`<circle class="pt-halo" cx=${x} cy=${y} r="9.5" />`}
           <circle class=${'pt-nodo' + (pos ? ' mayor' : '')} cx=${x} cy=${y} r=${pos ? 4.6 : 3.1} />
-          ${nombre && html`<text class="pt-ciudad" x=${pos === 'izq' ? x - 16 : x + 15} y=${pos === 'abajo' ? y + 30 : y + 5}
-            text-anchor=${pos === 'izq' ? 'end' : pos === 'abajo' ? 'middle' : 'start'}>${nombre}</text>`}
+          ${nombre && html`<text class="pt-ciudad" x=${pos === 'izq' ? x - 16 : pos === 'der' ? x + 15 : pos === 'arriba-izq' ? x - 4 : x}
+            y=${pos === 'abajo' ? y + 30 : pos === 'arriba' || pos === 'arriba-izq' ? y - 16 : y + 5}
+            text-anchor=${pos === 'izq' || pos === 'arriba-izq' ? 'end' : pos === 'der' ? 'start' : 'middle'}>${nombre}</text>`}
         </g>`;
       })}</g>
       <${Ciudad} />
@@ -133,6 +179,7 @@ const Portada = (() => {
         <path class="pt-rayo-brillo" d=${trazo(e.rayo) + trazo(e.rama)} />
         <path class="pt-rayo-nucleo" d=${trazo(e.rayo) + trazo(e.rama)} />
       </g>`)}
+      ${ESCENAS.map(Cuadrilla)}
       ${ESCENAS.map(Alerta)}
     </svg>`;
   }
@@ -149,7 +196,7 @@ function ArteAcceso() {
     <div class="marca"><div class="marca-glifo"><${Ico} n="marca" s=${20} /></div><div><div class="marca-nombre">${CONFIG.app}</div><div class="marca-bajada" style="color:inherit;opacity:.7">${CONFIG.bajada}</div></div></div>
     <div class="portada-escena" aria-hidden="true"><${Portada.Escena} /></div>
     <div class="portada-texto">
-      <h1>¿Hay falla<br />en su zona?</h1>
+      <h1>Fallas de red, al instante.</h1>
       <p>Certifica en segundos si el cliente está dentro de una falla general de la red fija, y le da a quien atiende las palabras para explicárselo.</p>
     </div>
   </div>`;

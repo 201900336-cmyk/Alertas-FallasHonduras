@@ -2,7 +2,7 @@
 
 **Página:** https://201900336-cmyk.github.io/Alertas-FallasHonduras/
 
-**¿Hay falla en su zona?** Alertas certifica en segundos si un cliente de Servicios Fijos está dentro de una falla general de red y le da a quien atiende las palabras para explicárselo.
+**Fallas de red, al instante.** Alertas certifica en segundos si un cliente de Servicios Fijos está dentro de una falla general de red y le da a quien atiende las palabras para explicárselo.
 
 - **Concentrix** (Call Center Nivel 1 y Redes Sociales) y **Tiendas** buscan por contrato o DNI y ven si el nodo del cliente está en falla, con el guion empático listo, y el mapa de Honduras con las fallas activas.
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe alertas tempranas.
@@ -143,6 +143,7 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 ## Día a día
 
 - **Asesores y tiendas**: escriben el contrato (6 a 8 dígitos) o el DNI (con o sin guiones). Alertas responde **Falla general** con el guion o **Sin falla general** para seguir el flujo normal. Si sospechan una falla que no está publicada, la reportan desde ahí. **Limpiar** (o la tecla Esc) borra la búsqueda.
+- **Mapa de fallas activas** (inicio de Consulta): con el nombre de cada departamento, y debajo la lista de departamentos afectados con sus clientes.
 - **Historial de fallas del cliente**: debajo del cliente y del guion. Muestra las fallas de su nodo desde que es cliente (90 días, 6 meses o 1 año): de cuándo a cuándo, cuánto duró cada una y las horas sin servicio en total. También dice cuántas veces lo consultaron en los últimos 7 días.
   - Con 3 o más fallas en 90 días lo marca como **Cliente reincidente** y el guion agrega una frase reconociéndolo.
   - El número de falla solo lo ve Workforce HN.

@@ -597,6 +597,9 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .hbar.cab .val { font-weight: 650; }
 .mapa path { stroke: var(--surface); stroke-width: 1.2; transition: opacity 150ms ease; }
 .mapa path:hover, .mapa path:focus { opacity: 0.8; outline: none; }
+.mapa-nombre { font-size: 13px; font-weight: 600; fill: var(--ink-2); text-anchor: middle; pointer-events: none; user-select: none; }
+.mapa-nombre[data-tono="medio"] { fill: var(--ink); }
+.mapa-nombre[data-tono="oscuro"] { fill: #ffffff; }
 .escala { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
 .escala .rampa { display: flex; gap: 2px; }
 .escala .rampa i { width: 22px; height: 10px; border-radius: 2px; }
@@ -615,7 +618,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .barra-sms .nota-sms { flex-basis: 100%; margin-top: 0; }
 
 /* ---------- Login ---------- */
-.login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+.login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) clamp(400px, 36vw, 600px); }
 .login-arte { background: var(--ink); color: var(--surface); padding: 48px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
 .login-arte .marca-glifo { background: var(--surface); color: var(--ink); }
 .login-arte h1 { font-size: clamp(40px, 5vw, 72px); font-weight: 850; font-stretch: 125%; letter-spacing: -0.03em; line-height: 0.95; margin: 0; }
@@ -626,15 +629,17 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .portada {
   --pt-rojo: #e3241b; --pt-blanco: #f4f5f6; --pt-niebla: #c9cdd2; --pt-gris: #8a9099; --pt-grafito: #2b3036; --pt-asfalto: #0d0f12;
   background: radial-gradient(120% 70% at 32% 16%, #171a1e 0%, #000 64%) #000; color: var(--pt-blanco);
-  padding: 40px 48px 44px; gap: 10px; isolation: isolate; justify-content: flex-start;
+  padding: 30px 48px 40px; gap: 18px; isolation: isolate; justify-content: flex-start;
 }
 .portada .marca-glifo { background: var(--pt-blanco); color: #000; }
 .portada .marca > div:last-child { display: block; }
-.portada > .marca, .portada-escena, .portada-texto { position: relative; z-index: 2; }
-.portada-escena { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; margin: 0 -30px; min-height: 0; }
-.portada-escena svg { display: block; width: 100%; height: auto; max-height: max(260px, calc(100vh - 360px)); overflow: visible; font-family: var(--font); }
-.portada-texto h1 { font-size: clamp(36px, 4.3vw, 62px); }
-.portada-texto p { color: #b3b9c1; opacity: 1; font-size: 15.5px; margin-top: 14px; }
+/* El mapa usa todo el alto que deja el texto (en una franja abajo, sin taparlo); la marca va arriba, sobre el cielo. */
+.portada > .marca { position: absolute; top: 40px; left: 48px; z-index: 3; }
+.portada-escena { position: relative; z-index: 2; flex: 1 1 auto; min-height: 0; margin: 0 -30px; }
+.portada-escena svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; overflow: visible; font-family: var(--font); }
+.portada-texto { position: relative; z-index: 3; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 36px; }
+.portada-texto h1 { font-size: clamp(30px, 2.7vw, 46px); white-space: nowrap; }
+.portada-texto p { color: #b3b9c1; opacity: 1; font-size: 15px; margin: 0; flex: 1 1 300px; max-width: 46ch; }
 
 .pt-reticula { fill: none; stroke: #1b1e23; stroke-width: 1; stroke-dasharray: 2 7; }
 .pt-costa path { fill: none; stroke: #3d434b; stroke-width: 3.4; stroke-linejoin: round; }
@@ -682,6 +687,27 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pt-urbe-colonia { fill: #8a9099; font-size: 12.5px; font-weight: 500; paint-order: stroke; stroke: #15181c; stroke-width: 3px; stroke-linejoin: round; }
 .pt-urbe-colonia.roja { fill: #fff; stroke: var(--pt-rojo); }
 
+/* Cuadrilla: sale de una ciudad cercana (5 % a 11 % del ciclo), los técnicos trabajan (12 % a 20.5 %)
+   y el servicio queda restablecido (21.5 % hasta que se apaga la escena). --d es el retraso de cada escena. */
+.portada .esc { animation-delay: var(--d, 0s); }
+.pt-tinte, .pt-urbe-zona { animation-name: pt-tinte; }
+.pt-ruta { fill: none; stroke: #d9dce0; stroke-width: 1.7; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0.55;
+  animation: pt-trazo 18s linear infinite both; animation-delay: var(--d); }
+.pt-viaje { transform: translate(var(--x0), var(--y0)); animation: pt-viaje 18s cubic-bezier(0.45, 0.05, 0.3, 1) infinite both; animation-delay: var(--d); }
+.pt-insignia { fill: #0b0d10; stroke: #d9dce0; stroke-width: 1.4; }
+.pt-camion .pt-insignia { stroke: var(--pt-rojo); stroke-width: 1.8; }
+.pt-insignia-icono { fill: var(--pt-blanco); }
+.pt-tecnico { opacity: 0; animation: pt-trabajando 18s linear infinite both; animation-delay: var(--d); }
+.pt-chispa { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; animation: pt-chispa 0.42s steps(2, end) infinite; }
+.pt-activo { animation: pt-activo 18s linear infinite both; animation-delay: var(--d); }
+.pt-ok { opacity: 0; animation: pt-restablecido 18s linear infinite both; animation-delay: var(--d); }
+.pt-ok-fondo { fill: var(--pt-blanco); stroke: #000; stroke-width: 1.5; }
+.pt-ok-check { fill: none; stroke: #000; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.pt-rotulo-e { font-size: 13.5px; font-weight: 650; opacity: 0; animation: 18s linear infinite both; animation-delay: var(--d); }
+.pt-e-camino { fill: #c9cdd2; animation-name: pt-en-camino; }
+.pt-e-trabajo { fill: #ff5a4f; animation-name: pt-trabajando; }
+.pt-e-listo { fill: #ffffff; animation-name: pt-restablecido; }
+
 .portada-lluvia { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden;
   -webkit-mask-image: linear-gradient(#000 0%, #000 34%, transparent 72%); mask-image: linear-gradient(#000 0%, #000 34%, transparent 72%); }
 .portada-lluvia i { position: absolute; inset: -40% -30%; will-change: transform; }
@@ -692,6 +718,14 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .portada-destello.d2 { background: radial-gradient(55% 42% at 26% 30%, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0) 70%); animation-delay: 7.2s; }
 
 @keyframes pt-paquete { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes pt-viaje { 0%, 5% { transform: translate(var(--x0), var(--y0)); } 11%, 100% { transform: translate(var(--x1), var(--y1)); } }
+@keyframes pt-trazo { 0%, 5% { stroke-dashoffset: 100; } 11%, 100% { stroke-dashoffset: 0; } }
+@keyframes pt-en-camino { 0%, 4% { opacity: 0; } 5.5%, 10.5% { opacity: 1; } 11.5%, 100% { opacity: 0; } }
+@keyframes pt-trabajando { 0%, 11.5% { opacity: 0; } 12.5%, 20% { opacity: 1; } 21%, 100% { opacity: 0; } }
+@keyframes pt-restablecido { 0%, 20.5% { opacity: 0; } 21.5%, 100% { opacity: 1; } }
+@keyframes pt-activo { 0%, 20% { opacity: 1; } 21%, 100% { opacity: 0; } }
+@keyframes pt-tinte { 0%, 2.4% { opacity: 0; } 4.6%, 20.5% { opacity: 1; } 23%, 100% { opacity: 0; } }
+@keyframes pt-chispa { 0% { opacity: 1; } 50% { opacity: 0.15; } }
 @keyframes pt-deriva { from { transform: translateX(-34px); } to { transform: translateX(42px); } }
 @keyframes pt-escena { 0%, 2.4% { opacity: 0; } 4.6%, 30% { opacity: 1; } 33.3%, 100% { opacity: 0; } }
 @keyframes pt-rayo { 0%, 1.1% { opacity: 0; } 1.7% { opacity: 1; } 2.3% { opacity: 0.15; } 2.9% { opacity: 1; } 3.8% { opacity: 0.3; } 5%, 100% { opacity: 0; } }
@@ -771,11 +805,12 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .login { grid-template-columns: 1fr; }
   .login-arte { min-height: 280px; }
   .portada { padding: 28px 28px 32px; }
-  .portada-escena { margin: 0 -14px; }
-  .portada-escena svg { max-height: 46vh; }
+  .portada > .marca { position: relative; top: auto; left: auto; }
+  .portada-escena { flex: none; height: min(46vh, 62vw); margin: 0 -14px; }
 }
 @media (max-width: 720px) {
   .portada-texto p { display: none; }
+  .portada-texto h1 { white-space: normal; }
   .portada { gap: 6px; }
   .contenido { padding: 16px 16px 40px; }
   .topbar { padding: 0 10px; gap: 6px; }
@@ -799,6 +834,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .comp-fila { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .entrada-nodos .textarea { padding-right: 12px; padding-bottom: 52px; }
   .mapa-grid { grid-template-columns: minmax(0, 1fr); }
+  .mapa-nombre { display: none; }
   .hbar { grid-template-columns: minmax(84px, 0.9fr) minmax(0, 1.6fr) auto; }
   .panel-cab .der { margin-left: 0; flex-wrap: wrap; }
   .datos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -837,4 +873,9 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .portada-lluvia, .portada-destello, .pt-rayo, .pt-paquete, .pt-onda { display: none; }
   .portada .esc, .portada .pt-tormenta { animation: none !important; }
   .portada .esc-1 { opacity: 1; }
+  /* Primera alerta quieta: la cuadrilla ya en el sitio y los técnicos trabajando */
+  .portada .pt-viaje { animation: none !important; transform: translate(var(--x1), var(--y1)); }
+  .portada .pt-ruta { animation: none !important; stroke-dashoffset: 0; }
+  .portada .pt-tecnico, .portada .pt-e-trabajo, .portada .pt-activo { animation: none !important; opacity: 1; }
+  .portada .pt-e-camino, .portada .pt-e-listo, .portada .pt-ok, .portada .pt-chispa { animation: none !important; opacity: 0; }
 }

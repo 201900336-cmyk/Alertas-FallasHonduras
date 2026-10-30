@@ -25,6 +25,7 @@ with sync_playwright() as p:
     errores = []
     def pagina():
         pg = ctx.new_page()
+        pg.bring_to_front()   # con varias pestañas a la vez, la nueva queda al frente (si no, a veces Playwright no la ve a tiempo)
         pg.on('pageerror', lambda e: errores.append(str(e)))
         pg.on('console', lambda m: errores.append(m.text) if m.type == 'error' and 'favicon' not in m.text else None)
         return pg

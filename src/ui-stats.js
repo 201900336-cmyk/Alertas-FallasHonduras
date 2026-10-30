@@ -219,7 +219,17 @@ function Comparativo({ d }) {
   </div>`;
 }
 
-function MapaHonduras({ valores, fallas, vacio, apilado }) {
+/* Dónde va el nombre de cada departamento (en las coordenadas del mapa, 1000 x 589): el punto más adentro
+   de cada uno, calculado con su contorno. Los nombres largos van en dos líneas; Islas de la Bahía, en el mar. */
+const HN_NOMBRES = {
+  OCOTEPEQUE: [45, 333, 'Ocotepeque'], COPAN: [70, 264, 'Copán'], LEMPIRA: [116, 373, 'Lempira'], INTIBUCA: [196, 345, 'Intibucá'],
+  'LA PAZ': [229, 404, 'La Paz'], VALLE: [286, 491, 'Valle'], CHOLUTECA: [356, 542, 'Choluteca'], 'EL PARAISO': [444, 408, 'El Paraíso'],
+  'FRANCISCO MORAZAN': [367, 343, 'Francisco', 'Morazán'], COMAYAGUA: [271, 305, 'Comayagua'], 'SANTA BARBARA': [156, 217, 'Santa', 'Bárbara'],
+  CORTES: [216, 163, 'Cortés'], YORO: [327, 218, 'Yoro'], ATLANTIDA: [338, 145, 'Atlántida'], COLON: [663, 146, 'Colón'],
+  OLANCHO: [585, 281, 'Olancho'], 'GRACIAS A DIOS': [781, 218, 'Gracias a Dios'], 'ISLAS DE LA BAHIA': [515, 58, 'Islas de la Bahía']
+};
+
+function MapaHonduras({ valores, fallas, vacio, apilado, nombres }) {
   const tt = useTooltip();
   const [tabla, setTabla] = useState(false);
   const max = Math.max(0, ...Object.values(valores));
@@ -231,6 +241,8 @@ function MapaHonduras({ valores, fallas, vacio, apilado }) {
         ${Object.entries(HN_MAPA.deps).map(([k, dep]) => { const v = valores[k] || 0; return html`<path key=${k} d=${dep.d} fill=${'var(--seq-' + clase(v) + ')'} tabindex="0"
           onPointerMove=${(e) => tt.mostrar(e, html`<div class="tl">${dep.name}</div><div class="tv">${U.n(v)} clientes</div><div class="tl">${U.plural(fallas[k] || 0, '1 falla', (fallas[k] || 0) + ' fallas')}</div>`)}
           onPointerLeave=${tt.ocultar} onFocus=${(e) => { const b = e.currentTarget.getBoundingClientRect(); tt.mostrar({ clientX: b.left + b.width / 2, clientY: b.top + b.height / 2 }, html`<div class="tl">${dep.name}</div><div class="tv">${U.n(v)} clientes</div>`); }} onBlur=${tt.ocultar} />`; })}
+        ${nombres && Object.entries(HN_NOMBRES).map(([k, [x, y, ...lineas]]) => { const c = clase(valores[k] || 0); return html`<text key=${'n-' + k} class="mapa-nombre" data-tono=${c >= 4 ? 'oscuro' : c === 3 ? 'medio' : ''} x=${x} y=${y} aria-hidden="true">
+          ${lineas.map((l, i) => html`<tspan x=${x} dy=${i ? '1.15em' : (0.35 - 0.575 * (lineas.length - 1)) + 'em'} key=${i}>${l}</tspan>`)}</text>`; })}
       </svg>
       <div>
         ${lista.length ? html`<div class="hbar cab"><span>Departamento</span><span></span><span class="val">Clientes</span></div>
