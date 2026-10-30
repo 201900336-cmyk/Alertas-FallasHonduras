@@ -1,0 +1,148 @@
+/* ==========================================================================
+   ALERTAS · Utilidades (formato, texto, tiempo)
+   ========================================================================== */
+
+const U = (() => {
+  const nf = new Intl.NumberFormat('es-HN');
+  const nf1 = new Intl.NumberFormat('es-HN', { maximumFractionDigits: 1 });
+  const fHora = new Intl.DateTimeFormat('es-HN', { hour: 'numeric', minute: '2-digit' });
+  const fDia = new Intl.DateTimeFormat('es-HN', { day: 'numeric', month: 'short' });
+  const fDiaAnio = new Intl.DateTimeFormat('es-HN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const fLargo = new Intl.DateTimeFormat('es-HN', { weekday: 'long', day: 'numeric', month: 'long' });
+  const MIN = 60000, HORA = 3600000, DIA = 86400000;
+
+  const n = (v) => nf.format(Math.round(v || 0));
+  const n1 = (v) => nf1.format(v || 0);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const compact = (v) => {
+    v = v || 0;
+    if (v >= 1e6) return nf1.format(v / 1e6) + ' M';
+    if (v >= 1e4) return nf1.format(v / 1e3) + ' mil';
+    return nf.format(Math.round(v));
+  };
+
+  /* Fechas guardadas como días desde 1970 (sin zona horaria) */
+  const fDiaUTC = new Intl.DateTimeFormat('es-HN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const fechaDias = (d) => (d ? fDiaUTC.format(new Date(d * 86400000)) : 'Sin fecha');
+  function antiguedad(d, now) {
+    if (!d) return '';
+    const dias = Math.floor((now || Date.now()) / 86400000) - d;
+    if (dias < 0) return '';
+    if (dias < 14) return dias === 1 ? '1 día' : dias + ' días';
+    if (dias < 61) return Math.floor(dias / 7) + ' semanas';
+    const meses = Math.floor(dias / 30.44);
+    if (meses < 24) return meses + ' meses';
+    return Math.floor(meses / 12) + ' años';
+  }
+
+  const hora = (ts) => fHora.format(new Date(ts)).replace(/\s/g, '\u00a0');
+  const dia = (ts) => fDia.format(new Date(ts));
+  const diaAnio = (ts) => fDiaAnio.format(new Date(ts));
+  const largo = (ts) => fLargo.format(new Date(ts));
+  const inicioDia = (ts) => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const esHoy = (ts, now) => inicioDia(ts) === inicioDia(now || Date.now());
+  const diaRel = (ts, now) => {
+    now = now || Date.now();
+    const d = Math.round((inicioDia(now) - inicioDia(ts)) / DIA);
+    if (d === 0) return 'hoy';
+    if (d === 1) return 'ayer';
+    if (d === -1) return 'mañana';
+    return 'el ' + dia(ts);
+  };
+  const cuando = (ts, now) => diaRel(ts, now) + ' a las ' + hora(ts);
+  const cuandoCorto = (ts, now) => (esHoy(ts, now) ? hora(ts) : dia(ts) + ', ' + hora(ts));
+
+  const dur = (ms) => {
+    ms = Math.max(0, ms || 0);
+    if (ms < MIN) return 'menos de 1 min';
+    const h = Math.floor(ms / HORA), m = Math.floor((ms % HORA) / MIN);
+    if (h >= 48) return Math.floor(h / 24) + ' días';
+    if (!h) return m + ' min';
+    return m ? h + ' h ' + m + ' min' : h + ' h';
+  };
+  const hace = (ts, now) => 'hace ' + dur((now || Date.now()) - ts);
+  const durCorto = (ms) => {
+    ms = Math.max(0, ms || 0);
+    if (ms < MIN) return '< 1 min';
+    const h = Math.floor(ms / HORA), m = Math.floor((ms % HORA) / MIN);
+    if (h >= 48) return Math.floor(h / 24) + ' días';
+    if (!h) return m + ' min';
+    return m ? h + ' h ' + m + ' m' : h + ' h';
+  };
+  /* Agrega punto final solo si hace falta (las horas ya terminan en "p. m.") */
+  const conPunto = (s) => (/[.!?]$/.test(String(s).trim()) ? String(s) : s + '.');
+  const horas = (ms) => ms / HORA;
+
+  /* Texto */
+  const sinAcentos = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const digitos = (s) => String(s == null ? '' : s).replace(/\D+/g, '');
+  const MINUS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'da', 'das', 'do', 'dos', 'van', 'von', 'el']);
+  function titulo(s) {
+    if (!s) return '';
+    const ws = String(s).toLowerCase().split(' ');
+    return ws.map((w, i) => {
+      if (!w) return w;
+      if (/[a-zñ]\.[a-zñ]/.test(w) || (/\d/.test(w) && /[a-zñ]/.test(w))) return w.toUpperCase();
+      if (i > 0 && MINUS.has(w) && !/\.$/.test(ws[i - 1])) return w;
+      return w.split('-').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join('-');
+    }).join(' ');
+  }
+  const ACENTOS = { Morazan: 'Morazán', Cortes: 'Cortés', Atlantida: 'Atlántida', Paraiso: 'Paraíso', Colon: 'Colón', Copan: 'Copán',
+    Intibuca: 'Intibucá', Bahia: 'Bahía', Barbara: 'Bárbara', Danli: 'Danlí', Roatan: 'Roatán', Jose: 'José', Maria: 'María', Belen: 'Belén',
+    Union: 'Unión', Concepcion: 'Concepción', Guanaja: 'Guanaja', Santa: 'Santa', Ocotepeque: 'Ocotepeque', Juticalpa: 'Juticalpa' };
+  const lugar = (s) => titulo(s).split(' ').map((w) => ACENTOS[w] || w).join(' ');
+  const esEmpresa = (nombre, categoria) =>
+    /\b(S\.?\s?A\.?|S\.? DE R\.?L|C\.?V\.?|BANCO|ASOCIACION|FUNDACION|IGLESIA|COLEGIO|ESCUELA|INSTITUTO|HOTEL|RESTAURANTE|EMPRESA|CORPORACION|INVERSIONES|COMERCIAL|DISTRIBUIDORA|MUNICIPALIDAD|SECRETARIA|CLINICA|HOSPITAL)\b/.test(sinAcentos(nombre || '').toUpperCase())
+    || /CORPORATIVO|EMPRESARIAL|PYME/.test(categoria || '');
+  const primerNombre = (nombre) => titulo(String(nombre || '').split(' ')[0] || '');
+
+  function formatoDni(raw) {
+    const d = digitos(raw);
+    if (d.length === 13) return d.slice(0, 4) + '-' + d.slice(4, 8) + '-' + d.slice(8);
+    return String(raw || '').trim();
+  }
+
+  /* Red */
+  const esVirtual = (nodo) => /VIRTUAL|VITUAL/i.test(nodo || '');
+  function oltBase(olt) { return String(olt || '').split('/')[0]; }
+  function oltNombre(olt) {
+    const b = oltBase(olt);
+    if (!/^M\d\d_/.test(b)) return b;
+    let s = b.replace(/^M\d\d_[A-Z0-9]+_/, '').replace(/^OLT_/, '');
+    return titulo(s.replace(/_/g, ' '));
+  }
+  function oltPuerto(olt) {
+    const p = String(olt || '').split('/');
+    if (p.length < 4) return null;
+    return { marco: p[1], tarjeta: p[2], puerto: p[3] };
+  }
+
+  /* Varios */
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  async function copiar(texto) {
+    try { await navigator.clipboard.writeText(texto); return true; } catch (e) {
+      const ta = document.createElement('textarea'); ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      ta.remove(); return ok;
+    }
+  }
+  function descargarCsv(nombre, filas) {
+    const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const txt = '﻿' + filas.map((f) => f.map(esc).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = nombre; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+  }
+  const plural = (k, uno, varios) => (k === 1 ? uno : varios);
+  const listaNatural = (arr, max) => {
+    max = max || 3;
+    if (!arr.length) return '';
+    if (arr.length <= max) return arr.length === 1 ? arr[0] : arr.slice(0, -1).join(', ') + ' y ' + arr[arr.length - 1];
+    return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
+  };
+
+  return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
+    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, oltBase, oltNombre,
+    oltPuerto, uid, copiar, descargarCsv, plural, listaNatural };
+})();
