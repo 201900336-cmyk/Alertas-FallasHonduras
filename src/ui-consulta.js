@@ -60,6 +60,11 @@ function VistaConsulta() {
     }
   }
 
+  function limpiar() {
+    setQ(''); setRes(null); setError(null); setSel(0);
+    setTimeout(() => inputRef.current && inputRef.current.focus(), 0);
+  }
+
   const detect = Model.tipoConsulta(q);
   const chip = !q ? null : detect.tipo === 'contrato' ? 'Contrato' : detect.tipo === 'dni' ? 'DNI' : detect.tipo === 'incompleto' ? 'DNI incompleto: ' + detect.d.length + ' de 13 dígitos' : null;
 
@@ -75,10 +80,11 @@ function VistaConsulta() {
           <input ref=${inputRef} value=${q} inputmode="numeric" autocomplete="off" spellcheck="false"
             placeholder="Contrato o DNI del cliente"
             onInput=${(e) => setQ(e.currentTarget.value)}
-            onKeyDown=${(e) => { if (e.key === 'Escape') { setQ(''); setRes(null); setError(null); } }} />
+            onKeyDown=${(e) => { if (e.key === 'Escape') limpiar(); }} />
           ${chip && html`<span class="detecta" data-k=${detect.tipo}>${chip}</span>`}
         </label>
         <button class="btn btn-primario btn-grande" type="submit" disabled=${!detect.tipo || detect.tipo === 'incompleto' || buscando}>${buscando ? 'Buscando…' : 'Consultar'}</button>
+        <button class="btn btn-borde btn-grande limpiar" type="button" disabled=${!q && !res && !error} onClick=${limpiar}>Limpiar</button>
       </form>
       <p class="ayuda-busqueda">
         <span>Contrato de 6 a 8 dígitos o DNI de 13, con o sin guiones.</span>
@@ -133,6 +139,8 @@ function Resultado({ res, sel, setSel, now }) {
   const items = res.filas.map((rec) => ({ rec, v: Model.veredictoNodo(mfr, rec.nodo) }));
   const actual = items[Math.min(sel, items.length - 1)];
   const contratos = new Set(items.map((x) => x.rec.contrato)).size;
+  const lista = res.historial ? (res.historial[actual.rec.nodo] || []) : null;
+  const rein = lista ? Model.reincidente(lista, actual.rec, now) : false;
   return html`<div class="resultado">
     ${items.length > 1 && html`<div class="servicios" role="group" aria-label="Servicios encontrados">
       <span>${res.tipo === 'dni' && contratos > 1 ? 'Este DNI tiene ' + contratos + ' contratos' : 'Este contrato tiene ' + items.length + ' servicios'}</span>
@@ -143,9 +151,62 @@ function Resultado({ res, sel, setSel, now }) {
     <${Veredicto} v=${actual.v} rec=${actual.rec} now=${now} />
     <div class="cliente-guion">
       <${TarjetaCliente} rec=${actual.rec} v=${actual.v} now=${now} />
-      <${Guion} rec=${actual.rec} v=${actual.v} now=${now} key=${actual.rec.i + actual.v.tipo} />
+      <${Guion} rec=${actual.rec} v=${actual.v} now=${now} rein=${rein} key=${actual.rec.i + actual.v.tipo} />
     </div>
+    ${lista && html`<${HistorialCliente} rec=${actual.rec} lista=${lista} now=${now} rein=${rein} key=${actual.rec.i} />`}
   </div>`;
+}
+
+/* ---------- Historial de fallas del cliente ---------- */
+const PERIODOS_HIST = [[90, '90 días', 'en 90 días'], [180, '6 meses', 'en 6 meses'], [365, '1 año', 'en 1 año']];
+const fechaHist = (t, now) => (U.esHoy(t, now) ? 'Hoy, ' + U.hora(t) : U.dia(t) + ', ' + U.hora(t));
+const cacheContactos = new Map();
+
+/* Las consultas anteriores del contrato se piden aparte, después del veredicto, para no hacer más lenta la búsqueda */
+function useContactos(contrato) {
+  const [c, setC] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    const k = String(contrato), e = cacheContactos.get(k);
+    if (e && Date.now() - e.t < 60000) { setC(e.r); return undefined; }
+    setC(null);
+    Backend.contactos({ contrato: k }).then((r) => { cacheContactos.set(k, { t: Date.now(), r }); if (vivo) setC(r); }, () => { if (vivo) setC({ error: true }); });
+    return () => { vivo = false; };
+  }, [contrato]);
+  return c;
+}
+
+function HistorialCliente({ rec, lista, now, rein }) {
+  const [dias, setDias] = useState(90);
+  const per = PERIODOS_HIST.find((p) => p[0] === dias);
+  const h = Model.historialCliente(lista, rec, now, dias);
+  const c = useContactos(rec.contrato);
+  const wf = puede('fallas');
+  return html`<section class="panel historial-cliente" aria-label="Historial de fallas del cliente">
+    <div class="panel-cab">
+      <h3>Historial de fallas de este cliente</h3>
+      ${rein && html`<span class="marca-estado" data-s="FALLA" title=${CONFIG.reincidente.fallas + ' o más fallas en ' + CONFIG.reincidente.dias + ' días'}>Cliente reincidente</span>`}
+      <div class="der"><div class="seg" role="group" aria-label="Periodo">
+        ${PERIODOS_HIST.map(([d, t]) => html`<button type="button" aria-pressed=${dias === d} onClick=${() => setDias(d)} key=${d}>${t}</button>`)}
+      </div></div>
+    </div>
+    <div class="hist-kpis">
+      <div><b class="num">${U.n(h.total)}</b><span>${U.plural(h.total, 'falla', 'fallas')} ${per[2]}</span></div>
+      <div><b class="num">${h.total ? U.dur(h.ms) : '0 h'}</b><span>sin servicio en total</span></div>
+      <div><b class="num">${!c ? '…' : c.error ? '—' : U.n(c.n7)}</b>
+        <span>${U.plural(c && !c.error ? c.n7 : 2, 'consulta anterior', 'consultas anteriores')} en 7 días</span>
+        ${c && !c.error && html`<small>${c.anterior ? 'La anterior: ' + fechaHist(c.anterior, now) : 'Sin consultas en los últimos 30 días'}</small>`}</div>
+    </div>
+    ${h.total ? html`<ol class="hist-lista">${h.fallas.map((f) => html`<li key=${f.id}>
+        <span class="hist-punto" data-s=${f.fin ? 'RESUELTA' : 'FALLA'}></span>
+        <div class="hist-motivo"><b>${nombreMotivo(f)}</b><span class="sub">Nodo ${rec.nodo}</span></div>
+        <div class="num hist-fechas">${fechaHist(f.inicio, now)} → ${f.fin ? fechaHist(f.fin, now) : 'sigue activa'}</div>
+        <div class="num hist-dur">${U.dur((f.fin || now) - f.inicio)}</div>
+        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">Activa</span>`}${wf && f.numero && html`<span class="chip codigo">${f.numero}</span>`}</div>
+      </li>`)}</ol>`
+      : html`<div class="vacio hist-vacio"><b>Sin fallas ${per[2]}</b>Workforce HN no ha registrado fallas en su nodo en este periodo.</div>`}
+    <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}.</p>
+  </section>`;
 }
 
 function Veredicto({ v, rec, now }) {
@@ -215,7 +276,7 @@ function TarjetaCliente({ rec, v, now }) {
 }
 
 /* ---------- Guion ---------- */
-function partesGuion(v, rec, modo, now) {
+function partesGuion(v, rec, modo, now, rein) {
   const f = v.falla;
   const empresa = U.esEmpresa(rec.nombre, rec.categoria);
   const nombre = empresa ? '' : U.primerNombre(rec.nombre);
@@ -226,12 +287,14 @@ function partesGuion(v, rec, modo, now) {
     const etaTxt = etaOk ? (U.esHoy(f.eta, now) ? 'alrededor de las ' + U.hora(f.eta) : U.diaRel(f.eta, now) + ' alrededor de las ' + U.hora(f.eta)) : '';
     if (modo === 'chat') {
       return ['Hola', nombre ? ', ' : '', nombre ? M(nombre) : '', '. Validamos su contrato ', M(String(rec.contrato)),
-        ' y su servicio se encuentra dentro de una afectación general por ', M(motivo), '. Lamentamos mucho las molestias.\n\n',
+        ' y su servicio se encuentra dentro de una afectación general por ', M(motivo), '. Lamentamos mucho las molestias.',
+        rein ? ' Sabemos que no es la primera vez que le pasa en los últimos meses.' : '', '\n\n',
         'Nuestro equipo técnico ya trabaja para restablecerlo lo antes posible', etaOk ? ' (hora estimada: ' : '', etaOk ? M(etaTxt.replace('alrededor de las ', '')) : '', etaOk ? ')' : '',
         '. No necesita reiniciar sus equipos; el servicio volverá de forma automática.\n\n¡Gracias por su paciencia!'];
     }
     return ['Le comento, ', nombre ? M(nombre) : 'estimado cliente', ', que validando su contrato en nuestro sistema vemos que su servicio depende de un nodo que en este momento presenta una afectación por ',
-      M(motivo), '. Lamentamos mucho las molestias que esto le ocasiona.\n\n',
+      M(motivo), '. Lamentamos mucho las molestias que esto le ocasiona.',
+      rein ? ' Sabemos que no es la primera vez que su servicio se ve afectado en los últimos meses y entendemos su molestia.' : '', '\n\n',
       'Nuestro equipo técnico ya está trabajando para solventar la falla en el menor tiempo posible', etaOk ? ', y estimamos que su servicio quede restablecido ' : '', etaOk ? M(etaTxt) : '',
       (etaOk && /\.$/.test(etaTxt) ? ' ' : '. ') + 'No es necesario que reinicie sus equipos: una vez se solucione, el servicio se restablecerá de forma automática.\n\n',
       'Le agradecemos mucho su paciencia y comprensión.'];
@@ -240,24 +303,26 @@ function partesGuion(v, rec, modo, now) {
     const cuando = U.cuando(f.cerradaEn, now);
     if (modo === 'chat') {
       return ['Hola', nombre ? ', ' : '', nombre ? M(nombre) : '', '. Validamos su contrato ', M(String(rec.contrato)), ': la afectación por ', M(motivo),
-        ' ya fue solucionada ', M(cuando), (/\.$/.test(cuando) ? ' ' : '. ') + 'Lamentamos las molestias.\n\n',
+        ' ya fue solucionada ', M(cuando), (/\.$/.test(cuando) ? ' ' : '. ') + 'Lamentamos las molestias.',
+        rein ? ' Sabemos que no es la primera vez que le pasa en los últimos meses.' : '', '\n\n',
         'Para normalizar su servicio, por favor apague su equipo, desconéctelo de la corriente 30 segundos y vuelva a conectarlo. Si continúa sin servicio, escríbanos y con gusto lo seguimos revisando.'];
     }
     return ['Le comento, ', nombre ? M(nombre) : 'estimado cliente', ', que validando su contrato vemos que su servicio se vio afectado por ', M(motivo),
-      ', la cual nuestro equipo técnico ya solucionó ', M(cuando), (/\.$/.test(cuando) ? ' ' : '. ') + 'Lamentamos las molestias ocasionadas.\n\n',
+      ', la cual nuestro equipo técnico ya solucionó ', M(cuando), (/\.$/.test(cuando) ? ' ' : '. ') + 'Lamentamos las molestias ocasionadas.',
+      rein ? ' Sabemos que no es la primera vez que su servicio se ve afectado en los últimos meses.' : '', '\n\n',
       'Para que su servicio se normalice, le pido por favor apagar su equipo, desconectarlo de la corriente por 30 segundos y volverlo a conectar. Si después de eso continúa sin servicio, con gusto lo seguimos revisando.'];
   }
   return [];
 }
 
-function Guion({ rec, v, now }) {
+function Guion({ rec, v, now, rein }) {
   const u = G.s.user;
   const [modo, setModoEstado] = useState(leerLS('alertas-modo-guion', 'llamada'));
   const setModo = (m) => { guardarLS('alertas-modo-guion', m); setModoEstado(m); };
   const [reportado, setReportado] = useState(false);
   const recos = CONFIG.recomendaciones[v.tipo] || [];
   const conGuion = v.tipo === 'FALLA' || v.tipo === 'RESUELTA';
-  const partes = conGuion ? partesGuion(v, rec, modo, now) : [];
+  const partes = conGuion ? partesGuion(v, rec, modo, now, rein) : [];
   const texto = partes.map((p) => (typeof p === 'string' ? p : p.v)).join('');
   async function reportar() {
     setReportado(true);
@@ -328,7 +393,7 @@ function MapaVivo({ mf }) {
   return html`<section class="panel" aria-label="Mapa de fallas activas">
     <div class="panel-cab"><div><h3>Fallas activas por departamento</h3>
       <div class="sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados en ' + U.plural(deps, '1 departamento', deps + ' departamentos') : 'No hay fallas activas en este momento'}</div></div></div>
-    <div class="panel-cuerpo"><${MapaHonduras} valores=${valores} fallas=${fallasDep} vacio="Sin fallas activas en el país." /></div>
+    <div class="panel-cuerpo"><${MapaHonduras} valores=${valores} fallas=${fallasDep} vacio="Sin fallas activas en el país." apilado=${true} /></div>
   </section>`;
 }
 

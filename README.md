@@ -142,7 +142,11 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 
 ## Día a día
 
-- **Asesores y tiendas**: escriben el contrato (6 a 8 dígitos) o el DNI (con o sin guiones). Alertas responde **Falla general** con el guion o **Sin falla general** para seguir el flujo normal. Si sospechan una falla que no está publicada, la reportan desde ahí.
+- **Asesores y tiendas**: escriben el contrato (6 a 8 dígitos) o el DNI (con o sin guiones). Alertas responde **Falla general** con el guion o **Sin falla general** para seguir el flujo normal. Si sospechan una falla que no está publicada, la reportan desde ahí. **Limpiar** (o la tecla Esc) borra la búsqueda.
+- **Historial de fallas del cliente**: debajo del cliente y del guion. Muestra las fallas de su nodo desde que es cliente (90 días, 6 meses o 1 año): de cuándo a cuándo, cuánto duró cada una y las horas sin servicio en total. También dice cuántas veces lo consultaron en los últimos 7 días.
+  - Con 3 o más fallas en 90 días lo marca como **Cliente reincidente** y el guion agrega una frase reconociéndolo.
+  - El número de falla solo lo ve Workforce HN.
+  - Sale de las fallas publicadas en Alertas para el nodo actual del cliente; si el cliente se cambió de nodo, no salen las de su nodo anterior.
 - **Workforce HN**: en **Fallas > Nueva falla** escribe los nodos (por ejemplo `NODO01, NODO02`), elige el motivo y la hora estimada, revisa a cuántos clientes afecta y **Publicar falla**. Puede editarla, cerrarla o reabrirla.
 - En el paso 4 van el **número de falla** (por ejemplo `F1254585`), la referencia del correo o ticket y las notas. Solo los ve Workforce HN. El número aparece en la tarjeta de la falla, en el historial (se puede buscar por él) y en el CSV del historial.
 - Una falla cerrada sigue visible para los asesores **36 horas** y luego sale de su panel. Workforce la conserva en el historial.
@@ -236,7 +240,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 139 pruebas del servidor en un emulador de Apps Script
+npm test                           # 144 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

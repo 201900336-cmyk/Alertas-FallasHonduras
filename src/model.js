@@ -337,6 +337,33 @@ const Model = (() => {
     return { tipo: 'SIN_FALLA', falla: null };
   }
   const PRIORIDAD = { FALLA: 0, RESUELTA: 1, SIN_FALLA: 2, SIN_NODO: 3 };
+
+  /* Historial de un cliente: las fallas de su nodo en los últimos `dias` días, sin contar las de antes de que
+     fuera cliente. lista: [{ id, motivo, motivoTexto, inicio, fin (null si sigue activa), numero? }] */
+  function historialCliente(lista, rec, now, dias) {
+    const desde = Math.max(now - dias * U.DIA, rec.fecha ? rec.fecha * U.DIA : 0);
+    const fallas = (lista || []).filter((f) => (f.fin || now) >= desde && f.inicio <= now).sort((a, b) => b.inicio - a.inicio);
+    const ms = fallas.reduce((a, f) => a + Math.max(0, (f.fin || now) - f.inicio), 0);
+    return { fallas, total: fallas.length, ms };
+  }
+  function reincidente(lista, rec, now) {
+    return historialCliente(lista, rec, now, CONFIG.reincidente.dias).total >= CONFIG.reincidente.fallas;
+  }
+  /* Lo mismo que arma el servidor para la búsqueda: por nodo, las fallas del último año (sin número si no es Workforce) */
+  function historialNodos(fallas, nodos, completo, now) {
+    const desde = now - 400 * U.DIA, out = {};
+    nodos.forEach((n) => { out[n] = []; });
+    fallas.forEach((f) => {
+      if (f.estado !== 'ACTIVA' && (f.cerradaEn || 0) < desde) return;
+      f.nodos.forEach((n) => {
+        if (!out[n]) return;
+        const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.estado === 'ACTIVA' ? null : f.cerradaEn };
+        if (completo && f.numero) x.numero = f.numero;
+        out[n].push(x);
+      });
+    });
+    return out;
+  }
   const peor = (lista) => lista.slice().sort((a, b) => PRIORIDAD[a.tipo] - PRIORIDAD[b.tipo])[0];
 
   function nuevoId(fallas, now) {
@@ -396,6 +423,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto,
+    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

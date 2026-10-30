@@ -11,6 +11,9 @@ const CONFIG = {
   // Una falla cerrada sigue visible para los asesores durante estas horas.
   horasVisibleTrasCierre: 36,
 
+  // Cliente reincidente: tantas fallas en su nodo en estos días (desde que es cliente).
+  reincidente: { fallas: 3, dias: 90 },
+
   // Alerta temprana: un nodo sin falla publicada que recibe consultas de
   // varios clientes distintos en poco tiempo.
   alerta: { minutos: 60, clientesDistintos: 3 },

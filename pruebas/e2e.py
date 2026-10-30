@@ -69,6 +69,10 @@ with sync_playwright() as p:
     ok(w.locator('.falla-card').count() >= 1, f'falla publicada en el servidor ({total} clientes)')
     ok('F1254585' in w.locator('.falla-card .meta').first.inner_text(), 'la tarjeta muestra el número de falla F1254585')
     w.locator('.falla-card').first.screenshot(path=OUT + 'e03c_tarjeta.png')
+    c_falla = http('/test/contrato?nodo=' + ejemplos[0])['contrato']
+    w.goto(APP + '#consulta'); w.wait_for_selector('.buscador-caja input')
+    w.fill('.buscador-caja input', c_falla); w.keyboard.press('Enter'); w.wait_for_selector('.historial-cliente', timeout=15000)
+    ok('F1254585' in w.locator('.historial-cliente').inner_text(), 'en la consulta, Workforce ve el número de falla en el historial del cliente')
 
     print('3. Tiendas recibe el aviso y ve la falla')
     t.goto(APP + '#consulta'); t.wait_for_selector('.aviso', timeout=15000)
@@ -76,12 +80,21 @@ with sync_playwright() as p:
     t.click('.aviso .btn'); t.wait_for_selector('.falla-item')
     ok('F1254585' not in json.dumps(t.evaluate('() => G.s.fallas')) and 'NOC #9150' not in t.content(), 'el número de falla y la referencia no llegan a Tiendas')
     ok(t.locator('.mapa path[fill*="seq-5"]').count() >= 1, 'el mapa pinta el departamento afectado')
-    t.screenshot(path=OUT + 'e04_tiendas_mapa.png')
-    c_falla = http('/test/contrato?nodo=' + ejemplos[0])['contrato']
+    cab = t.locator('.mapa-grid.apilado .hbar.cab').inner_text()
+    ok('Departamento' in cab and 'Clientes' in cab, 'en Consulta el mapa va a todo lo ancho, con la lista abajo y los encabezados Departamento y Clientes')
+    t.screenshot(path=OUT + 'e04_tiendas_mapa.png', full_page=True)
     t.fill('.buscador-caja input', c_falla); t.keyboard.press('Enter'); t.wait_for_selector('.veredicto', timeout=15000)
     ok(t.locator('.veredicto').get_attribute('data-s') == 'FALLA', 'el cliente ' + c_falla + ' del nodo ' + ejemplos[0] + ' sale con Falla general')
     ok('Le comento' in t.locator('.guion-texto').inner_text(), 'Tiendas recibe el guion')
-    t.screenshot(path=OUT + 'e05_tiendas_falla.png')
+    t.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)
+    hist = t.locator('.historial-cliente').inner_text()
+    ok('Falla de energía comercial' in hist and 'sigue activa' in hist and 'F1254585' not in hist, 'Tiendas ve el historial de fallas del cliente, sin el número de falla')
+    t.wait_for_function("() => { const b = document.querySelector('.hist-kpis > div:last-child b'); return b && b.textContent !== '…'; }", timeout=15000)
+    ok(t.locator('.hist-kpis > div:last-child b').inner_text() in ('0', '1'), 'y cuántas veces lo consultaron antes (' + t.locator('.hist-kpis > div:last-child').inner_text().replace('\n', ' ') + ')')
+    t.screenshot(path=OUT + 'e05_tiendas_falla.png', full_page=True)
+    t.set_viewport_size({'width': 390, 'height': 844}); t.wait_for_timeout(400)
+    t.screenshot(path=OUT + 'e05b_tiendas_telefono.png', full_page=True)
+    t.set_viewport_size({'width': 1440, 'height': 900})
 
     print('4. Concentrix entra con Genesys y consulta')
     http('/test/genesys?correo=karla.zelaya@concentrix.com&nombre=Karla%20Zelaya')
@@ -92,6 +105,9 @@ with sync_playwright() as p:
     ok(a.locator('.veredicto').get_attribute('data-s') == 'SIN_FALLA', 'un cliente de otro nodo sale Sin falla general')
     a.click('button:has-text("Reportar posible falla")'); a.wait_for_selector('text=Aviso enviado')
     ok(True, 'Concentrix reporta una posible falla')
+    ok('Sin fallas' in a.locator('.historial-cliente').inner_text(), 'un cliente sin fallas en su nodo: el historial lo dice')
+    a.click('button.limpiar'); a.wait_for_selector('.mini-kpis', timeout=5000)
+    ok(a.locator('.buscador-caja input').input_value() == '' and a.locator('.veredicto').count() == 0, 'Limpiar borra el contrato y el resultado')
     for i, modo in enumerate(('html', '503')):
         c_otro = http(f'/test/contrato?nodo={ejemplos[2]}&n={5 + i}')['contrato']   # otro contrato: el repetido sale de la memoria de la página
         a.keyboard.press('Escape'); a.fill('.buscador-caja input', ''); a.wait_for_timeout(200)

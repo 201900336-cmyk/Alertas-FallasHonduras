@@ -39,6 +39,7 @@ const ALERTAS = {
   DIAS_RESUMEN: 120,             // días de resumen diario para las estadísticas
   DIAS_ESTADISTICAS: 90,         // periodo más largo que muestra Estadísticas
   DIAS_FALLAS_CARGA: 120,        // historial de fallas que recibe Workforce al entrar
+  DIAS_HISTORIAL: 400,           // fallas que entran al historial de cada cliente (la tarjeta muestra hasta 1 año)
   FILAS_POR_LOTE: 5000,
   MAX_CAMBIOS: 20000,            // filas nuevas o cambiadas que se suben en una carga por cambios; si son más, va completa
   ALERTA_MIN: 60, ALERTA_CLIENTES: 3, ALERTA_REPORTES: 2,
@@ -78,7 +79,7 @@ const COL_DESCARGAS = ['Fecha', 'Usuario', 'Nombre', 'Fallas', 'Nodos', 'Cliente
 const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
-  telefonos: accionTelefonos_
+  telefonos: accionTelefonos_, contactos: accionContactos_
 };
 const PUBLICAS = { config: true, login: true };
 const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, estadisticas: true, telefonos: true };
@@ -447,6 +448,8 @@ function accionBuscar_(d, ses) {
   }
   const visibles = fallasVisibles_();
   const rel = visibles.filter((f) => filas.some((x) => f.nodos.indexOf(x.nodo) >= 0));
+  const e = estado_();
+  const historial = filas.length ? historialNodos_(filas.map((x) => x.nodo), ALERTAS.ESCRIBEN.indexOf(ses.r) >= 0, e.version) : {};
   let principal = null;
   filas.forEach((x) => {
     const v = veredicto_(visibles, x.nodo);
@@ -456,7 +459,64 @@ function accionBuscar_(d, ses) {
     tipo: tipo, contrato: principal ? principal.x.contrato : '', nodo: principal ? principal.x.nodo : '',
     resultado: principal ? principal.v.tipo : 'NO_ENCONTRADO', falla: principal && principal.v.falla ? principal.v.falla.id : ''
   });
-  return { estado: filas.length ? 'ok' : 'no', tipo: tipo, q: q, filas: filas, fallas: rel, version: estado_().version };
+  return { estado: filas.length ? 'ok' : 'no', tipo: tipo, q: q, filas: filas, fallas: rel, historial: historial, version: e.version };
+}
+
+/* Historial de fallas de cada nodo (último año) para la tarjeta del cliente.
+   Quien atiende (Concentrix y Tiendas) no recibe el número de falla. */
+function historialNodos_(nodos, completo, version) {
+  const out = {};
+  nodos.forEach((n) => { out[n] = []; });
+  fallasHistorial_(version).forEach((f) => f.nodos.forEach((n) => {
+    if (!out[n]) return;
+    const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.fin };
+    if (completo && f.numero) x.numero = f.numero;
+    out[n].push(x);
+  }));
+  return out;
+}
+/* Todas las fallas del periodo, en caché por versión: cada cambio de Workforce sube la versión y la caché se renueva sola */
+function fallasHistorial_(version) {
+  const c = cache_(), pref = 'hist:' + version + ':';
+  const n = Number(c.get(pref + 'n') || 0);
+  if (n) {
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push(pref + i);
+    const partes = c.getAll(keys);
+    if (keys.every((k) => partes[k] != null)) return JSON.parse(keys.map((k) => partes[k]).join(''));
+  }
+  const desde = Date.now() - ALERTAS.DIAS_HISTORIAL * 86400000;
+  const lista = leerFallas_().filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn || 0) >= desde)
+    .map((f) => ({ id: f.id, numero: f.numero, motivo: f.motivo, motivoTexto: f.motivoTexto, nodos: f.nodos, inicio: f.inicio, fin: f.estado === 'ACTIVA' ? null : f.cerradaEn }));
+  const txt = JSON.stringify(lista), partes = {};
+  let i = 0;
+  for (let p = 0; p < txt.length; p += 90000) partes[pref + (i++)] = txt.slice(p, p + 90000);
+  partes[pref + 'n'] = String(i);
+  try { c.putAll(partes, 21600); } catch (err) { /* si no cabe, se vuelve a leer de la hoja */ }
+  return lista;
+}
+
+/* Cuántas veces consultaron este contrato antes (la bitácora guarda 30 días) y cuándo fue la vez anterior.
+   La página lo pide después de mostrar el veredicto, para no hacer más lenta la búsqueda. */
+function accionContactos_(d, ses) {
+  const c = String(d.contrato || '').replace(/\D+/g, '').slice(0, 9);
+  if (!c) throw fallo_('DATOS', 'Falta el contrato.');
+  const h = hojaConsultas_();
+  const ult = h ? h.getLastRow() : 0;
+  if (ult < 2) return { n7: 0, n30: 0, anterior: null };
+  const filas = h.getRange(2, 7, ult - 1, 1).createTextFinder(c).matchEntireCell(true).findAll()
+    .map((r) => r.getRow()).sort((a, b) => b - a);           // de la más reciente a la más vieja
+  const ahora = Date.now();
+  let n7 = 0, anterior = null, actual = 0;
+  // Las fechas se leen una por una: con las 25 más recientes sobra para un cliente
+  for (let i = 0; i < filas.length && i < 25; i++) {
+    const v = h.getRange(filas[i], 1).getValue();
+    const t = v && typeof v.getTime === 'function' ? v.getTime() : Date.parse(v) || 0;
+    if (i === 0 && ahora - t < 120000) { actual = 1; continue; }   // la consulta que se está viendo ahora
+    if (anterior === null) anterior = t;
+    if (ahora - t <= 7 * 86400000) n7++;
+  }
+  return { n7: n7, n30: filas.length - actual, anterior: anterior };
 }
 
 function accionReportar_(d, ses) {

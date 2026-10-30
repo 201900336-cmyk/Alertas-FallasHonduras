@@ -203,6 +203,16 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });
   ok(r.ok && r.datos.fallas.some((f) => f.id === f1.id), 'la búsqueda trae la falla del nodo del cliente');
   ok(!JSON.stringify(r.datos).includes('F1254585') && !JSON.stringify(r.datos).includes('NOC #9150'), 'y tampoco trae el número de falla ni la referencia');
+  const hist1 = r.datos.historial && r.datos.historial[cli.nodo];
+  ok(hist1 && hist1.length === 1 && hist1[0].id === f1.id && hist1[0].fin === null && hist1[0].motivo === 'FIBRA' && !('numero' in hist1[0]),
+    'la búsqueda trae el historial de fallas del nodo del cliente (la activa, sin número para Concentrix)', r.datos && r.datos.historial);
+  const rWfH = g.post({ accion: 'buscar', token: tWf, datos: { q: String(cli.contrato) } });
+  ok(rWfH.ok && rWfH.datos.historial[cli.nodo][0].numero === 'F1254585', 'Workforce sí ve el número de falla en el historial');
+  let rc = g.post({ accion: 'contactos', token: tAgente, datos: { contrato: String(cli.contrato) } });
+  ok(rc.ok && rc.datos.n7 === 1 && rc.datos.n30 === 1 && rc.datos.anterior > Date.now() - 300000,
+    'cuenta las consultas anteriores del contrato (sin contar la que se está viendo)', rc.datos || rc);
+  rc = g.post({ accion: 'contactos', token: tTienda, datos: { contrato: '9999999' } });
+  ok(rc.ok && rc.datos.n7 === 0 && rc.datos.n30 === 0 && rc.datos.anterior === null, 'un contrato sin consultas anteriores da cero', rc.datos || rc);
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'editar', id: f1.id, falla: { nodos: nodosPrueba.slice(0, 2), eta: null }, detalle: 'Quitó ' + nodosPrueba[2] } });
   ok(r.ok && r.datos.falla.nodos.length === 2 && r.datos.falla.eta === null && r.datos.falla.historial.length === 2, 'editar quita un nodo y la hora estimada', r.datos && r.datos.falla);
   ok(r.ok && r.datos.falla.numero === 'F1254585', 'editar sin tocar el número lo conserva');
@@ -210,6 +220,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.falla.numero === 'F1254590' && hFallas.getRange(2, 20).getValue() === 'F1254590', 'cambiar el número de falla');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id, nota: 'Empalme terminado' } });
   ok(r.ok && r.datos.falla.estado === 'CERRADA' && r.datos.falla.cerradaPor.nombre === 'Ana López', 'cerrar la falla');
+  const cerrada = r.datos.falla.cerradaEn;
+  r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });
+  ok(r.ok && r.datos.historial[cli.nodo][0].fin === cerrada, 'el historial se actualiza al cerrar: queda de cuándo a cuándo');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id } });
   ok(!r.ok && /ya cerró/.test(r.error), 'no se puede cerrar dos veces');
   r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });

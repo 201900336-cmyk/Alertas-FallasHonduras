@@ -219,21 +219,22 @@ function Comparativo({ d }) {
   </div>`;
 }
 
-function MapaHonduras({ valores, fallas, vacio }) {
+function MapaHonduras({ valores, fallas, vacio, apilado }) {
   const tt = useTooltip();
   const [tabla, setTabla] = useState(false);
   const max = Math.max(0, ...Object.values(valores));
   const clase = (v) => (!v || !max ? 0 : Math.max(1, Math.ceil((v / max) * 5)));
   const lista = Object.entries(valores).sort((a, b) => b[1] - a[1]);
   return html`<div class="grafica">
-    <div class="mapa-grid">
+    <div class=${'mapa-grid' + (apilado ? ' apilado' : '')}>
       <svg class="mapa" viewBox=${'0 0 ' + HN_MAPA.w + ' ' + HN_MAPA.h} role="img" aria-label="Mapa de Honduras por departamento">
         ${Object.entries(HN_MAPA.deps).map(([k, dep]) => { const v = valores[k] || 0; return html`<path key=${k} d=${dep.d} fill=${'var(--seq-' + clase(v) + ')'} tabindex="0"
           onPointerMove=${(e) => tt.mostrar(e, html`<div class="tl">${dep.name}</div><div class="tv">${U.n(v)} clientes</div><div class="tl">${U.plural(fallas[k] || 0, '1 falla', (fallas[k] || 0) + ' fallas')}</div>`)}
           onPointerLeave=${tt.ocultar} onFocus=${(e) => { const b = e.currentTarget.getBoundingClientRect(); tt.mostrar({ clientX: b.left + b.width / 2, clientY: b.top + b.height / 2 }, html`<div class="tl">${dep.name}</div><div class="tv">${U.n(v)} clientes</div>`); }} onBlur=${tt.ocultar} />`; })}
       </svg>
       <div>
-        ${lista.length ? lista.slice(0, 6).map(([k, v]) => html`<${HBar} etiqueta=${HN_MAPA.deps[k] ? HN_MAPA.deps[k].name : U.lugar(k)} valor=${v} max=${lista[0][1]} color="var(--seq-4)" key=${k} />`)
+        ${lista.length ? html`<div class="hbar cab"><span>Departamento</span><span></span><span class="val">Clientes</span></div>
+          ${lista.slice(0, apilado ? 18 : 6).map(([k, v]) => html`<${HBar} etiqueta=${HN_MAPA.deps[k] ? HN_MAPA.deps[k].name : U.lugar(k)} valor=${v} max=${lista[0][1]} color="var(--seq-4)" key=${k} />`)}`
           : html`<div class="vacio">${vacio || 'Sin fallas en este periodo.'}</div>`}
       </div>
     </div>

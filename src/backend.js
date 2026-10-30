@@ -28,7 +28,7 @@ function BackendRemoto() {
 
   /* Las consultas de solo lectura se reintentan solas si el servidor estuvo ocupado un momento
      (con cientos de personas a la vez, Apps Script a veces rechaza una solicitud suelta). */
-  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, estadisticas: 1 };
+  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, estadisticas: 1, contactos: 1 };
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
@@ -130,6 +130,7 @@ function BackendRemoto() {
     alertas: () => llamar('alertas', {}),
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
+    contactos: (d) => llamar('contactos', d, 30000),
 
     /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
@@ -256,7 +257,16 @@ function BackendLocal() {
       const veredictos = filas.map((x) => ({ x, v: Model.veredictoNodo(mf, x.nodo) }));
       const p = veredictos.sort((a, b) => Model.PRIORIDAD[a.v.tipo] - Model.PRIORIDAD[b.v.tipo])[0];
       await log({ q: r.tipo, c: p ? p.x.contrato : null, n: p ? p.x.nodo : '', tec: p ? p.x.tecnologia : '', dep: p ? p.x.departamento : '', r: p ? p.v.tipo : 'NO_ENCONTRADO', f: p && p.v.falla ? p.v.falla.id : null });
-      return { estado: filas.length ? 'ok' : 'no', tipo: r.tipo, q: r.q, filas, fallas: rel };
+      const historial = Model.historialNodos(fallas, filas.map((x) => x.nodo), ['workforce', 'jefatura'].includes(ses.usuario.rol), Date.now());
+      return { estado: filas.length ? 'ok' : 'no', tipo: r.tipo, q: r.q, filas, fallas: rel, historial };
+    },
+    /* Consultas anteriores del contrato (la bitácora local guarda 30 días), igual que en el servidor */
+    async contactos({ contrato }) {
+      const ahora = Date.now();
+      const l = (await Store.leerLogs(ahora - 30 * U.DIA)).filter((x) => String(x.c) === String(contrato)).sort((a, b) => b.t - a.t);
+      const actual = l.length && ahora - l[0].t < 120000 ? 1 : 0;
+      const antes = l.slice(actual);
+      return { n7: antes.filter((x) => ahora - x.t <= 7 * U.DIA).length, n30: antes.length, anterior: antes.length ? antes[0].t : null };
     },
     async reportar(rec) {
       await log({ tipo: 'reporte', q: 'contrato', c: rec.contrato, n: rec.nodo, tec: rec.tecnologia, dep: rec.departamento, r: 'SIN_FALLA', f: null });
