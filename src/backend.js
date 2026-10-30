@@ -128,6 +128,7 @@ function BackendRemoto() {
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
     alertas: () => llamar('alertas', {}),
     estadisticas: (d) => llamar('estadisticas', d, 120000),
+    telefonos: (d) => llamar('telefonos', d, 120000),
 
     async subirBase(base, catalogoJson, alProgreso) {
       const ini = await llamar('base', { op: 'iniciar', total: base.filas, columnas: Model.columnasCarga(base), archivo: base.archivo }, 120000);
@@ -270,6 +271,10 @@ function BackendLocal() {
       const lista = Model.alertas(logs, Model.mapaFallas(fallas, Date.now()), Date.now(), {})
         .map((a) => ({ nodo: a.nodo, nClientes: a.nClientes, reportes: a.reportes, consultas: a.consultas, primero: a.primero, ultimo: a.ultimo }));
       return { alertas: lista, ahora: Date.now() };
+    },
+
+    async telefonos() {
+      throw errorAlertas('DEMO', 'En la demostración no hay teléfonos de clientes. Esta descarga funciona con la base real.');
     },
 
     async estadisticas({ desde, porHora }) {

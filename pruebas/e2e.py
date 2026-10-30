@@ -1,6 +1,6 @@
 """Prueba de punta a punta: la página contra el servidor de prueba (Code.gs en el emulador).
 Uso: python3 pruebas/e2e.py [puerto] [ruta-excel-real-opcional] [carpeta-capturas]"""
-import os, sys, json, time, urllib.request
+import os, re, sys, json, time, urllib.request
 from playwright.sync_api import sync_playwright
 
 PUERTO = sys.argv[1] if len(sys.argv) > 1 else '8787'
@@ -125,12 +125,14 @@ with sync_playwright() as p:
         x.goto(APP + '#base'); x.wait_for_selector('.zona-carga input[type=file]')
         x.set_input_files('.zona-carga input[type=file]', EXCEL)
         x.wait_for_selector('text=Lista para publicar', timeout=120000)
+        servicios = int(re.sub(r'\D', '', x.locator('.panel', has_text='Lista para publicar').locator('.resumen-base .num').first.inner_text()))
+        con_tel = x.locator('text=Trae teléfonos').count() > 0
         x.screenshot(path=OUT + 'e07_lista.png')
         t0 = time.time(); x.click('text=Publicar base')
         x.wait_for_timeout(1500); x.screenshot(path=OUT + 'e08_subiendo.png')
         x.wait_for_selector('text=Base actualizada', timeout=600000)
         e = http('/test/estado')
-        ok(e['filasBase'] == 160629, f'la base real quedó completa en el Sheet ({e["filasBase"] - 1} filas, {time.time() - t0:.0f} s en el emulador)', e)
+        ok(e['filasBase'] == servicios + 1, f'la base real quedó completa en el Sheet ({e["filasBase"] - 1} filas, {time.time() - t0:.0f} s en el emulador)', e)
         ok(x.locator('.tabla tbody tr').count() >= 2, 'el historial muestra las dos cargas')
         x.screenshot(path=OUT + 'e09_base.png', full_page=True)
         a.wait_for_selector('.aviso', timeout=20000)
@@ -154,6 +156,25 @@ with sync_playwright() as p:
         a.fill('.buscador-caja input', c_n); a.keyboard.press('Enter'); a.wait_for_selector('.veredicto[data-s=FALLA]', timeout=15000)
         ok(True, 'un cliente de ' + nodos3[0] + ' sale con Falla general')
         a.screenshot(path=OUT + 'e11_concentrix_falla.png')
+        x.goto(APP + '#fallas'); x.click('button[role=tab]:has-text("Activas")'); x.wait_for_selector('.falla-card')
+        tarjeta = x.locator('.falla-card', has_text=nodos3[0]).first
+        if con_tel:
+            with x.expect_download() as d: tarjeta.locator('button.sms').click()
+            crudo = open(d.value.path(), 'rb').read()          # en binario: el modo texto de Python cambia \r\n por \n
+            lineas = crudo.decode('utf-8').split('\r\n')
+            nums = [l for l in lineas[1:] if l]
+            malos = [n for n in nums if not re.fullmatch(r'504[3789]\d{7}', n)]
+            ok(not crudo.startswith(b'\xef\xbb\xbf') and lineas[0] == 'telefono' and nums and not malos and len(set(nums)) == len(nums),
+               f'descarga para Notifícame: {len(nums)} celulares de {", ".join(nodos3)} con 504, sin repetir ({d.value.suggested_filename})',
+               {'encabezado': lineas[0], 'lineas': len(lineas), 'mal_formados': len(malos), 'repetidos': len(nums) - len(set(nums))})   # sin imprimir números de clientes
+            x.wait_for_selector('.falla-card .nota-sms'); ok(True, 'muestra cuántos clientes tienen celular, solo fijo o ninguno')
+            with x.expect_download() as d2: x.click('.barra-sms button')
+            todas = [l for l in open(d2.value.path(), 'rb').read().decode('utf-8').split('\r\n')[1:] if l]
+            ok(len(todas) >= len(nums) > 0 and set(nums) <= set(todas) and len(set(todas)) == len(todas), f'todas las fallas activas en un solo archivo ({len(todas)} números)')
+            x.screenshot(path=OUT + 'e11b_sms.png', full_page=True)
+        else:
+            tarjeta.locator('button.sms').click(); x.wait_for_selector('text=no trae la columna TELEFONO', timeout=15000)
+            ok(True, 'con una base sin teléfonos, avisa que falta la columna TELEFONO')
         x.goto(APP + '#stats'); x.wait_for_selector('.kpis', timeout=60000); x.wait_for_timeout(800)
         x.screenshot(path=OUT + 'e12_stats.png', full_page=True)
         ok(x.locator('.kpi .v').first.inner_text() != '0', 'estadísticas con las consultas del servidor')

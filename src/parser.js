@@ -23,7 +23,8 @@ const ALERTAS_PARSER = (() => {
     colonia: ['COLONIA', 'BARRIO', 'BARRIO_COLONIA'],
     nombre: ['NOMBRE_CLIENTE', 'NOMBRE', 'CLIENTE', 'NOMBRE_COMPLETO'],
     dni: ['DNI', 'IDENTIDAD', 'NO_IDENTIDAD', 'DOCUMENTO', 'RTN'],
-    megas: ['MEGAS', 'VELOCIDAD', 'ANCHO_BANDA', 'MBPS', 'PLAN_INTERNET', 'PLAN']
+    megas: ['MEGAS', 'VELOCIDAD', 'ANCHO_BANDA', 'MBPS', 'PLAN_INTERNET', 'PLAN'],
+    telefono: ['TELEFONO', 'TELEFONOS', 'TELEFONO_CLIENTE', 'TELEFONO_CONTACTO', 'NUMERO_TELEFONO', 'NO_TELEFONO', 'CELULAR', 'MOVIL', 'TEL', 'CONTACTO']
   };
   const REQUIRED = ['contrato', 'nodo', 'tecnologia', 'nombre', 'dni'];
   const DICT_FIELDS = ['nodo', 'olt', 'nap', 'categoria', 'tecnologia', 'play', 'departamento', 'municipio', 'colonia', 'megas'];
@@ -58,6 +59,24 @@ const ALERTAS_PARSER = (() => {
   const cleanDni = (s) => squeeze(String(s == null ? '' : s).replace(/['´`"]/g, ''));
   const digits = (s) => String(s == null ? '' : s).replace(/\D+/g, '');
 
+  /* Teléfonos de Honduras: cada número queda como 504 + 8 dígitos, sin repetir y en el orden en que vienen.
+     En la base llegan de muchas formas: "99999999/88888888", "9999-9999", "9999 9999 // 3333 3333",
+     "504 9999 9999", "50499999999". Fijos empiezan con 2; celulares con 3, 7, 8 o 9. */
+  function telefonosHN(raw) {
+    const runs = String(raw == null ? '' : raw).match(/\d+/g) || [];
+    const out = [];
+    const meter = (d) => { if (/^[23789]\d{7}$/.test(d)) { const n = '504' + d; if (out.indexOf(n) < 0) out.push(n); } };
+    for (let i = 0; i < runs.length; i++) {
+      let r = runs[i];
+      if (r === '504' && i + 1 < runs.length) continue;                                    // el 504 viene aparte
+      if (r.length === 4 && i + 1 < runs.length && runs[i + 1].length === 4) r += runs[++i]; // "9999-9999"
+      if (r.length === 11 && r.slice(0, 3) === '504') r = r.slice(3);                       // ya trae el 504
+      if (r.length === 8) meter(r);
+      else if (r.length > 8 && r.length % 8 === 0) for (let k = 0; k < r.length; k += 8) meter(r.slice(k, k + 8)); // números pegados
+    }
+    return out.join(' ');
+  }
+
   /* ---------- Constructor de base compacta ---------- */
   function makeBuilder(cap) {
     cap = Math.max(1024, cap | 0);
@@ -65,7 +84,7 @@ const ALERTAS_PARSER = (() => {
     const num = { contrato: new Float64Array(cap), producto: new Float64Array(cap), fecha: new Int32Array(cap) };
     const enc = {}; const dicts = {}; const dmap = {};
     for (const f of DICT_FIELDS) { enc[f] = new Uint32Array(cap); dicts[f] = ['']; dmap[f] = new Map([['', 0]]); }
-    const nombre = []; const dni = [];
+    const nombre = []; const dni = []; const telefono = [];
 
     function grow() {
       const nc = Math.ceil(st.cap * 1.6);
@@ -85,13 +104,13 @@ const ALERTAS_PARSER = (() => {
       const i = st.n++;
       num.contrato[i] = rec.contrato; num.producto[i] = rec.producto || 0; num.fecha[i] = rec.fecha || 0;
       for (const f of DICT_FIELDS) enc[f][i] = code(f, rec[f]);
-      nombre.push(rec.nombre); dni.push(rec.dni);
+      nombre.push(rec.nombre); dni.push(rec.dni); telefono.push(rec.telefono || '');
     }
     function finish(meta) {
       const n = st.n; const cols = {};
       for (const k in num) cols[k] = num[k].slice(0, n);
       for (const k in enc) cols[k] = enc[k].slice(0, n);
-      cols.nombre = nombre; cols.dni = dni;
+      cols.nombre = nombre; cols.dni = dni; cols.telefono = telefono;
       return Object.assign({ formato: 2, filas: n, dicts, cols }, meta || {});
     }
     return { add, finish, get count() { return st.n; } };
@@ -127,7 +146,8 @@ const ALERTAS_PARSER = (() => {
       contrato: Number(cDig), producto: Number(digits(g('producto'))) || 0, fecha,
       nodo: g('nodo'), olt: g('olt'), nap: g('nap'), categoria: g('categoria'), tecnologia: g('tecnologia'),
       play: g('play'), departamento: g('departamento'), municipio: g('municipio'), colonia: g('colonia'),
-      megas: g('megas'), nombre: cleanName(g('nombre')), dni: cleanDni(g('dni'))
+      megas: g('megas'), nombre: cleanName(g('nombre')), dni: cleanDni(g('dni')),
+      telefono: idx.telefono == null ? '' : telefonosHN(g('telefono'))
     };
   }
 
@@ -368,12 +388,12 @@ const ALERTAS_PARSER = (() => {
     }
     const base = res.builder.finish({
       archivo: fileName || '', columnas: res.header, columnasUsadas: Object.keys(res.map.idx),
-      tieneMegas: res.map.idx.megas != null, segundos: (Date.now() - t0) / 1000
+      tieneMegas: res.map.idx.megas != null, tieneTelefono: res.map.idx.telefono != null, segundos: (Date.now() - t0) / 1000
     });
     return base;
   }
 
-  return { parseFile, makeBuilder, mapHeader, cleanName, digits, HEADER_ALIASES };
+  return { parseFile, makeBuilder, mapHeader, cleanName, digits, telefonosHN, HEADER_ALIASES };
 })();
 
 if (typeof module !== 'undefined') module.exports = ALERTAS_PARSER;

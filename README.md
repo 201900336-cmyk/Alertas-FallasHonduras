@@ -24,6 +24,7 @@ Navegador (GitHub Pages)             Google (privado)                           
 - **La página** (`index.html` y `config.js`) es pública y no tiene datos ni contraseñas.
 - **El servidor** (`servidor/Code.gs`) vive dentro de un Google Sheet privado que no se comparte con nadie. Corre con la cuenta de su dueño y solo devuelve lo que cada rol puede ver.
 - **La base de clientes** solo está en ese Sheet. La página recibe un cliente por búsqueda (nunca la base completa) y un resumen de nodos sin nombres ni DNI para el mapa y las fallas.
+- **Los teléfonos** de los clientes solo salen en la descarga de celulares para avisar por SMS, que es exclusiva de Workforce y Jefatura. Los asesores y las tiendas nunca los ven.
 - **Cada consulta** queda registrada (quién, cuándo, qué contrato y con qué resultado) en un segundo Sheet privado, "Alertas - Consultas": el detalle se guarda 30 días y, para las estadísticas, un resumen por día.
 
 ## Accesos
@@ -32,7 +33,7 @@ Navegador (GitHub Pages)             Google (privado)                           
 |---|---|---|
 | **Concentrix** (CC N1 y Redes Sociales) | Botón **Entrar con Genesys** | Consulta, mapa de fallas y guion |
 | **Tiendas** | Usuario genérico y contraseña, más su tienda y su nombre | Lo mismo que Concentrix |
-| **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas, Base y Estadísticas |
+| **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas (con la descarga de celulares para SMS), Base y Estadísticas |
 | **Jefatura** | Genesys, con su correo en la hoja **Usuarios** | Todo lo de Workforce |
 | Acceso temporal de Workforce | Usuario y contraseña (para cuando Genesys falle) | Lo mismo que Workforce |
 
@@ -51,7 +52,7 @@ Necesitas: la cuenta de Google donde vivirá el Sheet, tu repositorio de GitHub 
 3. Vuelve a la hoja y recárgala. Aparece el menú **Alertas**.
 4. **Alertas > 1. Configurar por primera vez.** Google te pedirá autorizar el script. Es tu propio script: si sale "Google no verificó esta app", entra a **Configuración avanzada > Ir a…**.
 
-Esto crea las hojas **Base**, **Fallas**, **Usuarios** y **Cargas** (más una oculta, **Catalogo**), y un segundo archivo, **Alertas - Consultas**, en tu Drive, con las hojas **Consultas**, **Resumen** y **Resumen_asesores**. También programa un mantenimiento que corre solo cada hora: arma el resumen de cada día y borra el detalle de más de 30 días.
+Esto crea las hojas **Base**, **Fallas**, **Usuarios** y **Cargas** (más una oculta, **Catalogo**), y un segundo archivo, **Alertas - Consultas**, en tu Drive, con las hojas **Consultas**, **Resumen** y **Resumen_asesores**. También programa un mantenimiento que corre solo cada hora: arma el resumen de cada día y borra el detalle de más de 30 días. La hoja **Descargas SMS** aparece sola con la primera descarga de teléfonos.
 
 > Solo la hoja **Usuarios** se edita a mano. Las demás las escribe Alertas.
 
@@ -120,7 +121,9 @@ Luego, en el Sheet: **Alertas > 2. Conectar Genesys**.
 
 Con cientos de personas consultando, conviene subir la base fuera de las horas pico (temprano en la mañana o en la noche): mientras sube, las búsquedas pueden tardar un poco más.
 
-Columnas obligatorias: `CONTRATO`, `GRUPO_NODO`, `TECNOLOGIA`, `NOMBRE_CLIENTE` y `DNI`. Las demás (`PRODUCT_ID`, `OLT`, `NAP`, `CATEGORIA_CLIENTE`, `FECHA_INICIO`, `PLAY`, `DEPARTAMENTO`, `MUNICIPIO`, `COLONIA`, `MEGAS`) se usan si vienen. La columna `ESTADO` se ignora.
+Columnas obligatorias: `CONTRATO`, `GRUPO_NODO`, `TECNOLOGIA`, `NOMBRE_CLIENTE` y `DNI`. Las demás (`PRODUCT_ID`, `OLT`, `NAP`, `CATEGORIA_CLIENTE`, `FECHA_INICIO`, `PLAY`, `DEPARTAMENTO`, `MUNICIPIO`, `COLONIA`, `MEGAS`, `TELEFONO`) se usan si vienen. La columna `ESTADO` se ignora.
+
+`TELEFONO` (también se reconoce como `TELEFONOS`, `CELULAR` o `MOVIL`) solo se usa para la descarga de celulares para SMS. Puede traer varios números por cliente, separados por espacio, coma, punto y coma o barra, con o sin 504 y con o sin guion: Alertas se queda con los números hondureños de 8 dígitos y les pone 504 adelante. Al revisar el Excel, la página dice cuántos servicios traen celular.
 
 Cada carga nueva **reemplaza** la anterior: la base vieja se borra, queda la nueva y la hoja **Cargas** registra quién la subió, cuándo y qué cambió (contratos nuevos, los que ya no aparecen y cambios de nodo). Todos los que estén usando Alertas reciben el aviso para actualizar.
 
@@ -133,6 +136,34 @@ Cada carga nueva **reemplaza** la anterior: la base vieja se borra, queda la nue
 - Una falla cerrada sigue visible para los asesores **36 horas** y luego sale de su panel. Workforce la conserva en el historial.
 - Cuando Workforce publica, edita, cierra o sube una base, los demás ven el aviso **"Workforce HN hizo una actualización"** en alrededor de un minuto. Lo que diga cada búsqueda siempre está al día: el servidor responde con las fallas del momento.
 - Si en la última hora llegan consultas o reportes de varios clientes del mismo nodo sin falla publicada, Workforce recibe una **alerta temprana**.
+
+## Avisar a los clientes por SMS (Notifícame)
+
+Para que el cliente sepa de la falla antes de llamar (y bajar el tráfico al Call Center), Workforce descarga los celulares de los clientes afectados y los sube a Notifícame.
+
+1. En **Fallas > Activas**, cada falla tiene el botón **Teléfonos para SMS**. Descarga un archivo con los celulares de los clientes de los nodos de esa falla. Por ejemplo, si la falla es GRA01 con 425 clientes, trae los celulares de esos 425; los que no tienen celular en la base quedan fuera.
+2. Con más de una falla activa aparece además **Teléfonos de todas**: un solo archivo con los celulares de todas las fallas activas, sin repetir.
+3. Al terminar, la tarjeta muestra cuántos números trae el archivo, cuántos clientes solo tienen teléfono fijo y cuántos no tienen teléfono en la base.
+
+**El archivo** es un CSV delimitado por comas (UTF-8), con el encabezado `telefono` y un número por línea, de 11 dígitos con 504 adelante:
+
+```
+telefono
+50431504547
+50488000003
+```
+
+Se llama, por ejemplo, `sms_F-261030-01_GRA01.csv` o `sms_fallas_activas_2026-10-30_0815.csv`.
+
+**Qué números entran:**
+
+- Uno por cliente (contrato): su primer celular en la base. En Honduras los celulares empiezan con 3, 7, 8 o 9.
+- Los teléfonos fijos (empiezan con 2) quedan fuera porque no reciben SMS.
+- Si dos clientes tienen el mismo celular, va una sola vez.
+
+**Para no mandar el mismo SMS dos veces:** para una falla nueva, usa el botón de su tarjeta. **Teléfonos de todas** vuelve a traer a los clientes de las fallas que ya avisaron. Lo mismo pasa si a una falla le agregan nodos después de avisar: la descarga trae otra vez a todos los clientes de la falla.
+
+Cada descarga queda anotada en la hoja **Descargas SMS** del Sheet (quién, cuándo, qué fallas y nodos, cuántos clientes y cuántos números). Si la base subida no trae la columna `TELEFONO`, el botón lo avisa.
 
 ## Cambios futuros
 
@@ -148,6 +179,7 @@ Cada carga nueva **reemplaza** la anterior: la base vieja se borra, queda la nue
 - **Límites**: 400 búsquedas por hora por persona y 8,000 por hora para toda la cuenta de Tiendas.
 - **Contraseñas equivocadas**: cinco errores bloquean 15 minutos solo a esa persona (por nombre y tienda), no a las demás tiendas. Si llegan 100 intentos fallidos en 15 minutos (alguien probando contraseñas), se bloquea la cuenta de Tiendas; cambiar la contraseña la desbloquea. Para el acceso temporal de Workforce el tope es 20.
 - **No hay búsquedas parciales**: solo contrato o DNI completos, máximo 20 resultados. No se puede listar la base desde la página.
+- **Teléfonos**: solo Workforce y Jefatura descargan los celulares, solo de los nodos de una falla, y cada descarga queda anotada en **Descargas SMS**. El archivo tiene datos personales: después de subirlo a Notifícame, conviene borrarlo de la computadora.
 - **Alertas > Cerrar todas las sesiones** obliga a todos a volver a entrar (por ejemplo, si una contraseña se filtró).
 
 > La base tiene datos personales de clientes de Claro. Lo recomendable es que el Sheet esté en una cuenta corporativa de Google Workspace y que el área de seguridad de la información apruebe el uso antes de abrirlo a todos los asesores.
@@ -191,7 +223,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 97 pruebas del servidor en un emulador de Apps Script
+npm test                           # 109 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 node pruebas/servidor-prueba.js 8787 demo
                                    # servidor local con Genesys simulado: http://localhost:8787/app/

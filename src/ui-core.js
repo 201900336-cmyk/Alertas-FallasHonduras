@@ -131,6 +131,13 @@ const A = {
     return r.falla;
   },
   publicarFalla: (datos) => A.falla('publicar', { falla: datos }),
+  /* Celulares de los clientes de una falla (o de todas las activas: id 'activas') para Notifícame:
+     CSV delimitado por comas, encabezado "telefono" y un número por fila, con 504 adelante. */
+  async telefonosSms(id) {
+    const r = await Backend.telefonos({ id });
+    if (r.telefonos.length) U.descargarTexto(r.archivo, 'telefono\r\n' + r.telefonos.join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+    return r;
+  },
   editarFalla: (id, cambios, detalle) => A.falla('editar', { id, falla: cambios, detalle }),
   cerrarFalla: (id, cerradaEn, nota) => A.falla('cerrar', { id, cerradaEn, nota }),
   reabrirFalla: (id) => A.falla('reabrir', { id }),

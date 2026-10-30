@@ -36,7 +36,7 @@ function VistaFallas() {
         onListo=${(f, editada) => { setEdicion(null); setSemilla(null); setTab('activas'); tostada(editada ? 'Cambios guardados en ' + f.id : 'Falla ' + f.id + ' publicada'); }}
         onCancelar=${() => { setEdicion(null); setTab('activas'); }} />`}
     ${tab === 'activas' && html`<${ListaFallas} fallas=${mf.activas} vacio="No hay fallas activas. Cuando llegue un correo con nodos afectados, publícala en la pestaña Publicar falla."
-        onEditar=${editar} onCerrar=${setCerrando} />`}
+        onEditar=${editar} onCerrar=${setCerrando} smsTodas=${true} />`}
     ${tab === 'resueltas' && html`<${ListaFallas} fallas=${mf.resueltas} vacio=${'No hay fallas cerradas en las últimas ' + CONFIG.horasVisibleTrasCierre + ' horas.'} />`}
     ${tab === 'historial' && html`<${Historial} />`}
     ${cerrando && html`<${ModalCerrar} f=${cerrando} onCerrar=${() => setCerrando(null)} />`}
@@ -324,9 +324,42 @@ function NotaNodos({ nota, ejemplos }) {
 }
 
 /* ---------- Listas de fallas ---------- */
-function ListaFallas({ fallas, vacio, onEditar, onCerrar }) {
+function ListaFallas({ fallas, vacio, onEditar, onCerrar, smsTodas }) {
   if (!fallas.length) return html`<div class="panel vacio"><b>Nada por aquí</b>${vacio}</div>`;
-  return html`<div class="fallas-lista">${fallas.map((f) => html`<${TarjetaFallaAdmin} f=${f} key=${f.id} onEditar=${onEditar} onCerrar=${onCerrar} />`)}</div>`;
+  return html`<div>
+    ${smsTodas && fallas.length > 1 && html`<${BarraSmsTodas} n=${fallas.length} />`}
+    <div class="fallas-lista">${fallas.map((f) => html`<${TarjetaFallaAdmin} f=${f} key=${f.id} onEditar=${onEditar} onCerrar=${onCerrar} />`)}</div>
+  </div>`;
+}
+
+/* Descarga de celulares para avisar por SMS (Notifícame) */
+function useSms(id) {
+  const [ocupado, setOcupado] = useState(false);
+  const [r, setR] = useState(null);
+  async function descargar() {
+    setOcupado(true);
+    try {
+      const x = await A.telefonosSms(id);
+      setR(x);
+      tostada(x.telefonos.length ? 'Listo: ' + U.n(x.telefonos.length) + ' números en ' + x.archivo : 'Esa falla no tiene clientes con celular en la base.');
+    } catch (e) { tostada(e.message); }
+    setOcupado(false);
+  }
+  return { ocupado, r, descargar };
+}
+function ResumenSms({ r }) {
+  return html`<p class="nota-sms"><${Ico} n="info" s=${16} /><span>
+    <b>${U.n(r.telefonos.length)} ${U.plural(r.telefonos.length, 'número', 'números')}</b> para ${U.n(r.clientes)} ${U.plural(r.clientes, 'cliente', 'clientes')}${r.conCelular > r.telefonos.length ? ' (algunos comparten el mismo celular)' : ''}.
+    ${r.soloFijo > 0 ? ' ' + U.n(r.soloFijo) + ' solo tienen teléfono fijo, que no recibe SMS.' : ''}${r.sinTelefono > 0 ? ' ' + U.n(r.sinTelefono) + ' no tienen teléfono en la base.' : ''}
+  </span></p>`;
+}
+function BarraSmsTodas({ n }) {
+  const sms = useSms('activas');
+  return html`<div class="panel barra-sms">
+    <div><b>Avisar por SMS a todas las fallas activas</b><span>Un solo archivo con los celulares de los clientes de las ${n} fallas, sin repetir.</span></div>
+    <button class="btn btn-borde btn-chico" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Teléfonos de todas'}</button>
+    ${sms.r && html`<${ResumenSms} r=${sms.r} />`}
+  </div>`;
 }
 
 function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
@@ -336,6 +369,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
   const imp = f.impacto || {};
   const fin = activa ? now : f.cerradaEn;
   const [verHist, setVerHist] = useState(false);
+  const sms = useSms(f.id);
   return html`<article class="panel falla-card" data-s=${f.estado}>
     <div class="falla-card-cab">
       <div><span class="id">${f.id}</span><h3>${nombreMotivo(f)}</h3></div>
@@ -362,8 +396,10 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
       ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />Cerrar falla</button>`}
       ${activa && onEditar && html`<button class="btn btn-borde btn-chico" onClick=${() => onEditar(f)}><${Ico} n="lapiz" s=${15} />Editar</button>`}
       ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + f.id + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
+      <button class="btn btn-borde btn-chico sms" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Teléfonos para SMS'}</button>
       <button class="btn btn-fantasma btn-chico" onClick=${() => setVerHist(true)}>Historial de cambios</button>
     </div>
+    ${sms.r && html`<${ResumenSms} r=${sms.r} />`}
     ${verHist && html`<${ModalHistorialFalla} f=${f} onCerrar=${() => setVerHist(false)} />`}
   </article>`;
 }

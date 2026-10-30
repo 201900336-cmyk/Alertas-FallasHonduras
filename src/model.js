@@ -244,7 +244,7 @@ const Model = (() => {
 
   /* ---------- Filas para subir la base al servidor ---------- */
   const COLUMNAS = ['CONTRATO', 'PRODUCT_ID', 'GRUPO_NODO', 'OLT', 'NAP', 'CATEGORIA_CLIENTE', 'FECHA_INICIO', 'TECNOLOGIA', 'PLAY',
-    'DEPARTAMENTO', 'MUNICIPIO', 'COLONIA', 'NOMBRE_CLIENTE', 'DNI', 'MEGAS'];
+    'DEPARTAMENTO', 'MUNICIPIO', 'COLONIA', 'NOMBRE_CLIENTE', 'DNI', 'MEGAS', 'TELEFONO'];
   const diasAIso = (d) => (d ? new Date(d * 864e5).toISOString().slice(0, 10) : '');
   const isoADias = (s) => { const t = Date.parse(String(s || '') + 'T00:00:00Z'); return isFinite(t) ? Math.floor(t / 864e5) : 0; };
   /* El DNI se guarda solo con dígitos cuando es un DNI o RTN; así se busca con o sin guiones */
@@ -253,7 +253,8 @@ const Model = (() => {
     const d = s.replace(/\D+/g, '');
     return /^[\d\s\-.]+$/.test(s) && d.length >= 13 && d.length <= 14 ? d : s;
   }
-  function columnasCarga(base) { return COLUMNAS.slice(0, base.tieneMegas ? 15 : 14); }
+  /* Las 14 de siempre y, si vienen en el Excel, MEGAS y TELEFONO (teléfonos ya con 504) */
+  function columnasCarga(base) { return COLUMNAS.slice(0, 14).concat(base.tieneMegas ? ['MEGAS'] : [], base.tieneTelefono ? ['TELEFONO'] : []); }
   function filasCarga(base, desde, hasta) {
     const C = base.cols, D = base.dicts, out = [];
     for (let i = desde; i < hasta; i++) {
@@ -261,6 +262,7 @@ const Model = (() => {
         D.categoria[C.categoria[i]], diasAIso(C.fecha[i]), D.tecnologia[C.tecnologia[i]], D.play[C.play[i]], D.departamento[C.departamento[i]],
         D.municipio[C.municipio[i]], D.colonia[C.colonia[i]], C.nombre[i], dniNormal(C.dni[i])];
       if (base.tieneMegas) f.push(D.megas[C.megas[i]]);
+      if (base.tieneTelefono) f.push(C.telefono ? C.telefono[i] || '' : '');
       out.push(f);
     }
     return out;

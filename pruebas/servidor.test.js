@@ -292,6 +292,15 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const hll = g.ejecutar('(() => { const out = []; [150, 3000, 20000].forEach((n) => { const r = hll_(); for (let i = 0; i < n; i++) hllSumar_(r, String(1000000 + i * 7)); out.push([n, hllContar_(r), hllContar_(hll_(Utilities.base64Encode(r)))]); }); return out; })()');
   ok(hll.every(([n, e, e2]) => Math.abs(e - n) / n < 0.05 && e === e2), 'clientes distintos de varios días con menos de 5 % de error: ' + hll.map(([n, e]) => e + ' de ' + n).join(', '), hll);
 
+  r = g.post({ accion: 'telefonos', token: tAgente, datos: { id: f1.id } });
+  ok(!r.ok && r.codigo === 'PERMISO', 'Concentrix no puede descargar teléfonos', r);
+  r = g.post({ accion: 'telefonos', token: tTienda3, datos: { id: f1.id } });
+  ok(!r.ok && r.codigo === 'PERMISO', 'Tiendas tampoco', r);
+  if (!base.tieneTelefono) {
+    r = g.post({ accion: 'telefonos', token: tWf, datos: { id: f1.id } });
+    ok(!r.ok && r.codigo === 'BASE' && /TELEFONO/.test(r.error), 'si la base subida no trae teléfonos, lo dice claro', r);
+  }
+
   /* ---------- Segunda carga ---------- */
   console.log('\n9. Segunda carga semanal (reemplaza la anterior)');
   const b2 = JSON.parse(JSON.stringify(base, (k, v) => (ArrayBuffer.isView(v) ? Array.from(v) : v)));
@@ -299,6 +308,17 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   b2.filas = base.filas - recorte;
   for (const k of Object.keys(b2.cols)) b2.cols[k] = b2.cols[k].slice(recorte);
   b2.cols.nodo[0] = b2.cols.nodo[5] !== b2.cols.nodo[0] ? b2.cols.nodo[5] : b2.cols.nodo[0] + 1;
+  if (!b2.tieneTelefono) {
+    // La base de la semana 2 ya trae teléfonos (ficticios), con los casos que se ven en la base real
+    const num = (j, pre) => '504' + pre + String(j).padStart(7, '0').slice(-7);
+    b2.cols.telefono = b2.cols.contrato.map((c, i) => {
+      if (i % 11 === 0) return '';                                   // sin teléfono
+      if (i % 11 === 1) return num(i, '2');                          // solo fijo
+      const j = i % 13 === 0 ? i - 1 : i;                            // algunos comparten celular
+      return num(j, j % 2 ? '9' : '3') + (i % 3 === 0 ? ' ' + num(i, '2') : '');
+    });
+    b2.tieneTelefono = true;
+  }
   t1 = Date.now();
   r = await subir(b2, tWfTemp, catJson, 'semana 2.xlsx');
   ok(r.ok && r.datos.comparacion && r.datos.comparacion.bajas >= recorte - 5 && r.datos.comparacion.cambiosNodo >= 1,
@@ -308,6 +328,37 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(hcg.getLastRow() === 3 && hcg.getRange(3, 2).getValue() === 'Mario Rivera', 'Cargas registra quién subió cada base');
   r = g.post({ accion: 'estado', token: tAgente });
   ok(r.datos.cambio.tipo === 'BASE_ACTUALIZADA' && /Mario Rivera/.test(r.datos.cambio.por.nombre), 'todos reciben el aviso de la base nueva');
+
+  console.log('\n9b. Teléfonos para avisar por SMS (Notifícame)');
+  const fa = g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.find((f) => f.id === f1.id);
+  const setN = new Set(fa.nodos), porC = new Map();
+  for (let i = 0; i < b2.filas; i++) {
+    if (!setN.has(b2.dicts.nodo[b2.cols.nodo[i]])) continue;
+    const c = String(b2.cols.contrato[i]), l = porC.get(c) || [];
+    porC.set(c, l);
+    String(b2.cols.telefono[i] || '').split(/\s+/).forEach((t) => { if (/^504\d{8}$/.test(t) && !l.includes(t)) l.push(t); });
+  }
+  const espera = new Set(); let eCel = 0, eFijo = 0, eSin = 0;
+  porC.forEach((l) => { const cel = l.find((t) => /^504[3789]/.test(t)); if (cel) { eCel++; espera.add(cel); } else if (l.length) eFijo++; else eSin++; });
+  r = g.post({ accion: 'telefonos', token: tWf, datos: { id: f1.id } });
+  ok(r.ok && r.datos.telefonos.length === espera.size && r.datos.telefonos.every((t) => espera.has(t)) && new Set(r.datos.telefonos).size === r.datos.telefonos.length,
+    `${r.datos && r.datos.telefonos.length} celulares sin repetir para los ${porC.size} clientes de ${fa.nodos.join(', ')}`, r.datos && [r.datos.telefonos.length, espera.size]);
+  ok(r.ok && r.datos.telefonos.length > 0 && r.datos.telefonos.every((t) => /^504[3789]\d{7}$/.test(t)), 'todos con 504 adelante y 8 dígitos de celular');
+  ok(r.ok && r.datos.clientes === porC.size && r.datos.conCelular === eCel && r.datos.soloFijo === eFijo && r.datos.sinTelefono === eSin,
+    `cuenta clientes con celular (${eCel}), solo con fijo (${eFijo}) y sin teléfono (${eSin})`, r.datos && [r.datos.clientes, r.datos.conCelular, r.datos.soloFijo, r.datos.sinTelefono]);
+  ok(r.ok && /^sms_F-\d{6}-\d{2}_[A-Za-z0-9_\-]+\.csv$/.test(r.datos.archivo), 'nombre del archivo: ' + (r.datos && r.datos.archivo));
+  const hdes = g.E.activo.getSheetByName('Descargas SMS');
+  ok(hdes && hdes.getLastRow() === 2 && hdes.getRange(2, 3).getValue() === 'Ana López' && Number(hdes.getRange(2, 7).getValue()) === espera.size,
+    'queda anotado quién descargó y cuántos números');
+  r = g.post({ accion: 'telefonos', token: tWf, datos: { id: 'activas' } });
+  ok(r.ok && r.datos.fallas.includes(f1.id) && r.datos.telefonos.length >= espera.size && /^sms_fallas_activas_/.test(r.datos.archivo), 'todas las fallas activas en un solo archivo', r.datos && r.datos.fallas);
+  r = g.post({ accion: 'telefonos', token: tWf, datos: { id: 'F-000000-99' } });
+  ok(!r.ok && r.codigo === 'DATOS', 'una falla que no existe da un mensaje claro', r);
+  const iTel = [...Array(b2.filas).keys()].find((i) => setN.has(b2.dicts.nodo[b2.cols.nodo[i]]) && b2.cols.telefono[i]);
+  r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(b2.cols.contrato[iTel]) } });
+  ok(r.ok && r.datos.filas.length > 0 && !JSON.stringify(r.datos).includes(b2.cols.telefono[iTel].split(' ')[0].slice(3)), 'la búsqueda de un asesor no trae teléfonos', r.datos && r.datos.filas[0]);
+  r = g.post({ accion: 'base', token: tWf, datos: { op: 'iniciar', total: 10, columnas: Model.columnasCarga(base).slice(0, 14).concat(['OTRA']) } });
+  ok(!r.ok && r.codigo === 'DATOS', 'una columna desconocida en la base se rechaza', r);
 
   /* ---------- Limpieza ---------- */
   console.log('\n10. Mantenimiento de cada hora');

@@ -48,7 +48,9 @@ function VistaBase() {
       const buf = await file.arrayBuffer();
       const base = await leerBase(buf, file.name, (p) => setEst((e) => (e && e.fase === 'leyendo' ? Object.assign({}, e, { p }) : e)));
       if (!base.filas) throw new Error('No encontré clientes en el archivo.');
-      setEst({ fase: 'listo', base, archivo: file.name, nodos: base.dicts.nodo.length - 1, gpon: contarTec(base, 'GPON'), hfc: contarTec(base, 'HFC') });
+      let conCelular = 0;
+      if (base.tieneTelefono && base.cols.telefono) base.cols.telefono.forEach((t) => { if (/(^|\s)504[3789]/.test(t || '')) conCelular++; });
+      setEst({ fase: 'listo', base, archivo: file.name, nodos: base.dicts.nodo.length - 1, gpon: contarTec(base, 'GPON'), hfc: contarTec(base, 'HFC'), conCelular });
     } catch (e) { setEst({ fase: 'error', msg: e.message || String(e), archivo: file.name }); }
   }
   async function publicar() {
@@ -117,6 +119,9 @@ function VistaBase() {
           </div>
           <div class="panel-cuerpo" style="display:flex;flex-direction:column;gap:12px">
             ${est.errorPublicar && html`<div class="nota" style="color:var(--falla-text)"><${Ico} n="alerta" s=${18} /><span>No se pudo publicar: ${est.errorPublicar} La base anterior sigue intacta.</span></div>`}
+            ${est.base.tieneTelefono
+              ? html`<div class="nota"><${Ico} n="info" s=${18} /><span>Trae teléfonos: ${U.n(est.conCelular)} de ${U.n(est.base.filas)} servicios tienen celular para avisar por SMS. Los números quedan con 504 adelante.</span></div>`
+              : html`<div class="nota"><${Ico} n="info" s=${18} /><span>Esta base no trae la columna TELEFONO, así que no se van a poder descargar los celulares para SMS.</span></div>`}
             ${s.meta.demo && html`<div class="nota"><${Ico} n="alerta" s=${18} /><span>Al publicar se borran los datos de demostración: fallas, consultas e historial ficticios.</span></div>`}
             <div class="sub">${local ? '' : 'Se sube por partes y tarda unos minutos. Las búsquedas siguen funcionando con la base anterior hasta que termine. '}Al publicar, todos los que estén usando Alertas recibirán el aviso para actualizar. Quedará registrado que la subiste tú.</div>
             <div style="display:flex;gap:10px">

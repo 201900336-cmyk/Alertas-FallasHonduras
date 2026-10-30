@@ -42,7 +42,7 @@ const ALERTAS = {
   FILAS_POR_LOTE: 5000,
   ALERTA_MIN: 60, ALERTA_CLIENTES: 3, ALERTA_REPORTES: 2,
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores' },
+  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura' },
   ESCRIBEN: ['workforce', 'jefatura'],
   REGIONES: {
@@ -60,7 +60,8 @@ const ALERTAS = {
 };
 
 const COL_BASE = ['CONTRATO', 'PRODUCT_ID', 'GRUPO_NODO', 'OLT', 'NAP', 'CATEGORIA_CLIENTE', 'FECHA_INICIO', 'TECNOLOGIA', 'PLAY',
-  'DEPARTAMENTO', 'MUNICIPIO', 'COLONIA', 'NOMBRE_CLIENTE', 'DNI', 'MEGAS'];
+  'DEPARTAMENTO', 'MUNICIPIO', 'COLONIA', 'NOMBRE_CLIENTE', 'DNI', 'MEGAS', 'TELEFONO'];
+const COL_OPCIONALES = ['MEGAS', 'TELEFONO'];   // pueden venir o no, después de las 14 de siempre
 const COL_FALLAS = ['ID', 'Estado', 'Motivo', 'Motivo (otro)', 'Explicación al cliente', 'Nodos', 'Inicio', 'Solución estimada',
   'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Nota de cierre', 'Referencia', 'Notas internas', 'Clientes', 'HFC', 'GPON', 'Datos (no editar)'];
 const COL_USUARIOS = ['Correo de Genesys', 'Nombre', 'Rol (workforce, jefatura, concentrix o bloqueado)', 'Activo (SÍ o NO)', 'Notas'];
@@ -68,13 +69,15 @@ const COL_CARGAS = ['Fecha', 'Subió', 'Archivo', 'Servicios', 'HFC', 'GPON', 'N
 const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo', 'Contrato', 'Nodo', 'Resultado', 'Falla'];
 const COL_RESUMEN = ['Día', 'Consultas', 'Con falla', 'Sin resultado', 'Reportes', 'Datos (no editar)'];
 const COL_RESUMEN_AS = ['Día', 'Usuario', 'Nombre', 'Canal', 'Consultas', 'Con falla', 'Sin resultado'];
+const COL_DESCARGAS = ['Fecha', 'Usuario', 'Nombre', 'Fallas', 'Nodos', 'Clientes', 'Números en el archivo'];
 
 const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
-  reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_
+  reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
+  telefonos: accionTelefonos_
 };
 const PUBLICAS = { config: true, login: true };
-const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, estadisticas: true };
+const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, estadisticas: true, telefonos: true };
 
 /* ============================================================================
  *  Entrada de la aplicación web
@@ -705,7 +708,9 @@ function baseIniciar_(d, ses) {
   const total = Math.floor(Number(d.total) || 0);
   const columnas = Array.isArray(d.columnas) ? d.columnas.map(String) : [];
   if (total < 1 || total > 600000) throw fallo_('DATOS', 'La cantidad de filas no es válida.');
-  if (columnas.join() !== COL_BASE.slice(0, columnas.length).join() || columnas.length < 14) throw fallo_('DATOS', 'Las columnas de la base no son las esperadas.');
+  const extra = columnas.slice(14);
+  if (columnas.length < 14 || columnas.slice(0, 14).join() !== COL_BASE.slice(0, 14).join()
+    || extra.some((c, i) => COL_OPCIONALES.indexOf(c) < 0 || extra.indexOf(c) !== i)) throw fallo_('DATOS', 'Las columnas de la base no son las esperadas.');
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw fallo_('OCUPADO', 'El servidor está ocupado. Intenta de nuevo.');
   try {
@@ -845,6 +850,66 @@ function leerCargas_() {
     hfc: Number(f[4]) || 0, gpon: Number(f[5]) || 0, nodos: Number(f[6]) || 0,
     nuevos: f[7] === '' ? null : Number(f[7]), bajas: f[8] === '' ? null : Number(f[8]), cambiosNodo: f[9] === '' ? null : Number(f[9])
   }));
+}
+
+/* ============================================================================
+ *  Teléfonos para avisar por SMS (plataforma Notifícame)
+ *  Workforce descarga los celulares de los clientes de una falla, o de todas las
+ *  activas juntas: un número por cliente (el primer celular que trae la base),
+ *  sin repetir y con 504 adelante. Cada descarga queda anotada en "Descargas SMS".
+ *  Los teléfonos nunca llegan a las búsquedas de los asesores.
+ * ========================================================================== */
+
+function accionTelefonos_(d, ses) {
+  const id = String(d.id || '');
+  const todas = leerFallas_();
+  const fallas = id === 'activas' ? todas.filter((f) => f.estado === 'ACTIVA') : todas.filter((f) => f.id === id);
+  if (!fallas.length) throw fallo_('DATOS', id === 'activas' ? 'No hay fallas activas.' : 'No encontré la falla ' + id + '.');
+  const nodos = {};
+  fallas.forEach((f) => f.nodos.forEach((n) => { nodos[n] = true; }));
+
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.base);
+  if (!h || h.getLastRow() < 2) throw fallo_('BASE', 'Todavía no hay base de clientes.');
+  const cols = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(String);
+  const iC = cols.indexOf('CONTRATO') + 1, iN = cols.indexOf('GRUPO_NODO') + 1, iT = cols.indexOf('TELEFONO') + 1;
+  if (!iT) throw fallo_('BASE', 'La base que está subida no trae la columna TELEFONO. Sube la base que incluye los teléfonos.');
+  const n = h.getLastRow() - 1;
+  const colN = h.getRange(2, iN, n, 1).getValues();
+  const colC = h.getRange(2, iC, n, 1).getValues();
+  const colT = h.getRange(2, iT, n, 1).getValues();
+
+  // Un cliente (contrato) puede tener varias filas, una por servicio: se juntan sus números
+  const porContrato = {};
+  for (let i = 0; i < n; i++) {
+    if (!nodos[String(colN[i][0])]) continue;
+    const c = String(colC[i][0]);
+    const lista = porContrato[c] || (porContrato[c] = []);
+    String(colT[i][0] || '').split(/\s+/).forEach((t) => { if (/^504\d{8}$/.test(t) && lista.indexOf(t) < 0) lista.push(t); });
+  }
+  const numeros = [], ya = {};
+  let clientes = 0, conCelular = 0, soloFijo = 0, sinTelefono = 0;
+  Object.keys(porContrato).forEach((c) => {
+    clientes++;
+    const lista = porContrato[c];
+    const cel = lista.filter((t) => /^504[3789]/.test(t))[0];
+    if (cel) { conCelular++; if (!ya[cel]) { ya[cel] = true; numeros.push(cel); } }
+    else if (lista.length) soloFijo++;
+    else sinTelefono++;
+  });
+
+  const ids = fallas.map((f) => f.id);
+  const listaNodos = Object.keys(nodos);
+  try {
+    const hd = hojaEn_(libro_(), ALERTAS.HOJAS.descargas, COL_DESCARGAS);
+    hd.appendRow([new Date(), ses.u, ses.n, ids.join(', ').slice(0, 300), listaNodos.join(', ').slice(0, 500), clientes, numeros.length]);
+  } catch (e) { console.error('No se pudo anotar la descarga: ' + (e && e.message)); }
+
+  const cuando = Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyy-MM-dd_HHmm');
+  const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + id + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
+  return {
+    archivo: nombre.replace(/[^A-Za-z0-9_\-]/g, '') + '.csv', fallas: ids, nodos: listaNodos.length,
+    clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono, telefonos: numeros
+  };
 }
 
 /* ============================================================================

@@ -134,6 +134,12 @@ const U = (() => {
     const a = document.createElement('a'); a.href = url; a.download = nombre; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
   }
+  /* Archivo de texto tal cual (sin marca BOM): lo usan plataformas como Notifícame */
+  function descargarTexto(nombre, texto, tipo) {
+    const url = URL.createObjectURL(new Blob([texto], { type: tipo || 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = nombre; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+  }
   const plural = (k, uno, varios) => (k === 1 ? uno : varios);
   const listaNatural = (arr, max) => {
     max = max || 3;
@@ -144,5 +150,5 @@ const U = (() => {
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, oltBase, oltNombre,
-    oltPuerto, uid, copiar, descargarCsv, plural, listaNatural };
+    oltPuerto, uid, copiar, descargarCsv, descargarTexto, plural, listaNatural };
 })();
