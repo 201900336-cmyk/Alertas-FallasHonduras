@@ -17,7 +17,7 @@ function Acceso() {
   const s = useG();
   const cfg = s.config || { genesys: {} };
   const [modo, setModo] = useState('tiendas');
-  const [usuario, setUsuario] = useState(leerLS('alertas-usuario-tiendas', 'tiendas'));
+  const [usuario, setUsuario] = useState(leerLS('alertas-usuario-tiendas', RT.usuarioTiendas || 'tiendas'));
   const [clave, setClave] = useState('');
   const [tienda, setTienda] = useState(leerLS('alertas-tienda', ''));
   const [nombre, setNombre] = useState(leerLS('alertas-nombre', ''));
@@ -57,7 +57,7 @@ function Acceso() {
           <div class="acceso-titulo">
             <h3>${esTienda ? 'Tiendas' : 'Acceso temporal'}</h3>
             ${cfg.temporal && html`<div class="seg" role="group" aria-label="Tipo de acceso">
-              <button type="button" aria-pressed=${esTienda} onClick=${() => { setModo('tiendas'); setUsuario(leerLS('alertas-usuario-tiendas', 'tiendas')); }}>Tiendas</button>
+              <button type="button" aria-pressed=${esTienda} onClick=${() => { setModo('tiendas'); setUsuario(leerLS('alertas-usuario-tiendas', RT.usuarioTiendas || 'tiendas')); }}>Tiendas</button>
               <button type="button" aria-pressed=${!esTienda} onClick=${() => { setModo('temporal'); setUsuario(''); }}>Temporal</button>
             </div>`}
           </div>
