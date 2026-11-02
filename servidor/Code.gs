@@ -54,6 +54,7 @@ const ALERTAS = {
   // Cada SMS es una llamada de Google a otro servicio: con una cuenta de Gmail son unas 20 mil al día en total,
   // y el ingreso con Genesys también usa (2 por ingreso). Con Google Workspace (100 mil al día) se puede subir.
   SMS_POR_DIA: 15000,
+  SMS_CONTROL_MAX: 40,           // números de control del equipo (menú Alertas > 5. Números de control)
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
   HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas' },
@@ -89,7 +90,7 @@ const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo',
 const COL_RESUMEN = ['Día', 'Consultas', 'Con falla', 'Sin resultado', 'Reportes', 'Datos (no editar)'];
 const COL_RESUMEN_AS = ['Día', 'Usuario', 'Nombre', 'Canal', 'Consultas', 'Con falla', 'Sin resultado'];
 const COL_DESCARGAS = ['Fecha', 'Usuario', 'Nombre', 'Fallas', 'Nodos', 'Clientes', 'Números en el archivo'];
-const COL_ENVIOS = ['Fecha', 'Falla', 'ID de Alertas', 'Tipo', 'Teléfono', 'Estado', 'Detalle', 'Envío', 'Envió'];
+const COL_ENVIOS = ['Fecha', 'Falla', 'ID de Alertas', 'Tipo', 'Teléfono', 'Estado', 'Detalle', 'Envío', 'Envió', 'Control'];
 const COL_TIENDAS = ['Tienda (una por fila: así aparece en la lista al entrar)'];
 /* Tiendas con las que se crea la hoja Tiendas. Después se agregan o quitan en la hoja, sin tocar el código. */
 const TIENDAS_INICIALES = [
@@ -1166,7 +1167,10 @@ function accionTelefonos_(d, ses) {
   const nodos = {};
   fallas.forEach((f) => f.nodos.forEach((n) => { nodos[n] = true; }));
   const cel = celularesDe_(nodos);
-  const numeros = cel.numeros, clientes = cel.clientes, conCelular = cel.conCelular, soloFijo = cel.soloFijo, sinTelefono = cel.sinTelefono;
+  const clientes = cel.clientes, conCelular = cel.conCelular, soloFijo = cel.soloFijo, sinTelefono = cel.sinTelefono;
+  // Los números de control del equipo van primero (los que no son clientes de la falla)
+  const control = numerosControlSms_().filter((x) => cel.numeros.indexOf(x) < 0);
+  const numeros = control.concat(cel.numeros);
 
   const ids = fallas.map(nombreFalla_);
   const listaNodos = Object.keys(nodos);
@@ -1179,7 +1183,7 @@ function accionTelefonos_(d, ses) {
   const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + nombreFalla_(fallas[0]) + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
   return {
     archivo: nombre.replace(/[^A-Za-z0-9_\-]/g, '') + '.csv', fallas: ids, nodos: listaNodos.length,
-    clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono, telefonos: numeros
+    clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono, control: control.length, telefonos: numeros
   };
 }
 
@@ -1291,6 +1295,27 @@ const NO_SALIO_SMS = /Address unavailable|DNS error|unknown host|SSL|certificate
 /* El mismo id para el mismo aviso al mismo número: si Notifícame no acepta ids repetidos, no se duplica */
 const idSms_ = (idFalla, tipo, num) => 'AL-' + idFalla_(idFalla) + '-' + (tipo === 'FALLA' ? 'F' : 'R') + '-' + num;
 
+/* Números de control: celulares del equipo que reciben cada mensaje para confirmar que llegó. Los guarda la
+   cuenta dueña (menú Alertas > 5. Números de control) en Propiedades del script; nunca llegan a la página.
+   Cada uno recibe cada mensaje distinto una vez por falla (aviso de falla y restablecido aparte): en la
+   pestaña Envíos SMS sus filas llevan en "Control" la huella del mensaje. Van al principio del envío. */
+function celularHn_(t) {
+  const d = String(t || '').replace(/\D+/g, '');
+  return /^[3789]\d{7}$/.test(d) ? '504' + d : /^504[3789]\d{7}$/.test(d) ? d : '';
+}
+function numerosControlSms_() {
+  let l = [];
+  try { l = JSON.parse(props_().getProperty('SMS_CONTROL') || '[]'); } catch (e) { l = []; }
+  return (Array.isArray(l) ? l : []).map(celularHn_).filter((x, i, a) => x && a.indexOf(x) === i);
+}
+/* Huella del mensaje (FNV-1a de 32 bits, igual que U.hashSms en la página): con una M adelante para que la hoja la guarde como texto */
+function hashSms_(t) {
+  let h = 0x811c9dc5;
+  const s = String(t || '');
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return 'M' + ('0000000' + h.toString(16)).slice(-8);
+}
+
 /* Todo lo que cambia la pestaña Envíos SMS o el envío en curso va con el candado del script */
 function conCandadoSms_(fn, intentos) {
   const lock = LockService.getScriptLock();
@@ -1306,7 +1331,10 @@ function conCandadoSms_(fn, intentos) {
 const claveEnvioSms_ = (idFalla) => 'SMS_ENVIO:' + idFalla_(idFalla);
 function envioSmsDe_(idFalla) { try { return JSON.parse(props_().getProperty(claveEnvioSms_(idFalla)) || 'null'); } catch (e) { return null; } }
 function guardarEnvioSms_(m) { props_().setProperty(claveEnvioSms_(m.falla), JSON.stringify(m)); }
-const avanceSms_ = (m) => ({ envio: m.envio, pasos: m.pasos, siguiente: m.siguiente, total: m.total, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, error: sinNumeros_(m.error) });
+const avanceSms_ = (m) => ({ envio: m.envio, pasos: m.pasos, siguiente: m.siguiente, total: m.total, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos,
+  error: sinNumeros_(m.error), control: m.ctrl || 0, cEnviados: m.cEnv || 0, cErrores: m.cErr || 0, cDudosos: m.cDud || 0 });
+// Lo ya resuelto (enviado, error o en duda), clientes y números de control
+const hechosSms_ = (m) => m.enviados + m.errores + m.dudosos + (m.cEnv || 0) + (m.cErr || 0) + (m.cDud || 0);
 
 /* Límite diario: cada SMS es una llamada de Google a otro servicio (20 mil al día con una cuenta de Gmail) */
 function cuotaSms_() {
@@ -1318,7 +1346,12 @@ function cuotaSms_() {
 }
 function gastarCuotaSms_(n) { const c = cuotaSms_(); props_().setProperty('SMS_CUOTA', JSON.stringify({ dia: c.dia, usados: Math.max(0, c.usados + n) })); }
 
-function hojaEnviosSms_() { return hojaEn_(libro_(), ALERTAS.HOJAS.envios, COL_ENVIOS); }
+function hojaEnviosSms_() {
+  const h = hojaEn_(libro_(), ALERTAS.HOJAS.envios, COL_ENVIOS);
+  if (h.getMaxColumns() < COL_ENVIOS.length) h.insertColumnsAfter(h.getMaxColumns(), COL_ENVIOS.length - h.getMaxColumns());
+  if (String(h.getRange(1, COL_ENVIOS.length).getValue()) !== 'Control') h.getRange(1, COL_ENVIOS.length).setValue('Control').setFontWeight('bold');
+  return h;
+}
 /* Las filas de un envío van juntas (se agregan de una vez): basta la primera */
 function inicioBloqueSms_(h, envio) {
   const ult = h.getLastRow();
@@ -1347,9 +1380,11 @@ function cerrarVueloSms_(h, r0, m, resultados) {
     v.filas.forEach((fila, k) => { tramo[fila - a] = [lista[k][0], String(lista[k][1] || '').slice(0, 200)]; });
     rango.setValues(tramo);
   }
-  lista.forEach((x) => { if (cuenta[x[0]] != null) cuenta[x[0]]++; });
+  const cuentaC = { Enviado: 0, Error: 0, Dudoso: 0 };
+  lista.forEach((x, k) => { const c = v.filas[k] < (m.ctrl || 0) ? cuentaC : cuenta; if (c[x[0]] != null) c[x[0]]++; });
   m.enviados += cuenta.Enviado; m.errores += cuenta.Error; m.dudosos += cuenta.Dudoso;
-  m.siguiente = Math.min(m.total, m.enviados + m.errores + m.dudosos);
+  m.cEnv = (m.cEnv || 0) + cuentaC.Enviado; m.cErr = (m.cErr || 0) + cuentaC.Error; m.cDud = (m.cDud || 0) + cuentaC.Dudoso;
+  m.siguiente = Math.min(m.total, hechosSms_(m));
   const malo = lista.filter((x) => x[0] === 'Error')[0];
   if (malo && !m.error) m.error = String(malo[1] || '');
   m.pasos = v.paso + 1; m.vuelo = null; m.renovado = Date.now();
@@ -1375,15 +1410,19 @@ function anotarTardeSms_(h, r0, filas, resultados) {
   rango.setValues(tramo);
 }
 
-/* El último estado de cada número de esta falla, por tipo de aviso */
+/* El último estado de cada número de esta falla, por tipo de aviso: el de los clientes y, aparte, el de los
+   números de control por huella de mensaje ({ clientes: { FALLA: { tel: estado } }, control: { FALLA: { huella: { tel: estado } } } }) */
 function estadosSms_(idFalla) {
-  const out = {};
-  Object.keys(TIPOS_SMS).forEach((t) => { out[t] = {}; });
+  const out = { clientes: {}, control: {} };
+  Object.keys(TIPOS_SMS).forEach((t) => { out.clientes[t] = {}; out.control[t] = {}; });
   const h = libro_().getSheetByName(ALERTAS.HOJAS.envios);
   if (!h || h.getLastRow() < 2) return out;
-  const id = idFalla_(idFalla);
-  h.getRange(2, 3, h.getLastRow() - 1, 4).getValues().forEach((x) => {   // ID de Alertas, Tipo, Teléfono, Estado
-    if (Object.prototype.hasOwnProperty.call(TIPOS_SMS, x[1]) && idFalla_(x[0]) === id) out[x[1]][String(x[2])] = String(x[3]);
+  const id = idFalla_(idFalla), nc = Math.min(8, Math.max(4, h.getLastColumn() - 2));
+  h.getRange(2, 3, h.getLastRow() - 1, nc).getValues().forEach((x) => {   // ID de Alertas, Tipo, Teléfono, Estado, … Control
+    if (!Object.prototype.hasOwnProperty.call(TIPOS_SMS, x[1]) || idFalla_(x[0]) !== id) return;
+    const c = String(x[7] == null ? '' : x[7]);
+    if (!c) out.clientes[x[1]][String(x[2])] = String(x[3]);
+    else (out.control[x[1]][c] || (out.control[x[1]][c] = {}))[String(x[2])] = String(x[3]);
   });
   return out;
 }
@@ -1404,10 +1443,12 @@ function registrarSmsEnFalla_(m, nota) {
   const f = leerFallas_(h).filter((x) => x.id === m.falla)[0];
   if (!f) return null;
   const ahora = Date.now();
-  f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total, por: m.n, en: ahora }]).slice(-20);
+  f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total - (m.ctrl || 0),
+    control: m.cEnv || 0, por: m.n, en: ahora }]).slice(-20);
   const extra = [m.errores ? m.errores + ' con error' : '', m.dudosos ? m.dudosos + ' en duda' : ''].filter(String);
+  const c = m.cEnv || 0, ctrl = m.ctrl ? ' y a ' + (c === m.ctrl ? c : c + ' de ' + m.ctrl) + (m.ctrl === 1 ? ' número' : ' números') + ' de control' : '';
   f.historial.push({ accion: 'SMS', en: ahora, por: { u: m.u, nombre: m.n },
-    detalle: TIPOS_SMS[m.tipo] + ' a ' + m.enviados + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '') + (nota ? '; ' + nota : '') });
+    detalle: TIPOS_SMS[m.tipo] + ' a ' + m.enviados + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '') + ctrl + (nota ? '; ' + nota : '') });
   columnaNumeroFallas_(h);
   const fila = fallaAFila_(f);
   h.getRange(f._fila, 1, 1, fila.length).setValues([fila]);
@@ -1423,16 +1464,16 @@ function cerrarEnvioSms_(m, nota) {
   if (r0) {
     const rango = h.getRange(r0, 6, m.total, 1), est = rango.getValues();
     let cancelados = 0, cambia = false;
-    est.forEach((x) => {
+    est.forEach((x, i) => {
       if (x[0] === 'Pendiente') { x[0] = 'Cancelado'; cancelados++; cambia = true; }
-      else if (x[0] === 'Enviando') { x[0] = 'Dudoso'; m.dudosos++; cambia = true; }
+      else if (x[0] === 'Enviando') { x[0] = 'Dudoso'; if (i < (m.ctrl || 0)) m.cDud = (m.cDud || 0) + 1; else m.dudosos++; cambia = true; }
     });
     if (cambia) rango.setValues(est);
     // lo apartado que no se mandó vuelve al límite de hoy (si el envío es de hoy)
     if (cancelados && Utilities.formatDate(new Date(m.en), ALERTAS.ZONA, 'yyyy-MM-dd') === cuotaSms_().dia) gastarCuotaSms_(-cancelados);
   }
   let falla = null;
-  try { falla = m.enviados || m.errores || m.dudosos ? registrarSmsEnFalla_(m, nota) : null; } catch (e) {
+  try { falla = hechosSms_(m) ? registrarSmsEnFalla_(m, nota) : null; } catch (e) {
     console.error('No se pudo anotar el envío de SMS en la falla ' + idFalla_(m.falla) + ': ' + (e && e.message));
   }
   props_().deleteProperty(claveEnvioSms_(m.falla));
@@ -1451,7 +1492,10 @@ function accionSms_(d, ses) {
 function smsResumen_(d, ses) {
   const f = fallaSms_(d.id), tipo = tipoSmsDe_(f);
   const cel = celularesDeFalla_(f);
-  const est = estadosSms_(f.id)[tipo];
+  const ests = estadosSms_(f.id), est = ests.clientes[tipo];
+  // Números de control que no son clientes de la falla (esos ya lo reciben como clientes) y, por mensaje, cuántos ya lo tienen
+  const ctrl = numerosControlSms_().filter((x) => cel.numeros.indexOf(x) < 0), hechos = {};
+  Object.keys(ests.control[tipo]).forEach((hm) => { hechos[hm] = ctrl.filter((x) => SMS_NO_REPETIR[ests.control[tipo][hm][x]]).length; });
   let ya = 0, enDuda = 0;
   cel.numeros.forEach((x) => { if (est[x] === 'Enviado') ya++; else if (est[x] === 'Enviando' || est[x] === 'Dudoso') enDuda++; });
   const m = envioSmsDe_(f.id);
@@ -1459,8 +1503,10 @@ function smsResumen_(d, ses) {
     configurado: !!notificameCfg_(), tipo: tipo, puede: tipo === 'FALLA' || !descartada_(f),
     clientes: cel.clientes, celulares: cel.numeros.length, conCelular: cel.conCelular, soloFijo: cel.soloFijo, sinTelefono: cel.sinTelefono,
     ya: ya, enDuda: enDuda, faltan: cel.numeros.length - ya - enDuda, quedanHoy: cuotaSms_().quedan, envios: f.sms || [],
+    control: ctrl.length, controlHechos: hechos,
     enCurso: m ? { por: m.n, mio: m.u === ses.u, tipo: m.tipo, mensaje: m.u === ses.u ? m.mensaje : '', total: m.total, siguiente: m.siguiente,
-      enviados: m.enviados, libre: Date.now() - m.renovado > ENVIO_SMS_VIEJO_MS } : null
+      enviados: m.enviados, control: m.ctrl || 0, cHechos: (m.cEnv || 0) + (m.cErr || 0) + (m.cDud || 0),
+      libre: Date.now() - m.renovado > ENVIO_SMS_VIEJO_MS } : null
   };
 }
 /* Aparta a quienes les falta el aviso: quedan "Pendiente" en Envíos SMS antes de mandar nada */
@@ -1474,7 +1520,7 @@ function smsIniciar_(d, ses) {
   const mensaje = String(d.mensaje || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
   if (!mensaje) throw fallo_('DATOS', 'Escribe el mensaje.');
   if (mensaje.length > ALERTAS.SMS_MAX) throw fallo_('DATOS', 'El mensaje es muy largo: máximo ' + ALERTAS.SMS_MAX + ' caracteres.');
-  const conDuda = d.dudosos === true;
+  const conDuda = d.dudosos === true, huella = hashSms_(mensaje);
   const cel = celularesDeFalla_(f);                    // fuera del candado: lee la base (unos segundos)
   return conCandadoSms_(() => {
     const ahora = Date.now();
@@ -1491,26 +1537,32 @@ function smsIniciar_(d, ses) {
       if (!resolverVueloSms_(h0, inicioBloqueSms_(h0, m.envio), m)) throw fallo_('OCUPADO', 'Todavía se está mandando un grupo del envío anterior. Intenta de nuevo en unos segundos.');
       cerrarEnvioSms_(m, 'se detuvo antes de terminar');
     }
-    const est = estadosSms_(f.id)[tipo];
+    const ests = estadosSms_(f.id), est = ests.clientes[tipo], estC = ests.control[tipo][huella] || {};
     let ya = 0, enDuda = 0;
     const pendientes = cel.numeros.filter((x) => {
       if (est[x] === 'Enviado') ya++; else if (est[x] === 'Enviando' || est[x] === 'Dudoso') enDuda++;
       return !SMS_NO_REPETIR[est[x]] || (conDuda && est[x] === 'Dudoso');   // los en duda, solo si se pide a propósito
     });
-    const cuota = cuotaSms_(), lista = pendientes.slice(0, cuota.quedan);
+    // Números de control que todavía no recibieron este mensaje (y que no son clientes de la falla)
+    const ctrl = numerosControlSms_().filter((x) => cel.numeros.indexOf(x) < 0 && !SMS_NO_REPETIR[estC[x]]);
+    const cuota = cuotaSms_(), lista = pendientes.slice(0, Math.max(0, cuota.quedan - ctrl.length));
     const extra = { ya: ya, enDuda: enDuda, quedanHoy: cuota.quedan, paraManana: pendientes.length - lista.length };
-    if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '' }, extra);
+    // Sin clientes a quienes mandar, no sale nada (tampoco a los de control)
+    if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '', control: 0 }, extra);
     const envio = 'S' + ahora.toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();
     const fecha = new Date(ahora), nombre = nombreFalla_(f);
-    m = { envio: envio, falla: f.id, u: ses.u, n: ses.n, tipo: tipo, mensaje: mensaje, total: lista.length, siguiente: 0, pasos: 0, cursor: 0,
-      lote: ALERTAS.SMS_LOTE, problemas: 0, rechazos: 0, enviados: 0, errores: 0, dudosos: 0, error: '', en: ahora, renovado: ahora, vuelo: null };
+    m = { envio: envio, falla: f.id, u: ses.u, n: ses.n, tipo: tipo, mensaje: mensaje, total: ctrl.length + lista.length, siguiente: 0, pasos: 0, cursor: 0,
+      lote: ALERTAS.SMS_LOTE, problemas: 0, rechazos: 0, enviados: 0, errores: 0, dudosos: 0, error: '', en: ahora, renovado: ahora, vuelo: null,
+      ctrl: ctrl.length, cEnv: 0, cErr: 0, cDud: 0 };
     // Primero el envío en curso y después las filas: si algo falla a medias, no quedan filas apartadas sin dueño
     guardarEnvioSms_(m);
-    try { agregarFilas_(hojaEnviosSms_(), lista.map((x) => [fecha, nombre, f.id, tipo, x, 'Pendiente', '', envio, ses.n]), [5]); } catch (e) {
+    const filas = ctrl.map((x) => [fecha, nombre, f.id, tipo, x, 'Pendiente', '', envio, ses.n, huella])   // los de control, primero
+      .concat(lista.map((x) => [fecha, nombre, f.id, tipo, x, 'Pendiente', '', envio, ses.n, '']));
+    try { agregarFilas_(hojaEnviosSms_(), filas, [5, 10]); } catch (e) {
       try { props_().deleteProperty(claveEnvioSms_(f.id)); } catch (e2) { /* el mantenimiento lo cierra */ }
       throw e;
     }
-    gastarCuotaSms_(lista.length);
+    gastarCuotaSms_(filas.length);
     return Object.assign(avanceSms_(m), extra);
   });
 }
@@ -2258,6 +2310,7 @@ function onOpen() {
     .addItem('2. Conectar Genesys', 'dialogoGenesys')
     .addItem('3. Contraseñas de acceso', 'dialogoClaves')
     .addItem('4. Conectar Notifícame (SMS)', 'dialogoNotificame')
+    .addItem('5. Números de control (SMS)', 'dialogoControlSms')
     .addSeparator()
     .addItem('Mostrar las pestañas', 'mostrarPestanas')
     .addItem('Ocultar y proteger las pestañas', 'ocultarPestanas')
@@ -2597,6 +2650,36 @@ function probarNotificame_(prueba) {
       : ' El SMS de prueba no salió: ' + c.detalle + ' (código ' + y.codigo + ', respuesta: ' + campos + ').';
   }
   return txt;
+}
+
+/* ----- Números de control (los celulares del equipo que reciben cada SMS para confirmar que llegó) ----- */
+function dialogoControlSms() {
+  const lista = numerosControlSms_();
+  const html = estiloDialogo_() +
+    '<style>textarea{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:8px;font:13px monospace;border:1px solid #c7ced7;border-radius:6px;height:250px}</style>' +
+    '<p>Celulares del equipo que reciben cada SMS que se manda desde Alertas, para confirmar que llegó. Uno por línea, con o sin 504.</p>' +
+    '<label>Números de control<textarea id="nums" spellcheck="false">' + esc_(lista.join('\n')) + '</textarea></label>' +
+    '<p class="nota">Reciben cada mensaje distinto una vez por falla (el aviso de falla y el de restablecido aparte), al principio del envío. ' +
+    'También van al principio del archivo de Descargar celulares. Se guardan en el servidor de Alertas: no llegan a la página ni a GitHub.</p>' +
+    '<div class="acc"><button onclick="google.script.host.close()">Cerrar</button>' +
+    '<button class="pri" id="btn" onclick="guardar()">Guardar</button></div><p id="msg"></p>' +
+    '<script>function guardar(){var b=document.getElementById("btn"),m=document.getElementById("msg");b.disabled=true;m.textContent="Guardando…";' +
+    'google.script.run.withSuccessHandler(function(r){b.disabled=false;m.textContent=r.texto;document.getElementById("nums").value=r.lista.join("\\n");})' +
+    '.withFailureHandler(function(e){b.disabled=false;m.textContent=e.message;}).guardarControlSms({texto:document.getElementById("nums").value});}</script>';
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(440).setHeight(540), 'Números de control (SMS)');
+}
+function guardarControlSms(d) {
+  if (!esDueno_()) throw new Error('Solo la cuenta dueña del archivo puede cambiar los números de control.');
+  const lineas = String(d && d.texto || '').split(/[\n,;]+/).map((x) => x.trim()).filter(String);
+  const lista = [], malos = [];
+  let repetidos = 0;
+  lineas.forEach((x) => { const n = celularHn_(x); if (!n) malos.push(x); else if (lista.indexOf(n) >= 0) repetidos++; else lista.push(n); });
+  if (lista.length > ALERTAS.SMS_CONTROL_MAX) throw new Error('Son demasiados: máximo ' + ALERTAS.SMS_CONTROL_MAX + ' números de control.');
+  props_().setProperty('SMS_CONTROL', JSON.stringify(lista));
+  const texto = (lista.length ? 'Guardados ' + lista.length + (lista.length === 1 ? ' número' : ' números') + ' de control.' : 'Sin números de control.')
+    + (repetidos ? ' Se quitó ' + repetidos + (repetidos === 1 ? ' repetido.' : ' repetidos.') : '')
+    + (malos.length ? ' No son celulares de Honduras, no se guardaron: ' + malos.slice(0, 5).map((x) => x.slice(0, 20)).join(', ') + (malos.length > 5 ? '…' : '') + '.' : '');
+  return { texto: texto, lista: lista };
 }
 
 /* ----- Contraseñas (Tiendas y accesos temporales) ----- */

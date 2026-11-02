@@ -508,7 +508,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const conNumeros = (x) => /504[3789]\d{7}/.test(JSON.stringify(x));
   const hEnv = () => g.E.activo.getSheetByName('Envíos SMS');
   const lease = (id) => JSON.parse(g.ejecutar('props_().getProperty(claveEnvioSms_(' + JSON.stringify(id) + '))') || 'null');
-  const filasDe = (envio) => { const h = hEnv(); return h && h.getLastRow() > 1 ? h.getRange(2, 1, h.getLastRow() - 1, 9).getValues().filter((x) => x[7] === envio) : []; };
+  const filasDe = (envio) => { const h = hEnv(); return h && h.getLastRow() > 1 ? h.getRange(2, 1, h.getLastRow() - 1, 10).getValues().filter((x) => x[7] === envio) : []; };
   const contar = (filas) => filas.reduce((o, x) => { o[x[5]] = (o[x[5]] || 0) + 1; return o; }, {});
   const repetidos = () => { const c = new Map(); N.enviados.forEach((e) => c.set(e.id, (c.get(e.id) || 0) + 1)); return [...c.values()].filter((v) => v > 1).length; };
   // Manda todos los grupos como la página: cada pedido con el paso en que va
@@ -583,12 +583,17 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
 
   /* Envío normal: primero se apartan todos, después se mandan de 50 en 50 */
   const msj = 'Claro informa: hay una falla en la red de su zona. Ya trabajamos para restablecer su servicio. Disculpe las molestias, señor cliente: atención é';
+  // Una pestaña Envíos SMS de la versión anterior (9 columnas, sin "Control"): se completa sola
+  const hVieja = g.E.activo.insertSheet('Envíos SMS');
+  hVieja.getRange(1, 1, 1, 9).setValues([['Fecha', 'Falla', 'ID de Alertas', 'Tipo', 'Teléfono', 'Estado', 'Detalle', 'Envío', 'Envió']]);
+  if (hVieja.getMaxColumns() > 9) hVieja.deleteColumns(10, hVieja.getMaxColumns() - 9);
   const filasAntes0 = hEnv() ? hEnv().getLastRow() : 1;
   r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj });
   const env1 = r.ok ? r.datos : {};
   ok(r.ok && env1.total === espera.size && env1.ya === 0 && env1.pasos === 0 && contar(filasDe(env1.envio)).Pendiente === espera.size && N.enviados.length === 0 && !conNumeros(r.datos),
     `iniciar aparta los ${espera.size} celulares en Envíos SMS (Pendiente) antes de mandar nada`, r.datos);
   ok(lease(f1.id) && lease(f1.id).envio === env1.envio, 'el envío en curso queda en Propiedades del script (no en la caché, que Google puede borrar)');
+  ok(hEnv().getRange(1, 10).getValue() === 'Control' && hEnv().getMaxColumns() >= 10, 'a una pestaña Envíos SMS de antes se le agrega sola la columna Control');
   r = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj });
   ok(!r.ok && r.codigo === 'OCUPADO' && /Ana López está enviando/.test(r.error), 'mientras tanto, otra persona de Workforce no puede mandar a la misma falla', r);
   r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj + '  ' });
@@ -821,6 +826,68 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(!lease(f2.id) && !lease(f3.id) && (contar(filasDe(env6.envio)).Cancelado || 0) === env6.total - l9.errores - l9.enviados - l9.dudosos && f2b.sms.length === 2 && f3b.sms.length === 1
     && /se cortó y se cerró solo/.test(f2b.historial.slice(-1)[0].detalle), 'el mantenimiento cierra los envíos que quedaron abiertos más de 2 horas (lo no enviado queda para el próximo)', f2b.historial.slice(-1));
   g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f2.id, cerradaEn: Date.now() - 60000, nota: 'Prueba de SMS' } });
+
+  /* Números de control: los celulares del equipo reciben cada mensaje, para confirmar que llegó */
+  const activas4 = new Set(g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
+  const nodos4 = [];
+  for (const [n] of [...porNodo].sort((a, b) => b[1] - a[1])) {
+    if (activas4.has(n) || setN.has(n) || nodos2.includes(n) || nodos3.includes(n)) continue;
+    nodos4.push(n);
+    if (celularesEsperados(nodos4).size >= 60 || nodos4.length >= 12) break;
+  }
+  const espera4 = celularesEsperados(nodos4);
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: nodos4, motivo: 'ENERGIA' } } });
+  const f4 = r.ok ? r.datos.falla : {};
+  // Números ficticios armados aquí (para no escribir teléfonos en el código) y uno que además es cliente de la falla
+  const ficticio = (k) => '504' + String(39990000 + k);
+  const ctrlNums = [ficticio(1), ficticio(2), ficticio(3), ficticio(4)], ctrlCliente = [...espera4][0];
+  g.E.usuario = 'otra.persona@claro.com.hn';
+  let errC = null;
+  try { C.guardarControlSms({ texto: ctrlNums.join('\n') }); } catch (e) { errC = e.message; }
+  g.E.usuario = null;
+  ok(r.ok && espera4.size >= 60 && errC && /cuenta dueña/.test(errC), 'solo la cuenta dueña cambia los números de control (falla de prueba con ' + espera4.size + ' celulares)', errC);
+  const entrada = [ctrlNums[0], ctrlNums[1].slice(3, 7) + '-' + ctrlNums[1].slice(7), '+504 ' + ctrlNums[2].slice(3), ctrlNums[3], ctrlNums[0], ctrlCliente, '2' + '2345678', 'hola'].join('\n');
+  const gc = C.guardarControlSms({ texto: entrada });
+  ok(gc.lista.length === 5 && gc.lista.every((x) => /^504[3789]\d{7}$/.test(x)) && /^Guardados 5 números de control\. Se quitó 1 repetido\. No son celulares de Honduras/.test(gc.texto),
+    'los números de control se guardan con 504 y sin repetir; lo que no es un celular se avisa', gc.texto);
+  r = sms(tWf, { op: 'resumen', id: f4.id });
+  ok(r.ok && r.datos.control === 4 && Object.keys(r.datos.controlHechos).length === 0 && !conNumeros(r.datos),
+    'el resumen dice cuántos números de control van (4: el que también es cliente lo recibe como cliente), sin mandar los números', r.datos && r.datos.control);
+  const msjC = 'Claro informa: falla de energía en su zona. Le avisaremos cuando se restablezca.';
+  const antesC = N.enviados.length;
+  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', mensaje: msjC });
+  const envC = r.ok ? r.datos : {}, filasC = filasDe(envC.envio);
+  ok(r.ok && envC.total === espera4.size + 4 && envC.control === 4 && filasC.slice(0, 4).every((x) => ctrlNums.includes(String(x[4])) && /^M[0-9a-f]{8}$/.test(String(x[9])))
+    && filasC.slice(4).every((x) => x[9] === '') && !conNumeros(r.datos), 'iniciar pone primero los 4 números de control (con la huella del mensaje) y después a los clientes', [envC.total, envC.control]);
+  const malosC = [...espera4].filter((x) => x !== ctrlCliente).slice(1, 5);
+  malosC.forEach((x) => N.rechazar.add(x));
+  const avC = mandarTodo(tWf, f4.id, envC);
+  r = sms(tWf, { op: 'terminar', id: f4.id, envio: envC.envio });
+  const llegaron = N.enviados.slice(antesC), vecesC = (num) => llegaron.filter((e) => e.msisdn === num).length;
+  ok(!avC.fallo && avC.control === 4 && avC.cEnviados === 4 && avC.enviados === espera4.size - 4 && avC.errores === 4 && ctrlNums.every((x) => vecesC(x) === 1) && vecesC(ctrlCliente) === 1
+    && llegaron.slice(0, 4).every((e) => ctrlNums.includes(e.msisdn)) && llegaron.every((e) => e.message === msjC) && !conNumeros(avC),
+    'los números de control reciben el mismo mensaje, primero y una sola vez (el que es cliente, una vez); los clientes se cuentan aparte', [avC.enviados, avC.cEnviados, avC.errores]);
+  const hC = r.ok ? r.datos.falla.historial.slice(-1)[0].detalle : '';
+  ok(/^Aviso de falla a \d+ clientes \(4 con error\) y a 4 números de control$/.test(hC) && r.datos.falla.sms.slice(-1)[0].control === 4, 'queda en la falla: "' + hC + '"', r.datos && r.datos.falla && r.datos.falla.sms.slice(-1));
+  malosC.slice(0, 2).forEach((x) => N.rechazar.delete(x));
+  r = sms(tWf, { op: 'resumen', id: f4.id });
+  ok(r.ok && r.datos.controlHechos[g.ejecutar('hashSms_(' + JSON.stringify(msjC) + ')')] === 4 && U.hashSms(msjC) === g.ejecutar('hashSms_(' + JSON.stringify(msjC) + ')'),
+    'el resumen sabe que los 4 ya tienen ese mensaje (la página calcula la misma huella)', r.datos && r.datos.controlHechos);
+  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', mensaje: msjC });
+  const envC2 = r.ok ? r.datos : {};
+  const avC2 = mandarTodo(tWf, f4.id, envC2);
+  sms(tWf, { op: 'terminar', id: f4.id, envio: envC2.envio });
+  ok(envC2.total === 4 && envC2.control === 0 && avC2.enviados === 2 && avC2.errores === 2, 'al reintentar con el mismo mensaje, a los números de control no se les repite', [envC2.total, envC2.control]);
+  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', mensaje: msjC + ' Disculpe las molestias.' });
+  const envC3 = r.ok ? r.datos : {};
+  ok(r.ok && envC3.total === 2 + 4 && envC3.control === 4, 'con otro mensaje sí lo reciben: una vez por cada mensaje distinto', r.datos);
+  sms(tWf, { op: 'terminar', id: f4.id, envio: envC3.envio });
+  r = g.post({ accion: 'telefonos', token: tWf, datos: { id: f4.id } });
+  ok(r.ok && r.datos.control === 4 && r.datos.telefonos.slice(0, 4).every((x) => ctrlNums.includes(x)) && new Set(r.datos.telefonos).size === r.datos.telefonos.length
+    && r.datos.telefonos.length === espera4.size + 4, 'Descargar celulares también los trae, al principio y sin repetir', r.datos && [r.datos.control, r.datos.telefonos.length]);
+  N.rechazar.clear();
+  C.guardarControlSms({ texto: '' });
+  g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f4.id, cerradaEn: Date.now() - 60000, nota: 'Prueba de SMS' } });
 
   /* ---------- Carga por cambios ---------- */
   console.log('\n9c. Carga por cambios (solo lo que cambió)');

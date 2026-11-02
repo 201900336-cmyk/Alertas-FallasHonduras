@@ -184,6 +184,18 @@ Para que el cliente sepa de la falla antes de llamar (y bajar el tráfico al Cal
 
 La key y la secret quedan en las Propiedades del script: no están en GitHub ni llegan a la página. Si en Notifícame usan **Regenerar credenciales**, hay que volver a pegarlas aquí.
 
+### Números de control (los celulares del equipo)
+
+Para confirmar que el mensaje llegó, cada envío también va a los celulares del equipo. Se guardan en la base interna: **Alertas > 5. Números de control (SMS)** (solo la cuenta dueña). Se pegan uno por línea, con o sin 504; Alertas quita los repetidos y avisa lo que no es un celular de Honduras.
+
+- Van al principio del envío, así llegan en los primeros segundos.
+- Cada número de control recibe cada mensaje distinto una vez por falla (el aviso de falla y el de restablecido aparte). Si se reintentan los que fallaron con el mismo texto, no se les repite; si se cambia el texto, sí les llega el nuevo.
+- Si un número de control también es cliente de la falla, le llega una sola vez.
+- Se cuentan aparte de los clientes: «Aviso de falla a 1,251 clientes y a 17 números de control».
+- Solo salen junto con clientes: si no hay clientes a quienes mandar, no se les manda nada.
+- También van al principio del archivo de **Descargar celulares**.
+- Se guardan en las Propiedades del script: no llegan a la página ni a GitHub.
+
 ### Enviar
 
 1. En **Fallas > Activas**, cada falla tiene **Enviar SMS** (aviso de falla). Las resueltas (36 horas) tienen **SMS de restablecido**. El aviso lo decide el estado de la falla: con la falla activa solo sale el de falla y, cerrada, solo el de restablecido. A una posible falla descartada no se le manda restablecido.
@@ -191,7 +203,7 @@ La key y la secret quedan en las Propiedades del script: no están en GitHub ni 
    - **Aviso de falla**: «Claro informa: hay una falla en la red de su zona que afecta su servicio. Ya trabajamos para restablecerlo antes de las 3:00 p. m. Disculpe las molestias.» La hora sale de la solución estimada; si no tiene, no la menciona. En una posible falla, el mensaje dice que se está revisando.
    - **Servicio restablecido**: «Claro informa: el servicio en su zona ya fue restablecido. Si sigue sin servicio, apague su equipo 30 segundos y vuelva a encenderlo. Gracias.»
    - Se puede cambiar. El contador dice cuántos caracteres y cuántos SMS por cliente usa (160 caracteres por SMS, 153 por parte si son varias). Notifícame quita las tildes de á, í, ó, ú: el cliente ve «conexion» en vez de «conexión», y la ñ, la é y la / sí llegan (probado el 2 nov). Por eso esas tildes no cambian el largo, y **Verlo así** muestra el mensaje como le llega. Comillas curvas o emojis puede que no lleguen bien y harían que cada SMS admita 70 caracteres: **Cambiarlos** los arregla. Los mensajes sugeridos están en `src/config.js` (`sms`).
-3. **Enviar a N clientes**, confirmar, y la barra muestra el avance. Se puede **Detener**.
+3. **Enviar a N clientes**, confirmar (dice también a cuántos números de control va), y la barra muestra el avance. Se puede **Detener**.
 4. Al terminar dice cuántos salieron, cuántos no (con el motivo que dio Notifícame) y cuántos quedaron en duda. **Reintentar los que fallaron** vuelve a mandar solo a los que fallaron.
 
 **Nunca se le repite un aviso a nadie.** Antes de mandar nada, Alertas aparta en la pestaña **Envíos SMS** a cada cliente que le falta el aviso (40 días de registro), y cada número pasa por estos estados:
@@ -221,6 +233,7 @@ La key y la secret quedan en las Propiedades del script: no están en GitHub ni 
 - Uno por cliente (contrato): su primer celular en la base. En Honduras los celulares empiezan con 3, 7, 8 o 9; los fijos (empiezan con 2) no reciben SMS. Si dos clientes tienen el mismo celular, va una sola vez.
 - Los números nunca salen del servidor: la página solo ve cuántos son. El servidor los manda a Notifícame de 50 en 50 (un SMS por número, como pide el API), cada pedido firmado con la key y la secret (HMAC-SHA1). Cada SMS lleva un id fijo por falla, aviso y número (`AL-<falla>-F-<número>`), el mismo si alguna vez se intentara otra vez.
 - Mientras una persona envía los SMS de una falla, nadie más puede mandar los de esa misma falla (sí los de otra falla).
+- En la pestaña **Envíos SMS**, las filas de los números de control llevan en la columna **Control** la huella del mensaje (así se sabe qué texto ya recibieron). Una pestaña de antes, sin esa columna, la recibe sola.
 - La tarjeta de la falla muestra el último envío y el historial de cambios lo registra («Aviso de falla a 1,251 clientes (9 con error, 2 en duda)»).
 - Solo Workforce y Jefatura pueden enviar. Los asesores no ven nada de esto.
 - **Límite diario: 15,000 SMS.** Cada SMS es una llamada de Google a Notifícame, y Google permite unas 20,000 por día con una cuenta de Gmail (100,000 con Google Workspace); Alertas deja margen para lo demás. Si una falla no cabe en lo que queda del día, se manda a los que caben y la ventana dice cuántos quedan para mañana. Lo que se aparta y no se manda vuelve al límite del día. Se cambia en `SMS_POR_DIA` de `servidor/Code.gs`.
@@ -229,12 +242,12 @@ La key y la secret quedan en las Propiedades del script: no están en GitHub ni 
 
 **Descargar celulares** baja un CSV para subirlo a mano a Notifícame, por si hiciera falta. Con más de una falla activa aparece además **Teléfonos de todas**: un solo archivo con los celulares de todas las fallas activas, sin repetir.
 
-El archivo es un CSV delimitado por comas (UTF-8), con el encabezado `telefono` y un número por línea, de 11 dígitos con 504 adelante:
+El archivo es un CSV delimitado por comas (UTF-8), con el encabezado `telefono` y un número por línea, de 11 dígitos con 504 adelante. Primero van los números de control del equipo:
 
 ```
 telefono
-50431504547
-50488000003
+504XXXXXXXX
+504XXXXXXXX
 ```
 
 Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-02_0815.csv`. La descarga trae a todos los clientes de la falla, aunque ya les haya llegado el SMS desde Alertas. Cada descarga queda anotada en la pestaña **Descargas SMS** (quién, cuándo, qué fallas y nodos, cuántos clientes y cuántos números). Si la base subida no trae la columna `TELEFONO`, el botón lo avisa.
@@ -304,7 +317,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 261 pruebas del servidor en un emulador de Apps Script
+npm test                           # 272 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

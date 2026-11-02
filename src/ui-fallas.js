@@ -468,15 +468,16 @@ function useSms(id) {
     try {
       const x = await A.telefonosSms(id);
       setR(x);
-      tostada(x.telefonos.length ? 'Listo: ' + U.n(x.telefonos.length) + ' números en ' + x.archivo : 'Esa falla no tiene clientes con celular en la base.');
+      tostada(x.telefonos.length > (x.control || 0) ? 'Listo: ' + U.n(x.telefonos.length) + ' números en ' + x.archivo : 'Esa falla no tiene clientes con celular en la base.');
     } catch (e) { tostada(e.message); }
     setOcupado(false);
   }
   return { ocupado, r, descargar };
 }
 function ResumenSms({ r }) {
+  const cli = r.telefonos.length - (r.control || 0);
   return html`<p class="nota-sms"><${Ico} n="info" s=${16} /><span>
-    <b>${U.n(r.telefonos.length)} ${U.plural(r.telefonos.length, 'número', 'números')}</b> para ${U.n(r.clientes)} ${U.plural(r.clientes, 'cliente', 'clientes')}${r.conCelular > r.telefonos.length ? ' (algunos comparten el mismo celular)' : ''}.
+    <b>${U.n(cli)} ${U.plural(cli, 'número', 'números')}</b> para ${U.n(r.clientes)} ${U.plural(r.clientes, 'cliente', 'clientes')}${r.conCelular > cli ? ' (algunos comparten el mismo celular)' : ''}${r.control ? ', y al principio los ' + U.n(r.control) + ' números de control del equipo' : ''}.
     ${r.soloFijo > 0 ? ' ' + U.n(r.soloFijo) + ' solo tienen teléfono fijo, que no recibe SMS.' : ''}${r.sinTelefono > 0 ? ' ' + U.n(r.sinTelefono) + ' no tienen teléfono en la base.' : ''}
   </span></p>`;
 }
@@ -558,7 +559,11 @@ function ModalHistorialFalla({ f, onCerrar }) {
 const TIPO_SMS = { FALLA: 'Aviso de falla', RESTABLECIDO: 'Servicio restablecido' };
 const extraSms = (x) => [x.errores ? U.n(x.errores) + ' con error' : '', x.dudosos ? U.n(x.dudosos) + ' en duda' : ''].filter(Boolean).join(', ');
 const lineaSms = (x, now) => TIPO_SMS[x.tipo] + ' a ' + U.n(x.enviados) + ' ' + U.plural(x.enviados, 'cliente', 'clientes')
-  + (extraSms(x) ? ' (' + extraSms(x) + ')' : '') + ', ' + x.por + ', ' + U.cuandoCorto(x.en, now);
+  + (extraSms(x) ? ' (' + extraSms(x) + ')' : '') + (x.control ? ' y ' + U.n(x.control) + ' de control' : '') + ', ' + x.por + ', ' + U.cuandoCorto(x.en, now);
+/* Cómo le fue a los números de control del equipo en un envío */
+const lineaControl = (av) => (av.cEnviados === av.control
+  ? 'También salió ' + (av.control === 1 ? 'al número' : 'a los ' + U.n(av.control) + ' números') + ' de control: revisen que les llegó.'
+  : U.n(av.cEnviados) + ' de ' + U.n(av.control) + ' números de control lo recibieron' + (av.cErrores ? ', ' + U.n(av.cErrores) + ' con error' : '') + (av.cDudosos ? ', ' + U.n(av.cDudosos) + ' en duda' : '') + '.');
 const normalSms = (t) => String(t || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
 function ModalSms({ f, onCerrar }) {
   const s = useG();
@@ -591,7 +596,11 @@ function ModalSms({ f, onCerrar }) {
   const duda = res && conDuda ? res.enDuda : 0;
   const sigueIgual = mioSigue && !duda && normalSms(texto) === enCurso.mensaje;
   const faltan = res ? res.faltan : 0;
-  const aMandar = !res ? 0 : sigueIgual ? enCurso.total - enCurso.siguiente : Math.min(faltan + duda, res.quedanHoy);
+  // Del envío en curso, solo los clientes (los números de control van aparte)
+  const cliCurso = enCurso ? { total: enCurso.total - (enCurso.control || 0), van: enCurso.siguiente - (enCurso.cHechos || 0) } : null;
+  const aMandar = !res ? 0 : sigueIgual ? cliCurso.total - cliCurso.van : Math.min(faltan + duda, res.quedanHoy);
+  // Números de control del equipo que todavía no recibieron este mismo texto (van al principio del envío)
+  const nControl = res && aMandar > 0 && !sigueIgual ? Math.max(0, (res.control || 0) - ((res.controlHechos || {})[U.hashSms(normalSms(texto))] || 0)) : 0;
   const puede = res && res.configurado && res.puede && !otroEnvia && aMandar > 0 && texto.trim() && !largo;
   async function enviar() {
     detener.current = false; setError(null); setAv(null); setFase('enviando');
@@ -612,7 +621,7 @@ function ModalSms({ f, onCerrar }) {
     ? html`<span class="sms-progreso-txt">${detener.current ? 'Deteniendo…' : av && av.aviso ? av.aviso : 'Enviando ' + U.n(av ? av.siguiente : 0) + ' de ' + U.n(av ? av.total : aMandar) + '…'}</span><span class="pie-espacio"></span>
         <button class="btn btn-borde" disabled=${detener.current} onClick=${cerrar}>Detener</button>`
     : fase === 'confirmar'
-      ? html`<span class="sms-confirmar">Se enviará ahora a ${U.n(aMandar)} ${U.plural(aMandar, 'cliente', 'clientes')}${duda ? ', con ' + U.n(duda) + ' en duda' : ''}${p.partes > 1 ? ' (' + U.n(aMandar * p.partes) + ' SMS en total)' : ''}. No se puede deshacer.</span><span class="pie-espacio"></span>
+      ? html`<span class="sms-confirmar">Se enviará ahora a ${U.n(aMandar)} ${U.plural(aMandar, 'cliente', 'clientes')}${duda ? ', con ' + U.n(duda) + ' en duda,' : ''}${nControl ? ' y a ' + U.n(nControl) + ' ' + U.plural(nControl, 'número', 'números') + ' de control' : ''}${p.partes > 1 ? ' (' + U.n((aMandar + nControl) * p.partes) + ' SMS en total)' : ''}. No se puede deshacer.</span><span class="pie-espacio"></span>
           <button class="btn btn-borde" onClick=${() => setFase('listo')}>Revisar</button><button class="btn btn-primario" onClick=${enviar}>Sí, enviar</button>`
       : fase === 'fin'
         ? html`<span class="pie-espacio"></span>${puede && html`<button class="btn btn-borde" onClick=${() => setFase('confirmar')}>${av && av.errores && !av.detenido && !error ? 'Reintentar los que fallaron' : 'Seguir enviando'}</button>`}
@@ -628,14 +637,15 @@ function ModalSms({ f, onCerrar }) {
             <div class="sms-cifra"><b class="num">${U.n(aMandar)}</b><span>${aMandar ? U.plural(aMandar, 'cliente recibe', 'clientes reciben') + ' este SMS'
               : faltan === 0 ? (res.enDuda ? 'No falta nadie' : 'Ya les llegó a todos') : !res.quedanHoy ? 'Se llegó al límite de hoy' : 'Nadie por ahora'}</span></div>
             <p class="sub">De ${U.n(res.clientes)} ${U.plural(res.clientes, 'cliente', 'clientes')} de la falla, ${U.n(res.celulares)} ${U.plural(res.celulares, 'tiene', 'tienen')} celular${res.soloFijo ? ', ' + U.n(res.soloFijo) + ' solo fijo' : ''}${res.sinTelefono ? ' y ' + U.n(res.sinTelefono) + ' sin teléfono' : ''}.
-              ${res.ya ? ' A ' + U.n(res.ya) + ' ya les llegó este aviso: no se les repite.' : ''}</p>
+              ${res.ya ? ' A ' + U.n(res.ya) + ' ya les llegó este aviso: no se les repite.' : ''}${nControl ? ' Además va a ' + U.n(nControl) + ' ' + U.plural(nControl, 'número', 'números') + ' de control del equipo, para confirmar que llegó.' : ''}</p>
           </div>
+          ${res.configurado && res.puede && aMandar > 0 && !res.control && aviso('info', 'No hay números de control del equipo. La cuenta dueña los agrega en la base interna: Alertas > 5. Números de control (SMS).')}
           ${!res.configurado && aviso('alerta', 'Falta conectar Notifícame. La cuenta dueña lo hace en la base interna: menú Alertas > 4. Conectar Notifícame (SMS).')}
           ${!res.puede && aviso('info', 'La posible falla se descartó: no hay servicio restablecido que avisar.')}
-          ${otroEnvia && aviso('info', enCurso.por + ' está enviando SMS de esta falla en este momento (van ' + U.n(enCurso.siguiente) + ' de ' + U.n(enCurso.total) + '). Cuando termine, aquí verás a quiénes les falta.')}
+          ${otroEnvia && aviso('info', enCurso.por + ' está enviando SMS de esta falla en este momento (van ' + U.n(cliCurso.van) + ' de ' + U.n(cliCurso.total) + '). Cuando termine, aquí verás a quiénes les falta.')}
           ${enCurso && !enCurso.mio && enCurso.libre && aviso('info', enCurso.por + ' empezó un envío que quedó sin terminar. Si envías ahora, ese se cierra y se manda solo a quienes falten.')}
           ${mioSigue && fase !== 'fin' && aviso('info', sigueIgual
-            ? 'Tienes un envío de esta falla sin terminar: van ' + U.n(enCurso.siguiente) + ' de ' + U.n(enCurso.total) + '. Sigue con el mismo mensaje; no se le repite a nadie.'
+            ? 'Tienes un envío de esta falla sin terminar: van ' + U.n(cliCurso.van) + ' de ' + U.n(cliCurso.total) + '. Sigue con el mismo mensaje; no se le repite a nadie.'
             : duda ? 'Para incluir a los que quedaron en duda, el envío que tenías sin terminar se cierra y el nuevo va a quienes falten.'
             : 'Cambiaste el mensaje: el envío que tenías sin terminar se cierra y el nuevo va a quienes falten.')}
           ${res.enDuda > 0 && html`<div class="aviso-linea"><${Ico} n="info" s=${16} /><span>A ${U.n(res.enDuda)} no se sabe si les llegó: Notifícame no respondió a tiempo. No se les reenvía, para no repetir; se puede revisar en los reportes de Notifícame.
@@ -662,6 +672,7 @@ function ModalSms({ f, onCerrar }) {
           : html`<b>${U.n(av ? av.enviados : 0)} SMS ${U.plural(av ? av.enviados : 0, 'enviado', 'enviados')}</b>
             ${av && av.errores ? html`<span>${U.n(av.errores)} no ${U.plural(av.errores, 'salió', 'salieron')}${av.error ? ': ' + av.error : ''}. Se pueden reintentar.</span>` : null}
             ${av && av.dudosos ? html`<span>${U.n(av.dudosos)} en duda: Notifícame no respondió a tiempo y no se sabe si ${U.plural(av.dudosos, 'salió', 'salieron')}. No se les reenvía, para no repetir.</span>` : null}
+            ${av && av.control ? html`<span>${lineaControl(av)}</span>` : null}
             ${av && av.paraManana ? html`<span>${U.n(av.paraManana)} quedan para mañana por el límite diario.</span>` : null}
             ${av && av.detenido && !error ? html`<span>Se detuvo antes de terminar: faltan ${U.n(av.total - av.siguiente)}. Puedes seguir después; no se le repite a nadie.</span>` : null}
             ${error && html`<span>Se detuvo: ${error}</span>`}`}

@@ -98,6 +98,15 @@ const U = (() => {
   const SIN_TILDE = Object.assign({ '“': '"', '”': '"', '‘': "'", '’': "'", '–': '-', '—': '-', '…': '...', '\u00a0': ' ', '\u202f': ' ' }, TILDES);
   const sinTildesSms = (t) => String(t).replace(/[áíóúÁÍÓÚêâôîûçïë“”‘’–—…\u00a0\u202f]/g, (c) => SIN_TILDE[c] || c);
 
+  /* Huella de un mensaje de SMS (FNV-1a de 32 bits, la misma que hashSms_ en el servidor): sirve para saber si los
+     números de control ya recibieron ese mismo texto */
+  const hashSms = (t) => {
+    let h = 0x811c9dc5;
+    const s = String(t || '');
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return 'M' + ('0000000' + h.toString(16)).slice(-8);
+  };
+
   /* Agrega punto final solo si hace falta (las horas ya terminan en "p. m.") */
   const conPunto = (s) => (/[.!?]$/.test(String(s).trim()) ? String(s) : s + '.');
   const horas = (ms) => ms / HORA;
@@ -206,5 +215,5 @@ const U = (() => {
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
-    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms };
+    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();

@@ -262,6 +262,8 @@ with sync_playwright() as p:
     t_res = abrir_sms()
     n_sms = int(re.sub(r'\D', '', x.locator('.sms-cifra b').inner_text()))
     msj_sms = x.locator('.sms-texto').input_value()
+    n_ctrl = 3                                                       # números de control del servidor de prueba
+    ok('Además va a 3 números de control del equipo' in x.locator('.sms-cifras').inner_text(), 'dice que también van los 3 números de control del equipo')
     ok(n_sms > 0 and x.locator('.sms-modal .campo > span').first.inner_text() == 'Mensaje · Servicio restablecido' and 'restablecido' in msj_sms,
        f'en una falla resuelta, el SMS de servicio restablecido va a {n_sms} clientes con celular')
     ok('1 SMS por cliente' in x.locator('.sms-contador').inner_text(), 'el mensaje sugerido cabe en un SMS: ' + x.locator('.sms-contador').inner_text())
@@ -270,21 +272,23 @@ with sync_playwright() as p:
     x.click('.modal-pie .btn-primario'); x.click('.modal-pie button:has-text("Sí, enviar")')
     x.wait_for_selector('.sms-progreso-txt:has-text("más despacio")', timeout=60000)
     ok(http('/test/sms')['enviados'] - antes_sms == 10, 'si Notifícame pide esperar, la página lo dice y espera: ' + x.locator('.sms-progreso-txt').inner_text())
+    van = 10 - n_ctrl                                                # el primer grupo: los 3 de control y 7 clientes
     x.locator('.modal').screenshot(path=OUT + 'e06h_sms_pausa.png')
     x.reload(); x.wait_for_selector('.usuario-txt', timeout=60000)   # se cerró la página a medio envío
     t_res = abrir_sms()
     seguir = x.locator('.modal-pie .btn-primario').inner_text()
-    ok('sin terminar: van 10 de ' + str(n_sms) in x.locator('.sms-modal').inner_text() and seguir == 'Seguir enviando a ' + str(n_sms - 10)
+    ok('sin terminar: van ' + str(van) + ' de ' + str(n_sms) in x.locator('.sms-modal').inner_text() and seguir == 'Seguir enviando a ' + str(n_sms - van)
        and x.locator('.sms-texto').input_value() == msj_sms, 'al volver, ofrece seguir el mismo envío: "' + seguir + '"')
     x.locator('.modal').screenshot(path=OUT + 'e06h_sms_seguir.png')
     x.click('.modal-pie .btn-primario'); x.click('.modal-pie button:has-text("Sí, enviar")')
     x.wait_for_selector('.sms-resultado', timeout=180000); x.wait_for_timeout(300)
     r_sms = http('/test/sms')
-    ok(r_sms['enviados'] - antes_sms == n_sms and r_sms['repetidos'] == 0 and r_sms['malFirmados'] == 0 and str(n_sms) in x.locator('.sms-resultado').inner_text().replace(',', ''),
-       f'Notifícame recibió los {n_sms} SMS, una vez cada uno y bien firmados', r_sms)
+    res_txt = x.locator('.sms-resultado').inner_text().replace(',', '')
+    ok(r_sms['enviados'] - antes_sms == n_sms + n_ctrl and r_sms['repetidos'] == 0 and r_sms['malFirmados'] == 0 and str(n_sms) + ' SMS enviados' in res_txt
+       and 'También salió a los 3 números de control' in res_txt, f'Notifícame recibió los {n_sms} SMS y los 3 de control, una vez cada uno y bien firmados', r_sms)
     x.locator('.modal').screenshot(path=OUT + 'e06h_sms_listo.png')
     x.click('.modal-pie button:has-text("Listo")'); x.wait_for_timeout(300)
-    ok('Servicio restablecido a ' + str(n_sms) in t_res.locator('dl.meta').inner_text().replace(',', ''), 'la tarjeta muestra el envío')
+    ok('Servicio restablecido a ' + str(n_sms) + ' clientes y 3 de control' in t_res.locator('dl.meta').inner_text().replace(',', ''), 'la tarjeta muestra el envío, con los de control')
     t_res.locator('button.enviar-sms').click(); x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
     ok('Ya les llegó a todos' in x.locator('.sms-cifras').inner_text() and x.locator('.modal-pie .btn-primario').is_disabled(), 'al abrirlo otra vez, no se le repite a nadie')
     x.keyboard.press('Escape')

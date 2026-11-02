@@ -224,7 +224,8 @@ function BackendLocal() {
     return cache;
   }
   const quien = () => ({ u: ses.usuario.u, nombre: ses.usuario.nombre });
-  const smsDemo = { envios: new Map(), estados: new Map() };   // envíos en curso por falla; estado de cada contrato por falla y aviso
+  const smsDemo = { envios: new Map(), estados: new Map(), control: new Map() };   // control: falla|aviso|huella → números de control que ya lo tienen
+  const CONTROL_DEMO = ['C1', 'C2', 'C3', 'C4'];   // en la demostración, 4 "números de control" del equipo   // envíos en curso por falla; estado de cada contrato por falla y aviso
   /* Posibles fallas marcadas como reportadas (en la demostración, solo en esta PC); duran 6 horas */
   const marcasDemo = () => {
     const m = leerLS('alertas-demo-reportadas', {}), corte = Date.now() - 6 * U.HORA;
@@ -406,16 +407,19 @@ function BackendLocal() {
       const clave = f.id + '|' + tipo;
       const estados = smsDemo.estados.get(clave) || new Map();      // contrato → último estado
       smsDemo.estados.set(clave, estados);
-      const avance = (m) => ({ envio: m.envio, pasos: m.pasos, siguiente: m.siguiente, total: m.total, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, error: m.error });
+      const avance = (m) => ({ envio: m.envio, pasos: m.pasos, siguiente: m.siguiente, total: m.total, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, error: m.error,
+        control: m.ctrl || 0, cEnviados: m.cEnv || 0, cErrores: 0, cDudosos: 0 });
+      const controlDe = (h) => { const k = clave + '|' + h; if (!smsDemo.control.has(k)) smsDemo.control.set(k, new Set()); return smsDemo.control.get(k); };
       const cerrar = async (m, nota) => {
         m.lista.slice(m.siguiente).forEach((k) => { if (estados.get(k) === 'Pendiente') estados.set(k, 'Cancelado'); });
         smsDemo.envios.delete(m.falla);
-        if (!(m.enviados || m.errores || m.dudosos)) return null;
+        if (!(m.enviados || m.errores || m.dudosos || m.cEnv)) return null;
         const ahora = Date.now();
         const extra = [m.errores ? m.errores + ' con error' : '', m.dudosos ? m.dudosos + ' en duda' : ''].filter(Boolean);
-        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total, por: m.por.nombre, en: ahora }]);
+        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total - m.ctrl, control: m.cEnv, por: m.por.nombre, en: ahora }]);
         f.historial.push({ accion: 'SMS', en: ahora, por: m.por, detalle: (m.tipo === 'RESTABLECIDO' ? 'Servicio restablecido' : 'Aviso de falla') + ' a ' + m.enviados
-          + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '') + (nota ? '; ' + nota : '') });
+          + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '')
+          + (m.ctrl ? ' y a ' + m.cEnv + ' números de control' : '') + (nota ? '; ' + nota : '') });
         await Store.guardarFallas(fallas);
         return f;
       };
@@ -428,10 +432,13 @@ function BackendLocal() {
         let ya = 0, enDuda = 0;
         cel.forEach((k) => { const e = estados.get(k); if (e === 'Enviado') ya++; else if (e === 'Dudoso') enDuda++; });
         if (d.op === 'resumen') {
+          const hechos = {};
+          smsDemo.control.forEach((v, k) => { if (k.indexOf(clave + '|') === 0) hechos[k.slice(clave.length + 1)] = v.size; });
           return { configurado: true, demo: true, tipo, puede: tipo === 'FALLA' || !Model.descartada(f), clientes: contratos.length, celulares: cel.length, conCelular: cel.length,
             soloFijo: contratos.filter((k) => tel(k) === 'fijo').length, sinTelefono: contratos.filter((k) => !tel(k)).length,
-            ya, enDuda, faltan: cel.length - ya - enDuda, quedanHoy: 15000, envios: f.sms || [],
-            enCurso: m ? { por: m.por.nombre, mio: true, tipo: m.tipo, mensaje: m.mensaje, total: m.total, siguiente: m.siguiente, enviados: m.enviados, libre: false } : null };
+            ya, enDuda, faltan: cel.length - ya - enDuda, quedanHoy: 15000, envios: f.sms || [], control: CONTROL_DEMO.length, controlHechos: hechos,
+            enCurso: m ? { por: m.por.nombre, mio: true, tipo: m.tipo, mensaje: m.mensaje, total: m.total, siguiente: m.siguiente, enviados: m.enviados,
+              control: m.ctrl, cHechos: m.cEnv, libre: false } : null };
         }
         if (d.tipo != null && d.tipo !== tipo) throw errorAlertas('DATOS', tipo === 'FALLA' ? 'La falla sigue activa: el aviso que corresponde es el de falla.' : 'La falla ya se cerró: el aviso que corresponde es el de servicio restablecido.');
         if (tipo === 'RESTABLECIDO' && Model.descartada(f)) throw errorAlertas('DATOS', 'La posible falla se descartó: no hay servicio restablecido que avisar.');
@@ -442,10 +449,12 @@ function BackendLocal() {
         if (m) await cerrar(m, 'se detuvo antes de terminar');
         const lista = cel.filter((k) => !['Enviado', 'Dudoso', 'Pendiente'].includes(estados.get(k)) || (d.dudosos === true && estados.get(k) === 'Dudoso'));
         const extra = { ya, enDuda, quedanHoy: 15000, paraManana: 0 };
-        if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '' }, extra);
+        if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '', control: 0 }, extra);
         lista.forEach((k) => estados.set(k, 'Pendiente'));
-        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, lista, total: lista.length, siguiente: 0, pasos: 0,
-          enviados: 0, errores: 0, dudosos: 0, error: '', por: quien(), conDuda: d.dudosos === true };
+        const huella = U.hashSms(mensaje), yaC = controlDe(huella);
+        const ctrl = CONTROL_DEMO.filter((k) => !yaC.has(k));            // los de control van primero, una vez por mensaje
+        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, huella, lista: ctrl.concat(lista), total: ctrl.length + lista.length,
+          ctrl: ctrl.length, cEnv: 0, siguiente: 0, pasos: 0, enviados: 0, errores: 0, dudosos: 0, error: '', por: quien(), conDuda: d.dudosos === true };
         smsDemo.envios.set(f.id, nuevo);
         return Object.assign(avance(nuevo), extra);
       }
@@ -457,7 +466,8 @@ function BackendLocal() {
         if (d.paso !== m.pasos || m.siguiente >= m.total) return avance(m);
         await esperar(350);
         m.lista.slice(m.siguiente, m.siguiente + 50).forEach((k) => {
-          if (Number(k) % 89 === 0) { m.errores++; estados.set(k, 'Error'); if (!m.error) m.error = 'Número no válido'; }
+          if (m.siguiente < m.ctrl) { m.cEnv++; controlDe(m.huella).add(k); }
+          else if (Number(k) % 89 === 0) { m.errores++; estados.set(k, 'Error'); if (!m.error) m.error = 'Número no válido'; }
           else if (Number(k) % 97 === 0 && estados.get(k) !== 'Dudoso' && !m.conDuda) { m.dudosos++; estados.set(k, 'Dudoso'); }
           else { m.enviados++; estados.set(k, 'Enviado'); }
           m.siguiente++;

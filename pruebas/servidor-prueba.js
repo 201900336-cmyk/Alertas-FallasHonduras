@@ -54,6 +54,8 @@ async function precargar() {
   if (!fin.ok) throw new Error(fin.error);
   console.log('Base precargada:', base.filas, 'filas');
   console.log('Notifícame (falso):', C.guardarNotificame({ key: g.E.notificame.key, secret: g.E.notificame.secret }));
+  // 3 números de control ficticios (se arman aquí para no escribir teléfonos en el código)
+  console.log('Números de control:', C.guardarControlSms({ texto: [1, 2, 3].map((k) => '504' + String(39990000 + k)).join('\n') }).texto);
 }
 
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css' };
