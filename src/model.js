@@ -366,10 +366,11 @@ const Model = (() => {
   }
   const peor = (lista) => lista.slice().sort((a, b) => PRIORIDAD[a.tipo] - PRIORIDAD[b.tipo])[0];
 
+  /* Igual que nuevoId_ del servidor: F + aammdd + número del día, sin guiones (F26110201) */
   function nuevoId(fallas, now) {
     const d = new Date(now);
-    const pref = 'F-' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-';
-    const usados = fallas.filter((f) => f.id.startsWith(pref)).map((f) => +f.id.slice(pref.length) || 0);
+    const pref = 'F' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const usados = fallas.map((f) => U.idFalla(f.id)).filter((id) => id.startsWith(pref)).map((id) => +id.slice(pref.length) || 0);
     return pref + String((usados.length ? Math.max(...usados) : 0) + 1).padStart(2, '0');
   }
 

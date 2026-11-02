@@ -697,7 +697,7 @@ function accionFalla_(d, ses) {
         historial: [{ accion: 'PUBLICADA', en: ahora, por: por, detalle: datos.nodos.length === 1 ? '1 nodo' : datos.nodos.length + ' nodos' }]
       });
       tipo = 'FALLA_PUBLICADA';
-      texto = 'publicó la falla ' + f.id + ' (' + nombreMotivo_(f) + ' en ' + lista_(f.nodos, 2) + ')';
+      texto = 'publicó la falla ' + idFalla_(f.id) + ' (' + nombreMotivo_(f) + ' en ' + lista_(f.nodos, 2) + ')';
     } else {
       f = todas.filter((x) => x.id === String(d.id || ''))[0];
       if (!f) throw fallo_('DATOS', 'La falla ya no existe.');
@@ -707,20 +707,20 @@ function accionFalla_(d, ses) {
         const det = texto_(d.detalle, 200);
         f.historial.push({ accion: 'EDITADA', en: ahora, por: por, detalle: det });
         tipo = 'FALLA_EDITADA';
-        texto = 'actualizó la falla ' + f.id + (det ? ' (' + det + ')' : '');
+        texto = 'actualizó la falla ' + idFalla_(f.id) + (det ? ' (' + det + ')' : '');
       } else if (d.op === 'cerrar') {
         if (f.estado === 'CERRADA') throw fallo_('DATOS', 'Otra persona ya cerró esta falla.');
         const cuando = Math.min(Number(d.cerradaEn) || ahora, ahora);
         f.estado = 'CERRADA'; f.cerradaEn = Math.max(cuando, f.inicio); f.cerradaPor = por; f.notaCierre = texto_(d.nota, 200);
         f.historial.push({ accion: 'CERRADA', en: ahora, por: por, detalle: f.notaCierre });
         tipo = 'FALLA_CERRADA';
-        texto = 'cerró la falla ' + f.id + ' (' + nombreMotivo_(f) + ')';
+        texto = 'cerró la falla ' + idFalla_(f.id) + ' (' + nombreMotivo_(f) + ')';
       } else if (d.op === 'reabrir') {
         if (f.estado === 'ACTIVA') throw fallo_('DATOS', 'La falla ya está activa.');
         f.estado = 'ACTIVA'; f.cerradaEn = null; f.cerradaPor = null; f.notaCierre = '';
         f.historial.push({ accion: 'REABIERTA', en: ahora, por: por, detalle: '' });
         tipo = 'FALLA_REABIERTA';
-        texto = 'reabrió la falla ' + f.id;
+        texto = 'reabrió la falla ' + idFalla_(f.id);
       } else throw fallo_('DATOS', 'Operación no válida.');
     }
     columnaNumeroFallas_(h);
@@ -764,11 +764,15 @@ function validarFalla_(x, ahora, nueva) {
   };
 }
 
+/* ID de cada falla: F + fecha de Honduras (aammdd) + número del día, sin guiones: F26110201.
+   Las publicadas antes del 2 nov 2026 tienen guiones (F-261030-05): se muestran sin ellos
+   (idFalla_) y cuentan para el número del día, así nunca se repite un ID. */
+const idFalla_ = (id) => String(id == null ? '' : id).replace(/-/g, '');
 function nuevoId_(todas, ahora) {
-  const pref = 'F-' + Utilities.formatDate(new Date(ahora), ALERTAS.ZONA, 'yyMMdd') + '-';
+  const pref = 'F' + Utilities.formatDate(new Date(ahora), ALERTAS.ZONA, 'yyMMdd');
   let max = 0;
-  todas.forEach((f) => { if (f.id.indexOf(pref) === 0) max = Math.max(max, Number(f.id.slice(pref.length)) || 0); });
-  return pref + ('0' + (max + 1)).slice(-2);
+  todas.forEach((f) => { const id = idFalla_(f.id); if (id.indexOf(pref) === 0) max = Math.max(max, Number(id.slice(pref.length)) || 0); });
+  return pref + String(max + 1).padStart(2, '0');
 }
 function nombreMotivo_(f) { return f.motivo === 'OTRO' ? (f.motivoTexto || 'Otro motivo') : ALERTAS.MOTIVOS[f.motivo]; }
 function lista_(arr, max) {
@@ -1132,8 +1136,8 @@ function leerCargas_() {
 function accionTelefonos_(d, ses) {
   const id = String(d.id || '');
   const todas = leerFallas_();
-  const fallas = id === 'activas' ? todas.filter((f) => f.estado === 'ACTIVA') : todas.filter((f) => f.id === id);
-  if (!fallas.length) throw fallo_('DATOS', id === 'activas' ? 'No hay fallas activas.' : 'No encontré la falla ' + id + '.');
+  const fallas = id === 'activas' ? todas.filter((f) => f.estado === 'ACTIVA') : todas.filter((f) => f.id === id || idFalla_(f.id) === idFalla_(id));
+  if (!fallas.length) throw fallo_('DATOS', id === 'activas' ? 'No hay fallas activas.' : 'No encontré la falla ' + idFalla_(id) + '.');
   const nodos = {};
   fallas.forEach((f) => f.nodos.forEach((n) => { nodos[n] = true; }));
 
@@ -1166,7 +1170,7 @@ function accionTelefonos_(d, ses) {
     else sinTelefono++;
   });
 
-  const ids = fallas.map((f) => f.id);
+  const ids = fallas.map((f) => idFalla_(f.id));
   const listaNodos = Object.keys(nodos);
   try {
     const hd = hojaEn_(libro_(), ALERTAS.HOJAS.descargas, COL_DESCARGAS);
@@ -1174,7 +1178,7 @@ function accionTelefonos_(d, ses) {
   } catch (e) { console.error('No se pudo anotar la descarga: ' + (e && e.message)); }
 
   const cuando = Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyy-MM-dd_HHmm');
-  const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + id + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
+  const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + idFalla_(id) + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
   return {
     archivo: nombre.replace(/[^A-Za-z0-9_\-]/g, '') + '.csv', fallas: ids, nodos: listaNodos.length,
     clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono, telefonos: numeros

@@ -217,12 +217,12 @@ function Veredicto({ v, rec, now }) {
     l1 = nombreMotivo(f) + ' en el nodo ' + rec.nodo + '.';
     l2 = 'Afectado desde las ' + U.hora(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
       + (f.eta ? (f.eta > now ? U.conPunto('Solución estimada: ' + U.cuandoCorto(f.eta, now)) : 'La hora estimada (' + U.hora(f.eta) + ') ya pasó; Workforce HN sigue dando seguimiento.') : 'Aún sin hora estimada de solución.');
-    sello = 'Falla ' + f.id + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
+    sello = 'Falla ' + U.idFalla(f.id) + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
   } else if (v.tipo === 'RESUELTA') {
     titulo = 'Falla resuelta';
     l1 = U.conPunto(nombreMotivo(f) + ' en el nodo ' + rec.nodo + ', solucionada ' + U.cuando(f.cerradaEn, now));
     l2 = 'Si el cliente sigue sin servicio, pídele reiniciar su equipo antes de escalar.';
-    sello = 'Falla ' + f.id;
+    sello = 'Falla ' + U.idFalla(f.id);
   } else if (v.tipo === 'SIN_FALLA') {
     titulo = 'Sin falla general';
     l1 = 'El nodo ' + rec.nodo + ' no tiene fallas reportadas por Workforce HN.';
@@ -420,7 +420,7 @@ function FallaItem({ f, now }) {
   const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
   const imp = f.impacto || { total: 0, hfc: 0, gpon: 0, deps: [] };
   return html`<button type="button" class="falla-item" data-s=${f.estado} aria-expanded=${abierto} onClick=${() => setAbierto(!abierto)}>
-    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${f.id}</span></div>
+    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.idFalla(f.id)}</span></div>
     <div class="nodos">${U.listaNatural(f.nodos, 3)}</div>
     <div class="m">
       ${activa ? html`<span>Desde las ${U.hora(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`

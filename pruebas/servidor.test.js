@@ -212,7 +212,11 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.falla.impacto.total === imp.total && r.datos.falla.impacto.hfc === imp.hfc && r.datos.falla.nodos.length === nodosPrueba.length,
     `publica la falla con ${imp.total} clientes (HFC ${imp.hfc}, GPON ${imp.gpon}) e ignora nodos inexistentes`, r.datos && r.datos.falla && r.datos.falla.impacto);
   const f1 = r.datos.falla;
-  ok(/^F-\d{6}-01$/.test(f1.id), 'ID de falla con fecha de Honduras: ' + f1.id);
+  const hoyId = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Tegucigalpa', year: '2-digit', month: '2-digit', day: '2-digit' }).format(new Date()).replace(/-/g, '');
+  ok(f1.id === 'F' + hoyId + '01', 'ID de falla sin guiones, con la fecha de Honduras: ' + f1.id);
+  // Las fallas de antes (F-aammdd-NN) se muestran sin guiones y cuentan para el número del día: nunca se repite un ID
+  ok(g.ejecutar("idFalla_('F-261030-05')") === 'F26103005' && g.ejecutar("idFalla_('F26110201')") === 'F26110201', 'los IDs viejos se muestran sin guiones');
+  ok(g.ejecutar("nuevoId_([{ id: 'F-" + hoyId + "-07' }, { id: 'F" + hoyId + "03' }, { id: 'F-261030-09' }], Date.now())") === 'F' + hoyId + '08', 'el número del día sigue después de los IDs viejos de hoy');
   ok(f1.numero === 'F1254585', 'guarda el número de falla en mayúsculas y sin espacios: ' + f1.numero);
   const hFallas = g.E.activo.getSheetByName('Fallas');
   ok(hFallas.getRange(1, 20).getValue() === 'Número de falla' && hFallas.getRange(2, 20).getValue() === 'F1254585', 'la hoja Fallas tiene la columna Número de falla');
@@ -442,7 +446,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.telefonos.length > 0 && r.datos.telefonos.every((t) => /^504[3789]\d{7}$/.test(t)), 'todos con 504 adelante y 8 dígitos de celular');
   ok(r.ok && r.datos.clientes === porC.size && r.datos.conCelular === eCel && r.datos.soloFijo === eFijo && r.datos.sinTelefono === eSin,
     `cuenta clientes con celular (${eCel}), solo con fijo (${eFijo}) y sin teléfono (${eSin})`, r.datos && [r.datos.clientes, r.datos.conCelular, r.datos.soloFijo, r.datos.sinTelefono]);
-  ok(r.ok && /^sms_F-\d{6}-\d{2}_[A-Za-z0-9_\-]+\.csv$/.test(r.datos.archivo), 'nombre del archivo: ' + (r.datos && r.datos.archivo));
+  ok(r.ok && /^sms_F\d{8}_[A-Za-z0-9_\-]+\.csv$/.test(r.datos.archivo), 'nombre del archivo: ' + (r.datos && r.datos.archivo));
   const hdes = g.E.activo.getSheetByName('Descargas SMS');
   ok(hdes && hdes.getLastRow() === 2 && hdes.getRange(2, 3).getValue() === 'Ana López' && Number(hdes.getRange(2, 7).getValue()) === espera.size,
     'queda anotado quién descargó y cuántos números');

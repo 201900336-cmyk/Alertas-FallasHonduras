@@ -104,6 +104,8 @@ const U = (() => {
 
   /* Red */
   const esVirtual = (nodo) => /VIRTUAL|VITUAL/i.test(nodo || '');
+  // ID de una falla tal como se muestra: sin guiones (las de antes del 2 nov 2026 se guardaron como F-261030-05)
+  const idFalla = (id) => String(id == null ? '' : id).replace(/-/g, '');
   function oltBase(olt) { return String(olt || '').split('/')[0]; }
   function oltNombre(olt) {
     const b = oltBase(olt);
@@ -172,6 +174,6 @@ const U = (() => {
   };
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
-    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, oltBase, oltNombre,
+    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
 })();

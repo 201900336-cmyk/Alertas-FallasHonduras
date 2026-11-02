@@ -297,7 +297,7 @@ function BackendLocal() {
           historial: [{ accion: 'PUBLICADA', en: ahora, por, detalle: U.plural(x.nodos.length, '1 nodo', x.nodos.length + ' nodos') }]
         };
         fallas.push(f);
-        tipo = 'FALLA_PUBLICADA'; texto = 'publicó la falla ' + f.id + ' (' + nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 2) + ')';
+        tipo = 'FALLA_PUBLICADA'; texto = 'publicó la falla ' + U.idFalla(f.id) + ' (' + nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 2) + ')';
       } else {
         f = fallas.find((x) => x.id === d.id);
         if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
@@ -305,16 +305,16 @@ function BackendLocal() {
           Object.assign(f, d.falla);
           if (d.falla.nodos) f.impacto = resumir(Model.impacto(c.cat, f.nodos));
           f.historial.push({ accion: 'EDITADA', en: ahora, por, detalle: d.detalle || '' });
-          tipo = 'FALLA_EDITADA'; texto = 'actualizó la falla ' + f.id + (d.detalle ? ' (' + d.detalle + ')' : '');
+          tipo = 'FALLA_EDITADA'; texto = 'actualizó la falla ' + U.idFalla(f.id) + (d.detalle ? ' (' + d.detalle + ')' : '');
         } else if (op === 'cerrar') {
           if (f.estado === 'CERRADA') throw errorAlertas('DATOS', 'Otra persona ya cerró esta falla.');
           Object.assign(f, { estado: 'CERRADA', cerradaEn: Math.max(f.inicio, Math.min(d.cerradaEn || ahora, ahora)), cerradaPor: por, notaCierre: d.nota || '' });
           f.historial.push({ accion: 'CERRADA', en: ahora, por, detalle: d.nota || '' });
-          tipo = 'FALLA_CERRADA'; texto = 'cerró la falla ' + f.id + ' (' + nombreMotivo(f) + ')';
+          tipo = 'FALLA_CERRADA'; texto = 'cerró la falla ' + U.idFalla(f.id) + ' (' + nombreMotivo(f) + ')';
         } else if (op === 'reabrir') {
           Object.assign(f, { estado: 'ACTIVA', cerradaEn: null, cerradaPor: null, notaCierre: '' });
           f.historial.push({ accion: 'REABIERTA', en: ahora, por, detalle: '' });
-          tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + f.id;
+          tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.idFalla(f.id);
         }
       }
       const version = await confirmar(tipo, texto, { fallas });

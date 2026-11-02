@@ -152,6 +152,7 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
   - Sale de las fallas publicadas en Alertas para el nodo actual del cliente; si el cliente se cambió de nodo, no salen las de su nodo anterior.
 - **Workforce HN**: en **Fallas > Nueva falla** escribe los nodos (por ejemplo `NODO01, NODO02`), elige el motivo y la hora estimada, revisa a cuántos clientes afecta y **Publicar falla**. Puede editarla, cerrarla o reabrirla.
 - En el paso 4 van el **número de falla** (por ejemplo `F1254585`), la referencia del correo o ticket y las notas. Solo los ve Workforce HN. El número aparece en la tarjeta de la falla, en el historial (se puede buscar por él) y en el CSV del historial.
+- Cada falla tiene un número de Alertas sin guiones: **F**, la fecha (año, mes y día) y el número del día, por ejemplo `F26110201` (la primera del 2 nov 2026). Las publicadas antes del 2 nov se guardaron con guiones (`F-261030-05`) y la página las muestra igual, sin guiones (`F26103005`).
 - Una falla cerrada sigue visible para los asesores **36 horas** y luego sale de su panel. Workforce la conserva en el historial.
 - Cuando Workforce publica, edita, cierra o sube una base, los demás ven el aviso **"Workforce HN hizo una actualización"** en alrededor de un minuto. Lo que diga cada búsqueda siempre está al día: el servidor responde con las fallas del momento.
 - **Posibles fallas** (Workforce y Jefatura): cuando **5 clientes distintos** de un nodo sin falla publicada consultan en **60 minutos**, o 2 asesores lo reportan con **Reportar posible falla**, el nodo aparece en **Fallas > Posibles fallas**. Solo cuentan las búsquedas de Concentrix y Tiendas (las de Workforce revisando no suman, y un cliente que vuelve a llamar cuenta una vez). Con 3 o 4 clientes el nodo queda **en observación**.
@@ -176,7 +177,7 @@ telefono
 50488000003
 ```
 
-Se llama, por ejemplo, `sms_F-261030-01_GRA01.csv` o `sms_fallas_activas_2026-10-30_0815.csv`.
+Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-02_0815.csv`.
 
 **Qué números entran:**
 
@@ -248,7 +249,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 165 pruebas del servidor en un emulador de Apps Script
+npm test                           # 167 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente
