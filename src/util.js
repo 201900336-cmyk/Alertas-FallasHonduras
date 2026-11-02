@@ -71,6 +71,26 @@ const U = (() => {
     if (!h) return m + ' min';
     return m ? h + ' h ' + m + ' m' : h + ' h';
   };
+  /* SMS: con solo caracteres GSM-7 cada SMS admite 160 (153 por parte si son varias); con cualquier otro
+     (por ejemplo á, í, ó, ú) pasa a UCS-2 y admite 70 (67 por parte). Los de la tabla extendida cuentan doble. */
+  const GSM7 = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+  const GSM7_EXT = '^{}\\[~]|€';
+  function partesSms(texto) {
+    let n = 0;
+    const raros = [];
+    for (const ch of String(texto)) {
+      if (GSM7.indexOf(ch) >= 0) n++;
+      else if (GSM7_EXT.indexOf(ch) >= 0) n += 2;
+      else if (raros.indexOf(ch) < 0) raros.push(ch);
+    }
+    if (!raros.length) return { gsm: true, caracteres: n, partes: n <= 160 ? 1 : Math.ceil(n / 153), limite: 160, raros };
+    const u = String(texto).length;
+    return { gsm: false, caracteres: u, partes: u <= 70 ? 1 : Math.ceil(u / 67), limite: 70, raros };
+  }
+  /* Cambia lo que no cabe en GSM-7 por su forma simple (á→a, “ ”→", …→...) para que cada SMS admita 160 */
+  const SIN_TILDE = { á: 'a', í: 'i', ó: 'o', ú: 'u', Á: 'A', Í: 'I', Ó: 'O', Ú: 'U', ê: 'e', â: 'a', ô: 'o', ç: 'c', ï: 'i', '“': '"', '”': '"', '‘': "'", '’': "'", '–': '-', '—': '-', '…': '...', '\u00a0': ' ', '\u202f': ' ' };
+  const sinTildesSms = (t) => String(t).replace(/[áíóúÁÍÓÚêâôçï“”‘’–—…\u00a0\u202f]/g, (c) => SIN_TILDE[c] || c);
+
   /* Agrega punto final solo si hace falta (las horas ya terminan en "p. m.") */
   const conPunto = (s) => (/[.!?]$/.test(String(s).trim()) ? String(s) : s + '.');
   const horas = (ms) => ms / HORA;
@@ -179,5 +199,5 @@ const U = (() => {
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
-    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
+    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms };
 })();

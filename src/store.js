@@ -91,6 +91,9 @@ const Store = (() => {
     return nueva;
   }
 
+  /* Fallas que cambian sin que los demás tengan que actualizar (por ejemplo, un envío de SMS) */
+  async function guardarFallas(fallas) { await guardar({ fallas }); }
+
   async function agregarLog(entrada) {
     if (memoria) memoria.logs.push(entrada);
     else await peticion(db.transaction('logs', 'readwrite').objectStore('logs').add(entrada));
@@ -144,7 +147,7 @@ const Store = (() => {
   }
 
   return {
-    init, leerTodo, leerMeta, leerFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
+    init, leerTodo, leerMeta, leerFallas, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
     alCambiar: (fn) => { alCambiarFns.add(fn); return () => alCambiarFns.delete(fn); },
     alLog: (fn) => { alLogFns.add(fn); return () => alLogFns.delete(fn); },
     get version() { return version; },

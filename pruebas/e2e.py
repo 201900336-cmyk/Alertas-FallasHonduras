@@ -251,6 +251,44 @@ with sync_playwright() as p:
        'Estadísticas: detección de fallas, sin la posible falla descartada (la cuenta aparte)', det_txt[:300])
     x.locator('.deteccion').screenshot(path=OUT + 'e06f_deteccion.png')
 
+    print('7b. SMS a los clientes con Notifícame')
+    def abrir_sms():
+        x.goto(APP + '#fallas'); x.wait_for_selector('.pestanas', timeout=15000)
+        x.click('button[role=tab]:has-text("Resueltas")'); x.wait_for_selector('.falla-card', timeout=10000)
+        t = x.locator('.falla-card', has_text='F1254585')
+        t.locator('button.enviar-sms').click()
+        x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
+        return t
+    t_res = abrir_sms()
+    n_sms = int(re.sub(r'\D', '', x.locator('.sms-cifra b').inner_text()))
+    msj_sms = x.locator('.sms-texto').input_value()
+    ok(n_sms > 0 and x.locator('.sms-modal .campo > span').first.inner_text() == 'Mensaje · Servicio restablecido' and 'restablecido' in msj_sms,
+       f'en una falla resuelta, el SMS de servicio restablecido va a {n_sms} clientes con celular')
+    ok('1 SMS por cliente' in x.locator('.sms-contador').inner_text(), 'el mensaje sugerido cabe en un SMS: ' + x.locator('.sms-contador').inner_text())
+    x.locator('.modal').screenshot(path=OUT + 'e06g_sms.png')
+    antes_sms = http('/test/sms?limite=10,1')['enviados']        # el primer grupo: Notifícame acepta 10 y pide esperar
+    x.click('.modal-pie .btn-primario'); x.click('.modal-pie button:has-text("Sí, enviar")')
+    x.wait_for_selector('.sms-progreso-txt:has-text("más despacio")', timeout=60000)
+    ok(http('/test/sms')['enviados'] - antes_sms == 10, 'si Notifícame pide esperar, la página lo dice y espera: ' + x.locator('.sms-progreso-txt').inner_text())
+    x.locator('.modal').screenshot(path=OUT + 'e06h_sms_pausa.png')
+    x.reload(); x.wait_for_selector('.usuario-txt', timeout=60000)   # se cerró la página a medio envío
+    t_res = abrir_sms()
+    seguir = x.locator('.modal-pie .btn-primario').inner_text()
+    ok('sin terminar: van 10 de ' + str(n_sms) in x.locator('.sms-modal').inner_text() and seguir == 'Seguir enviando a ' + str(n_sms - 10)
+       and x.locator('.sms-texto').input_value() == msj_sms, 'al volver, ofrece seguir el mismo envío: "' + seguir + '"')
+    x.locator('.modal').screenshot(path=OUT + 'e06h_sms_seguir.png')
+    x.click('.modal-pie .btn-primario'); x.click('.modal-pie button:has-text("Sí, enviar")')
+    x.wait_for_selector('.sms-resultado', timeout=180000); x.wait_for_timeout(300)
+    r_sms = http('/test/sms')
+    ok(r_sms['enviados'] - antes_sms == n_sms and r_sms['repetidos'] == 0 and r_sms['malFirmados'] == 0 and str(n_sms) in x.locator('.sms-resultado').inner_text().replace(',', ''),
+       f'Notifícame recibió los {n_sms} SMS, una vez cada uno y bien firmados', r_sms)
+    x.locator('.modal').screenshot(path=OUT + 'e06h_sms_listo.png')
+    x.click('.modal-pie button:has-text("Listo")'); x.wait_for_timeout(300)
+    ok('Servicio restablecido a ' + str(n_sms) in t_res.locator('dl.meta').inner_text().replace(',', ''), 'la tarjeta muestra el envío')
+    t_res.locator('button.enviar-sms').click(); x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
+    ok('Ya les llegó a todos' in x.locator('.sms-cifras').inner_text() and x.locator('.modal-pie .btn-primario').is_disabled(), 'al abrirlo otra vez, no se le repite a nadie')
+    x.keyboard.press('Escape')
+
     if EXCEL:
         print('8. Subir la base real desde la página')
         x.goto(APP + '#base'); x.wait_for_selector('.zona-carga input[type=file]')
@@ -300,6 +338,13 @@ with sync_playwright() as p:
                f'descarga para Notifícame: {len(nums)} celulares de {", ".join(nodos3)} con 504, sin repetir ({d.value.suggested_filename})',
                {'encabezado': lineas[0], 'lineas': len(lineas), 'mal_formados': len(malos), 'repetidos': len(nums) - len(set(nums))})   # sin imprimir números de clientes
             x.wait_for_selector('.falla-card .nota-sms'); ok(True, 'muestra cuántos clientes tienen celular, solo fijo o ninguno')
+            if x.locator('.barra-sms').count() == 0:
+                # "Teléfonos de todas" sale con dos o más fallas activas: se publica otra (un nodo grande que no esté en falla)
+                otro = x.evaluate("(ya) => [...G.s.cat.nodos.values()].filter((n) => /^[A-Z]{3}(GC)?\\d{2}$/.test(n.code) && !ya.includes(n.code)).sort((a, b) => b.total - a.total)[0].code", nodos3)
+                x.click('button[role=tab]:has-text("Publicar")'); x.wait_for_selector('.entrada-nodos textarea')
+                x.locator('.entrada-nodos textarea').fill(otro); x.click('button.agregar'); x.wait_for_timeout(300)
+                x.click('button.motivo:has-text("fibra")'); x.click('.publicar-barra .btn-primario'); x.click('.modal .btn-primario'); x.wait_for_timeout(1500)
+                x.click('button[role=tab]:has-text("Activas")'); x.wait_for_selector('.barra-sms', timeout=15000)
             with x.expect_download() as d2: x.click('.barra-sms button')
             todas = [l for l in open(d2.value.path(), 'rb').read().decode('utf-8').split('\r\n')[1:] if l]
             ok(len(todas) >= len(nums) > 0 and set(nums) <= set(todas) and len(set(todas)) == len(todas), f'todas las fallas activas en un solo archivo ({len(todas)} números)')

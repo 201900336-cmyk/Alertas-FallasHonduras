@@ -708,6 +708,30 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .bitacora li:last-child { border-bottom: 0; }
 .bitacora .cuando { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 
+/* ---------- Enviar SMS (Notifícame) ---------- */
+.sms-modal { display: flex; flex-direction: column; gap: 14px; }
+.sms-cifras { display: flex; flex-direction: column; gap: 4px; }
+.sms-cifras .sub { margin: 0; line-height: 1.45; }
+.sms-cifra { display: flex; align-items: baseline; gap: 10px; }
+.sms-cifra b { font-size: 34px; font-weight: 800; font-stretch: 112%; line-height: 1.05; }
+.sms-cifra span { font-size: 15px; color: var(--ink-2); font-weight: 600; }
+.sms-tipo { align-self: flex-start; }
+.sms-texto { min-height: 104px; resize: vertical; font-size: 15px; line-height: 1.45; }
+.sms-contador { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: -6px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.sms-contador[data-aviso="si"] span { color: var(--resuelta-text); font-weight: 600; }
+.sms-modal .aviso-linea button { margin-left: 6px; border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.sms-modal .sms-duda { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-weight: 650; color: var(--ink); cursor: pointer; }
+.sms-modal .sms-duda input { width: 16px; height: 16px; margin: 0; accent-color: var(--ink); flex: none; }
+.sms-barra { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.sms-barra i { display: block; height: 100%; background: var(--ok); border-radius: 999px; transition: width 300ms ease; }
+.sms-resultado { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 12px; background: var(--ok-soft); color: var(--ok-text); font-size: 14px; }
+.sms-resultado b { font-size: 16px; }
+.sms-resultado span { color: var(--ink-2); }
+.sms-resultado.con-error { background: var(--resuelta-soft); color: var(--resuelta-text); }
+.sms-envios ul { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
+.sms-envios li { padding: 6px 0; border-top: 1px solid var(--line); }
+.sms-confirmar, .sms-progreso-txt { font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+
 /* ---------- Teléfonos para SMS ---------- */
 .nota-sms { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; padding: 10px 12px; border-radius: var(--r-s); background: var(--surface-2, var(--bg)); color: var(--ink-2); font-size: 13.5px; line-height: 1.45; }
 .nota-sms svg { flex: none; margin-top: 2px; color: var(--ink-3); }
@@ -1514,6 +1538,14 @@ const CONFIG = {
     ]
   },
 
+  // SMS a los clientes de una falla (Notifícame). {eta} se cambia por " antes de las 3:00 p. m." si la falla
+  // tiene hora estimada. Sin tildes en á, í, ó, ú: así cada SMS admite 160 caracteres (con tildes, 70).
+  sms: {
+    FALLA: 'Claro informa: hay una falla en la red de su zona que afecta su servicio. Ya trabajamos para restablecerlo{eta}. Disculpe las molestias.',
+    POSIBLE: 'Claro informa: estamos revisando un inconveniente en la red de su zona. Le avisaremos cuando su servicio se restablezca. Disculpe las molestias.',
+    RESTABLECIDO: 'Claro informa: el servicio en su zona ya fue restablecido. Si sigue sin servicio, apague su equipo 30 segundos y vuelva a encenderlo. Gracias.'
+  },
+
   // Nota corta para pegar en la descripción del caso en Qflow, según el resultado de la consulta. Así todos
   // documentan igual. {nodo} {numero} {motivo} {inicio} {eta} {cerrada} {contrato} se reemplazan con los datos
   // del cliente y la falla; {inicio} y {cerrada} ya traen "las" o el día ("ayer a las 3:00 p. m.").
@@ -1602,6 +1634,26 @@ const U = (() => {
     if (!h) return m + ' min';
     return m ? h + ' h ' + m + ' m' : h + ' h';
   };
+  /* SMS: con solo caracteres GSM-7 cada SMS admite 160 (153 por parte si son varias); con cualquier otro
+     (por ejemplo á, í, ó, ú) pasa a UCS-2 y admite 70 (67 por parte). Los de la tabla extendida cuentan doble. */
+  const GSM7 = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+  const GSM7_EXT = '^{}\\[~]|€';
+  function partesSms(texto) {
+    let n = 0;
+    const raros = [];
+    for (const ch of String(texto)) {
+      if (GSM7.indexOf(ch) >= 0) n++;
+      else if (GSM7_EXT.indexOf(ch) >= 0) n += 2;
+      else if (raros.indexOf(ch) < 0) raros.push(ch);
+    }
+    if (!raros.length) return { gsm: true, caracteres: n, partes: n <= 160 ? 1 : Math.ceil(n / 153), limite: 160, raros };
+    const u = String(texto).length;
+    return { gsm: false, caracteres: u, partes: u <= 70 ? 1 : Math.ceil(u / 67), limite: 70, raros };
+  }
+  /* Cambia lo que no cabe en GSM-7 por su forma simple (á→a, “ ”→", …→...) para que cada SMS admita 160 */
+  const SIN_TILDE = { á: 'a', í: 'i', ó: 'o', ú: 'u', Á: 'A', Í: 'I', Ó: 'O', Ú: 'U', ê: 'e', â: 'a', ô: 'o', ç: 'c', ï: 'i', '“': '"', '”': '"', '‘': "'", '’': "'", '–': '-', '—': '-', '…': '...', '\u00a0': ' ', '\u202f': ' ' };
+  const sinTildesSms = (t) => String(t).replace(/[áíóúÁÍÓÚêâôçï“”‘’–—…\u00a0\u202f]/g, (c) => SIN_TILDE[c] || c);
+
   /* Agrega punto final solo si hace falta (las horas ya terminan en "p. m.") */
   const conPunto = (s) => (/[.!?]$/.test(String(s).trim()) ? String(s) : s + '.');
   const horas = (ms) => ms / HORA;
@@ -1710,7 +1762,7 @@ const U = (() => {
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
-    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
+    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms };
 })();
 
 
@@ -1808,6 +1860,9 @@ const Store = (() => {
     return nueva;
   }
 
+  /* Fallas que cambian sin que los demás tengan que actualizar (por ejemplo, un envío de SMS) */
+  async function guardarFallas(fallas) { await guardar({ fallas }); }
+
   async function agregarLog(entrada) {
     if (memoria) memoria.logs.push(entrada);
     else await peticion(db.transaction('logs', 'readwrite').objectStore('logs').add(entrada));
@@ -1861,7 +1916,7 @@ const Store = (() => {
   }
 
   return {
-    init, leerTodo, leerMeta, leerFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
+    init, leerTodo, leerMeta, leerFallas, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
     alCambiar: (fn) => { alCambiarFns.add(fn); return () => alCambiarFns.delete(fn); },
     alLog: (fn) => { alLogFns.add(fn); return () => alLogFns.delete(fn); },
     get version() { return version; },
@@ -2254,7 +2309,18 @@ const Model = (() => {
   /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
   const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal]);
   const esInterno = (canal) => INTERNOS.has(canal);
-  function alertas(logs, mf, now, descartadas) {
+  /* Nodo -> cuándo se registró el cierre de su última falla (resuelta o descartada): lo de antes ya lo explicó esa falla */
+  const cierreDe = (f) => (f.historial || []).reduce((t, h) => (h.accion === 'CERRADA' && h.en > t ? h.en : t), f.cerradaEn || 0);
+  function cierresPorNodo(fallas) {
+    const m = new Map();
+    (fallas || []).forEach((f) => {
+      if (f.estado === 'ACTIVA' || !f.cerradaEn) return;
+      const t = cierreDe(f);
+      f.nodos.forEach((n) => { if (!(m.get(n) >= t)) m.set(n, t); });
+    });
+    return m;
+  }
+  function alertas(logs, mf, now, descartadas, cierres) {
     const desde = now - CONFIG.alerta.minutos * U.MIN;
     const por = new Map();
     for (const l of logs) {
@@ -2263,7 +2329,8 @@ const Model = (() => {
       const lst = mf.porNodo.get(l.n);
       if (lst && lst.some((f) => f.estado === 'ACTIVA')) continue;
       // Lo de antes de cerrar su última falla (resuelta o descartada) ya quedó explicado por esa falla
-      if (lst && lst.some((f) => f.cerradaEn && l.t <= f.cerradaEn)) continue;
+      const cierre = cierres && cierres.get(l.n);
+      if (cierre && l.t <= cierre) continue;
       const desc = descartadas && descartadas[l.n];
       if (desc && l.t <= desc) continue;
       let e = por.get(l.n);
@@ -2335,6 +2402,13 @@ const Model = (() => {
       cerrada: f && f.cerradaEn ? (U.esHoy(f.cerradaEn, now) ? 'hoy a ' : '') + momento(f.cerradaEn) : ''
     };
     return plantilla.replace(/\{(\w+)\}/g, (m, k) => (k in datos ? datos[k] : m)).replace(/\.\./g, '.');
+  }
+
+  /* Mensaje de SMS para los clientes de una falla (plantillas en CONFIG.sms). tipo: FALLA o RESTABLECIDO */
+  function textoSms(f, tipo, now) {
+    const clave = tipo === 'RESTABLECIDO' ? 'RESTABLECIDO' : esPosible(f) ? 'POSIBLE' : 'FALLA';
+    const eta = f.eta && f.eta > now ? ' antes de ' + (U.esHoy(f.eta, now) ? '' : U.diaRel(f.eta, now) + ' a ') + U.las(f.eta) : '';
+    return U.sinTildesSms(CONFIG.sms[clave].replace('{eta}', eta));
   }
 
   /* ---------- Correo para reportar una posible falla (al VOC o al personal interno) ----------
@@ -2432,7 +2506,7 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, textoSms, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();
 
@@ -2756,7 +2830,8 @@ function BackendRemoto() {
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
-        if (!REINTENTABLES[accion] || !e.reintentar || intento >= 2) throw e;
+        const lectura = REINTENTABLES[accion] || (accion === 'sms' && datos && datos.op === 'resumen');
+        if (!lectura || !e.reintentar || intento >= 2) throw e;
         await esperar((intento ? 2000 : 800) * (1 + Math.random() * 0.5));
       }
     }
@@ -2866,6 +2941,7 @@ function BackendRemoto() {
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
+    sms: (d) => llamar('sms', d, d.op === 'lote' ? 200000 : 120000),
 
     /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
@@ -2946,6 +3022,7 @@ function BackendLocal() {
     return cache;
   }
   const quien = () => ({ u: ses.usuario.u, nombre: ses.usuario.nombre });
+  const smsDemo = { envios: new Map(), estados: new Map() };   // envíos en curso por falla; estado de cada contrato por falla y aviso
   /* Posibles fallas marcadas como reportadas (en la demostración, solo en esta PC); duran 6 horas */
   const marcasDemo = () => {
     const m = leerLS('alertas-demo-reportadas', {}), corte = Date.now() - 6 * U.HORA;
@@ -3060,7 +3137,7 @@ function BackendLocal() {
       const fallas = await Store.leerFallas();
       const logs = await Store.leerLogs(Date.now() - CONFIG.alerta.minutos * U.MIN);
       const marcas = marcasDemo();
-      const lista = Model.alertas(logs, Model.mapaFallas(fallas, Date.now()), Date.now(), {})
+      const lista = Model.alertas(logs, Model.mapaFallas(fallas, Date.now()), Date.now(), {}, Model.cierresPorNodo(fallas))
         .map((a) => Object.assign({ nodo: a.nodo, nivel: a.nivel, nClientes: a.nClientes, reportes: a.reportes, consultas: a.consultas, primero: a.primero, ultimo: a.ultimo },
           marcas[a.nodo] ? { reportada: marcas[a.nodo] } : {}));
       const um = CONFIG.alerta;
@@ -3072,7 +3149,7 @@ function BackendLocal() {
       const ahora = Date.now();
       const fallas = await Store.leerFallas();
       // Solo lo que llegó después de cerrar la última falla del nodo (resuelta o descartada)
-      const cierre = Math.max(0, ...fallas.filter((f) => f.cerradaEn && f.nodos.includes(nodo)).map((f) => f.cerradaEn));
+      const cierre = Model.cierresPorNodo(fallas).get(nodo) || 0;
       const logs = (await Store.leerLogs(ahora - CONFIG.alerta.minutos * U.MIN))
         .filter((l) => l.n === nodo && l.t > cierre && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
         .sort((a, b) => a.t - b.t);
@@ -3114,6 +3191,83 @@ function BackendLocal() {
 
     async telefonos() {
       throw errorAlertas('DEMO', 'En la demostración no hay teléfonos de clientes. Esta descarga funciona con la base real.');
+    },
+
+    /* SMS en la demostración: no sale ningún SMS. Se simula con los clientes de la base ficticia (la
+       mayoría con celular; algunos solo con fijo o sin teléfono), unos pocos números que fallan y otros
+       que quedan en duda, con el mismo protocolo que el servidor (iniciar, lote con paso, terminar). */
+    async sms(d) {
+      const fallas = await Store.leerFallas();
+      const f = fallas.find((x) => x.id === d.id);
+      if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
+      const tipo = f.estado === 'ACTIVA' ? 'FALLA' : 'RESTABLECIDO';
+      const clave = f.id + '|' + tipo;
+      const estados = smsDemo.estados.get(clave) || new Map();      // contrato → último estado
+      smsDemo.estados.set(clave, estados);
+      const avance = (m) => ({ envio: m.envio, pasos: m.pasos, siguiente: m.siguiente, total: m.total, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, error: m.error });
+      const cerrar = async (m, nota) => {
+        m.lista.slice(m.siguiente).forEach((k) => { if (estados.get(k) === 'Pendiente') estados.set(k, 'Cancelado'); });
+        smsDemo.envios.delete(m.falla);
+        if (!(m.enviados || m.errores || m.dudosos)) return null;
+        const ahora = Date.now();
+        const extra = [m.errores ? m.errores + ' con error' : '', m.dudosos ? m.dudosos + ' en duda' : ''].filter(Boolean);
+        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total, por: m.por.nombre, en: ahora }]);
+        f.historial.push({ accion: 'SMS', en: ahora, por: m.por, detalle: (m.tipo === 'RESTABLECIDO' ? 'Servicio restablecido' : 'Aviso de falla') + ' a ' + m.enviados
+          + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '') + (nota ? '; ' + nota : '') });
+        await Store.guardarFallas(fallas);
+        return f;
+      };
+      const m = smsDemo.envios.get(f.id);
+      if (d.op === 'resumen' || d.op === 'iniciar') {
+        const c = await indice();
+        const contratos = [...new Set(Model.filasDeNodos(c.ix, f.nodos).map((i) => String(Model.registro(c.ix, i).contrato)))];
+        const tel = (k) => (Number(k) % 17 ? 'cel' : Number(k) % 2 ? 'fijo' : '');
+        const cel = contratos.filter((k) => tel(k) === 'cel');
+        let ya = 0, enDuda = 0;
+        cel.forEach((k) => { const e = estados.get(k); if (e === 'Enviado') ya++; else if (e === 'Dudoso') enDuda++; });
+        if (d.op === 'resumen') {
+          return { configurado: true, demo: true, tipo, puede: tipo === 'FALLA' || !Model.descartada(f), clientes: contratos.length, celulares: cel.length, conCelular: cel.length,
+            soloFijo: contratos.filter((k) => tel(k) === 'fijo').length, sinTelefono: contratos.filter((k) => !tel(k)).length,
+            ya, enDuda, faltan: cel.length - ya - enDuda, quedanHoy: 15000, envios: f.sms || [],
+            enCurso: m ? { por: m.por.nombre, mio: true, tipo: m.tipo, mensaje: m.mensaje, total: m.total, siguiente: m.siguiente, enviados: m.enviados, libre: false } : null };
+        }
+        if (d.tipo != null && d.tipo !== tipo) throw errorAlertas('DATOS', tipo === 'FALLA' ? 'La falla sigue activa: el aviso que corresponde es el de falla.' : 'La falla ya se cerró: el aviso que corresponde es el de servicio restablecido.');
+        if (tipo === 'RESTABLECIDO' && Model.descartada(f)) throw errorAlertas('DATOS', 'La posible falla se descartó: no hay servicio restablecido que avisar.');
+        const mensaje = String(d.mensaje || '').replace(/ /g, ' ').replace(/[ \t]+/g, ' ').trim();
+        if (!mensaje) throw errorAlertas('DATOS', 'Escribe el mensaje.');
+        if (mensaje.length > 459) throw errorAlertas('DATOS', 'El mensaje es muy largo: máximo 459 caracteres.');
+        if (m && m.tipo === tipo && m.mensaje === mensaje && d.dudosos !== true) return Object.assign(avance(m), { reanudado: true });
+        if (m) await cerrar(m, 'se detuvo antes de terminar');
+        const lista = cel.filter((k) => !['Enviado', 'Dudoso', 'Pendiente'].includes(estados.get(k)) || (d.dudosos === true && estados.get(k) === 'Dudoso'));
+        const extra = { ya, enDuda, quedanHoy: 15000, paraManana: 0 };
+        if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '' }, extra);
+        lista.forEach((k) => estados.set(k, 'Pendiente'));
+        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, lista, total: lista.length, siguiente: 0, pasos: 0,
+          enviados: 0, errores: 0, dudosos: 0, error: '', por: quien(), conDuda: d.dudosos === true };
+        smsDemo.envios.set(f.id, nuevo);
+        return Object.assign(avance(nuevo), extra);
+      }
+      if (!m || m.envio !== d.envio) {
+        if (d.op === 'terminar') return { terminado: true, falla: null };
+        throw errorAlertas('DATOS', 'Este envío ya terminó o lo reemplazó otro. Abre otra vez Enviar SMS: solo se manda a quienes falten.');
+      }
+      if (d.op === 'lote') {
+        if (d.paso !== m.pasos || m.siguiente >= m.total) return avance(m);
+        await esperar(350);
+        m.lista.slice(m.siguiente, m.siguiente + 50).forEach((k) => {
+          if (Number(k) % 89 === 0) { m.errores++; estados.set(k, 'Error'); if (!m.error) m.error = 'Número no válido'; }
+          else if (Number(k) % 97 === 0 && estados.get(k) !== 'Dudoso' && !m.conDuda) { m.dudosos++; estados.set(k, 'Dudoso'); }
+          else { m.enviados++; estados.set(k, 'Enviado'); }
+          m.siguiente++;
+        });
+        m.pasos++;
+        return avance(m);
+      }
+      if (d.op === 'terminar') {
+        const falla = await cerrar(m, m.siguiente < m.total ? 'se detuvo antes de terminar' : '');
+        return Object.assign(avance(m), { terminado: true, falla });
+      }
+      throw errorAlertas('DATOS', 'Operación no válida.');
     },
 
     async estadisticas({ desde, porHora }) {
@@ -3376,6 +3530,42 @@ const A = {
     const r = await Backend.telefonos({ id });
     if (r.telefonos.length) U.descargarTexto(r.archivo, 'telefono\r\n' + r.telefonos.join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
     return r;
+  },
+  /* SMS a los clientes de una falla con Notifícame. El servidor aparta a quienes les falta el aviso y
+     anota cada número antes de mandarlo; la página pide grupo por grupo (hasta 50 SMS cada uno) con el
+     número de paso. Si una respuesta se corta y la página repite el pedido, el servidor no vuelve a
+     mandar ese grupo. Si es la misma persona con el mismo mensaje, "iniciar" sigue el envío sin terminar. */
+  smsResumen: (id) => Backend.sms({ op: 'resumen', id }),
+  async enviarSms(id, tipo, mensaje, alAvance, detenido, conDuda) {
+    // Corte de red o servidor ocupado: se repite el mismo pedido (no duplica nada)
+    const pedir = async (datos, veces) => {
+      for (let k = 1; ; k++) {
+        try { return await Backend.sms(datos); } catch (e) {
+          if (!/^(RED|OCUPADO|SERVIDOR)$/.test(e.codigo) || k > veces) throw e;
+          await esperar(Math.min(12000, 2000 * k));
+        }
+      }
+    };
+    const ini = await pedir({ op: 'iniciar', id, tipo, mensaje, dudosos: !!conDuda }, 2);   // dudosos: también a los que quedaron en duda
+    let av = Object.assign({ aviso: '' }, ini);
+    if (!av.total) return Object.assign(av, { nada: true });
+    alAvance(av);
+    let error = null;
+    while (av.siguiente < av.total && !detenido()) {
+      try {
+        const r = await pedir({ op: 'lote', id, envio: av.envio, paso: av.pasos }, 6);
+        av = Object.assign({}, av, r, { aviso: r.aviso || '' });
+        alAvance(av);
+        // Notifícame pidió ir más despacio: se espera lo que dijo el servidor (se puede detener mientras tanto)
+        for (const t = Date.now() + (Number(r.pausa) || 0) * 1000; Date.now() < t && !detenido();) await esperar(250);
+      } catch (e) { error = e; break; }
+    }
+    let fin = null;
+    try { fin = await pedir({ op: 'terminar', id, envio: av.envio }, 6); } catch (e) { if (!error) error = e; }
+    if (fin && fin.falla) G.set((s) => ({ fallas: s.fallas.map((f) => (f.id === fin.falla.id ? fin.falla : f)) }));
+    const res = Object.assign({}, av, fin && fin.envio ? fin : {}, { aviso: '', detenido: !error && av.siguiente < av.total });
+    if (error) { error.avance = res; throw error; }
+    return res;
   },
   editarFalla: (id, cambios, detalle) => A.falla('editar', { id, falla: cambios, detalle }),
   cerrarFalla: (id, cerradaEn, nota) => A.falla('cerrar', { id, cerradaEn, nota }),
@@ -4573,7 +4763,9 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
   const imp = f.impacto || {};
   const fin = activa ? now : f.cerradaEn;
   const [verHist, setVerHist] = useState(false);
+  const [enviarSms, setEnviarSms] = useState(false);
   const sms = useSms(f.id);
+  const ultSms = (f.sms || [])[(f.sms || []).length - 1];
   return html`<article class="panel falla-card" data-s=${f.estado}>
     <div class="falla-card-cab">
       <div><span class="id numero-falla">${U.numeroFalla(f)}</span><h3>${nombreMotivo(f)}</h3></div>
@@ -4597,28 +4789,151 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
       ${f.referencia && html`<dt>Referencia</dt><dd>${f.referencia}</dd>`}
       ${f.detalle && html`<dt>Notas</dt><dd>${f.detalle}</dd>`}
       ${f.notaCierre && html`<dt>Cierre</dt><dd>${f.notaCierre}</dd>`}
+      ${ultSms && html`<dt>SMS</dt><dd>${lineaSms(ultSms, now)}${f.sms.length > 1 ? ' (' + f.sms.length + ' envíos)' : ''}</dd>`}
     </dl>
     <div class="acc">
       ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />${Model.esPosible(f) ? 'Descartar' : 'Cerrar falla'}</button>`}
       ${activa && onEditar && html`<button class="btn btn-borde btn-chico" onClick=${() => onEditar(f)}><${Ico} n="lapiz" s=${15} />Editar</button>`}
       ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + U.numeroFalla(f) + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
-      <button class="btn btn-borde btn-chico sms" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Teléfonos para SMS'}</button>
+      ${(activa || Model.visible(f, now)) && html`<button class="btn btn-borde btn-chico enviar-sms" onClick=${() => setEnviarSms(true)}><${Ico} n="telefono" s=${15} />${activa ? 'Enviar SMS' : 'SMS de restablecido'}</button>`}
+      <button class="btn btn-borde btn-chico sms" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Descargar celulares'}</button>
       <button class="btn btn-fantasma btn-chico" onClick=${() => setVerHist(true)}>Historial de cambios</button>
     </div>
     ${sms.r && html`<${ResumenSms} r=${sms.r} />`}
     ${verHist && html`<${ModalHistorialFalla} f=${f} onCerrar=${() => setVerHist(false)} />`}
+    ${enviarSms && html`<${ModalSms} f=${f} onCerrar=${() => setEnviarSms(false)} />`}
   </article>`;
 }
 
-const ACCION = { PUBLICADA: 'Publicó', EDITADA: 'Editó', CERRADA: 'Cerró', REABIERTA: 'Reabrió' };
+const ACCION = { PUBLICADA: 'Publicó', EDITADA: 'Editó', CERRADA: 'Cerró', REABIERTA: 'Reabrió', SMS: 'Envió SMS de' };
+const verboAccion = (a) => (ACCION[a] || a).replace(/^./, (c) => c.toLowerCase());
 function ModalHistorialFalla({ f, onCerrar }) {
   const now = G.s.now;
   return html`<${Modal} titulo=${'Historial de ' + U.numeroFalla(f)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3)} onCerrar=${onCerrar}
       pie=${html`<button class="btn btn-primario" onClick=${onCerrar}>Listo</button>`}>
     <ul class="bitacora">${f.historial.slice().reverse().map((h, k) => html`<li key=${k}>
       <span class="cuando">${U.dia(h.en)}, ${U.hora(h.en)}</span>
-      <span><b>${h.por.nombre}</b> ${(ACCION[h.accion] || h.accion).toLowerCase()} la falla${h.detalle ? ': ' + h.detalle : ''}.</span>
+      <span><b>${h.por.nombre}</b> ${verboAccion(h.accion)} la falla${h.detalle ? ': ' + h.detalle : ''}.</span>
     </li>`)}</ul>
+  </${Modal}>`;
+}
+
+/* ---------- Enviar SMS a los clientes de la falla (Notifícame) ----------
+   El servidor arma la lista de celulares (uno por cliente, sin repetir), anota cada número antes de
+   mandarlo y no le repite el aviso a quien ya lo recibió. La página nunca ve los números: solo cuántos
+   son y cómo va el envío. Con la falla activa va el aviso de falla; cerrada, el de servicio restablecido. */
+const TIPO_SMS = { FALLA: 'Aviso de falla', RESTABLECIDO: 'Servicio restablecido' };
+const extraSms = (x) => [x.errores ? U.n(x.errores) + ' con error' : '', x.dudosos ? U.n(x.dudosos) + ' en duda' : ''].filter(Boolean).join(', ');
+const lineaSms = (x, now) => TIPO_SMS[x.tipo] + ' a ' + U.n(x.enviados) + ' ' + U.plural(x.enviados, 'cliente', 'clientes')
+  + (extraSms(x) ? ' (' + extraSms(x) + ')' : '') + ', ' + x.por + ', ' + U.cuandoCorto(x.en, now);
+const normalSms = (t) => String(t || '').replace(/ /g, ' ').replace(/[ \t]+/g, ' ').trim();
+function ModalSms({ f, onCerrar }) {
+  const s = useG();
+  const now = s.now;
+  const tipoLocal = f.estado === 'ACTIVA' ? 'FALLA' : 'RESTABLECIDO';
+  const [texto, setTexto] = useState(() => Model.textoSms(f, tipoLocal, now));
+  const [editado, setEditado] = useState(false);
+  const [res, setRes] = useState(null);
+  const [errorRes, setErrorRes] = useState(null);
+  const [fase, setFase] = useState('listo');          // listo, confirmar, enviando, fin
+  const [av, setAv] = useState(null);
+  const [error, setError] = useState(null);
+  const [conDuda, setConDuda] = useState(false);       // reenviar también a los que quedaron en duda (a propósito)
+  const detener = useRef(false);
+  const contar = () => A.smsResumen(f.id).then((r) => { setRes(r); setErrorRes(null); return r; }, (e) => { setErrorRes(e.message); return null; });
+  useEffect(() => {
+    contar().then((r) => {
+      if (!r) return;
+      // Un envío mío que quedó sin terminar (se cerró la página): se sigue con el mismo mensaje
+      if (r.enCurso && r.enCurso.mio && !r.enCurso.libre && r.enCurso.tipo === r.tipo && r.enCurso.mensaje) setTexto(r.enCurso.mensaje);
+      else if (r.tipo !== tipoLocal) setTexto(Model.textoSms(f, r.tipo, Date.now()));
+    });
+  }, []);
+  const tipo = res ? res.tipo : tipoLocal;
+  const p = U.partesSms(texto);
+  const largo = texto.trim().length > 459;
+  const enCurso = res && res.enCurso;
+  const mioSigue = !!enCurso && enCurso.mio && !enCurso.libre && enCurso.tipo === tipo;
+  const otroEnvia = !!enCurso && !enCurso.mio && !enCurso.libre;
+  const duda = res && conDuda ? res.enDuda : 0;
+  const sigueIgual = mioSigue && !duda && normalSms(texto) === enCurso.mensaje;
+  const faltan = res ? res.faltan : 0;
+  const aMandar = !res ? 0 : sigueIgual ? enCurso.total - enCurso.siguiente : Math.min(faltan + duda, res.quedanHoy);
+  const puede = res && res.configurado && res.puede && !otroEnvia && aMandar > 0 && texto.trim() && !largo;
+  async function enviar() {
+    detener.current = false; setError(null); setAv(null); setFase('enviando');
+    try {
+      const r = await A.enviarSms(f.id, tipo, texto.trim(), setAv, () => detener.current, duda > 0);
+      setAv(r);
+      tostada(r.nada ? (r.paraManana ? 'Ya se usó el límite de SMS de hoy' : 'Todos ya tenían este aviso') : U.n(r.enviados) + ' SMS enviados');
+    } catch (e) { setAv(e.avance || null); setError(e.message); }
+    setConDuda(false);
+    setRes(null);          // se vuelve a contar: el número de arriba ya no es el de antes de enviar
+    setFase('fin');
+    contar();
+  }
+  const cerrar = () => { if (fase === 'enviando') { detener.current = true; setAv(Object.assign({}, av)); return; } onCerrar(); };
+  const pct = av && av.total ? Math.round((av.siguiente / av.total) * 100) : 0;
+  const seguirLabel = sigueIgual ? 'Seguir enviando a ' + U.n(aMandar) : 'Enviar a ' + U.n(aMandar) + ' ' + U.plural(aMandar, 'cliente', 'clientes');
+  const pie = fase === 'enviando'
+    ? html`<span class="sms-progreso-txt">${detener.current ? 'Deteniendo…' : av && av.aviso ? av.aviso : 'Enviando ' + U.n(av ? av.siguiente : 0) + ' de ' + U.n(av ? av.total : aMandar) + '…'}</span><span class="pie-espacio"></span>
+        <button class="btn btn-borde" disabled=${detener.current} onClick=${cerrar}>Detener</button>`
+    : fase === 'confirmar'
+      ? html`<span class="sms-confirmar">Se enviará ahora a ${U.n(aMandar)} ${U.plural(aMandar, 'cliente', 'clientes')}${duda ? ', con ' + U.n(duda) + ' en duda' : ''}${p.partes > 1 ? ' (' + U.n(aMandar * p.partes) + ' SMS en total)' : ''}. No se puede deshacer.</span><span class="pie-espacio"></span>
+          <button class="btn btn-borde" onClick=${() => setFase('listo')}>Revisar</button><button class="btn btn-primario" onClick=${enviar}>Sí, enviar</button>`
+      : fase === 'fin'
+        ? html`<span class="pie-espacio"></span>${puede && html`<button class="btn btn-borde" onClick=${() => setFase('confirmar')}>${av && av.errores && !av.detenido && !error ? 'Reintentar los que fallaron' : 'Seguir enviando'}</button>`}
+            <button class="btn btn-primario" onClick=${onCerrar}>Listo</button>`
+        : html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><span class="pie-espacio"></span>
+            <button class="btn btn-primario" disabled=${!puede} onClick=${() => setFase('confirmar')}><${Ico} n="telefono" s=${16} />${res ? seguirLabel : 'Contando…'}</button>`;
+  const aviso = (icono, txt) => html`<div class="aviso-linea"><${Ico} n=${icono} s=${16} /><span>${txt}</span></div>`;
+  return html`<${Modal} titulo=${'Enviar SMS · ' + U.numeroFalla(f)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3) + '.'} onCerrar=${cerrar} pie=${pie} ancho=${640}>
+    <div class="sms-modal">
+      ${errorRes ? aviso('alerta', errorRes)
+        : !res ? html`<p class="sub">Contando los clientes de la falla con celular…</p>`
+        : html`<div class="sms-cifras">
+            <div class="sms-cifra"><b class="num">${U.n(aMandar)}</b><span>${aMandar ? U.plural(aMandar, 'cliente recibe', 'clientes reciben') + ' este SMS'
+              : faltan === 0 ? (res.enDuda ? 'No falta nadie' : 'Ya les llegó a todos') : !res.quedanHoy ? 'Se llegó al límite de hoy' : 'Nadie por ahora'}</span></div>
+            <p class="sub">De ${U.n(res.clientes)} ${U.plural(res.clientes, 'cliente', 'clientes')} de la falla, ${U.n(res.celulares)} ${U.plural(res.celulares, 'tiene', 'tienen')} celular${res.soloFijo ? ', ' + U.n(res.soloFijo) + ' solo fijo' : ''}${res.sinTelefono ? ' y ' + U.n(res.sinTelefono) + ' sin teléfono' : ''}.
+              ${res.ya ? ' A ' + U.n(res.ya) + ' ya les llegó este aviso: no se les repite.' : ''}</p>
+          </div>
+          ${!res.configurado && aviso('alerta', 'Falta conectar Notifícame. La cuenta dueña lo hace en la base interna: menú Alertas > 4. Conectar Notifícame (SMS).')}
+          ${!res.puede && aviso('info', 'La posible falla se descartó: no hay servicio restablecido que avisar.')}
+          ${otroEnvia && aviso('info', enCurso.por + ' está enviando SMS de esta falla en este momento (van ' + U.n(enCurso.siguiente) + ' de ' + U.n(enCurso.total) + '). Cuando termine, aquí verás a quiénes les falta.')}
+          ${enCurso && !enCurso.mio && enCurso.libre && aviso('info', enCurso.por + ' empezó un envío que quedó sin terminar. Si envías ahora, ese se cierra y se manda solo a quienes falten.')}
+          ${mioSigue && fase !== 'fin' && aviso('info', sigueIgual
+            ? 'Tienes un envío de esta falla sin terminar: van ' + U.n(enCurso.siguiente) + ' de ' + U.n(enCurso.total) + '. Sigue con el mismo mensaje; no se le repite a nadie.'
+            : duda ? 'Para incluir a los que quedaron en duda, el envío que tenías sin terminar se cierra y el nuevo va a quienes falten.'
+            : 'Cambiaste el mensaje: el envío que tenías sin terminar se cierra y el nuevo va a quienes falten.')}
+          ${res.enDuda > 0 && html`<div class="aviso-linea"><${Ico} n="info" s=${16} /><span>A ${U.n(res.enDuda)} no se sabe si les llegó: Notifícame no respondió a tiempo. No se les reenvía, para no repetir; se puede revisar en los reportes de Notifícame.
+            ${res.configurado && res.puede && !otroEnvia && html`<label class="sms-duda"><input type="checkbox" checked=${conDuda} disabled=${fase === 'enviando'} onChange=${(e) => { setConDuda(e.currentTarget.checked); if (fase === 'confirmar') setFase('listo'); }} />
+              Mandarles también a ellos (a algunos les puede llegar dos veces)</label>`}</span></div>`}
+          ${res.configurado && res.puede && !sigueIgual && faltan > res.quedanHoy && aviso('alerta', res.quedanHoy
+            ? 'Hoy quedan ' + U.n(res.quedanHoy) + ' SMS del límite diario de Alertas: se manda a esos y los otros ' + U.n(faltan - res.quedanHoy) + ' mañana.'
+            : 'Ya se usó el límite diario de SMS de Alertas. Los ' + U.n(faltan) + ' que faltan se pueden mandar mañana.')}
+          ${res.demo && html`<p class="nota-sms"><${Ico} n="info" s=${16} /><span>Demostración: no se envía ningún SMS de verdad.</span></p>`}`}
+      <label class="campo"><span>Mensaje · ${TIPO_SMS[tipo]}</span>
+        <textarea class="input sms-texto" rows="4" maxlength="600" value=${texto} disabled=${fase === 'enviando'}
+          onInput=${(e) => { setTexto(e.currentTarget.value); setEditado(true); if (fase !== 'listo' && fase !== 'fin') setFase('listo'); }}></textarea></label>
+      <div class="sms-contador" data-aviso=${!p.gsm || p.partes > 1 || largo ? 'si' : 'no'}>
+        <span>${U.n(p.caracteres)} ${U.plural(p.caracteres, 'carácter', 'caracteres')} · ${p.partes === 1 ? '1 SMS por cliente' : p.partes + ' SMS por cliente'}${largo ? ' · demasiado largo (máximo 459)' : ''}</span>
+        ${editado && fase !== 'enviando' && html`<button type="button" class="ver-tabla" onClick=${() => { setTexto(Model.textoSms(f, tipo, now)); setEditado(false); }}>Volver al mensaje sugerido</button>`}
+      </div>
+      ${!p.gsm && fase !== 'enviando' && html`<div class="aviso-linea"><${Ico} n="info" s=${16} /><span>Tiene ${p.raros.map((c) => (c === ' ' ? 'espacio especial' : c)).join(' ')}: con eso cada SMS admite 70 caracteres en vez de 160.
+        <button type="button" onClick=${() => { setTexto(U.sinTildesSms(texto)); setEditado(true); }}>Quitar tildes</button></span></div>`}
+      ${(fase === 'enviando' || fase === 'fin') && av && !av.nada && html`<div class="sms-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow=${pct}><i style=${'width:' + pct + '%'}></i></div>`}
+      ${fase === 'fin' && html`<div class=${'sms-resultado' + (error ? ' con-error' : '')}>
+        ${av && av.nada ? html`<b>${av.paraManana ? 'Ya se usó el límite diario de SMS.' : 'A todos ya les había llegado este aviso.'}</b>${av.paraManana ? html`<span>Los ${U.n(av.paraManana)} que faltan se pueden mandar mañana.</span>` : null}`
+          : html`<b>${U.n(av ? av.enviados : 0)} SMS ${U.plural(av ? av.enviados : 0, 'enviado', 'enviados')}</b>
+            ${av && av.errores ? html`<span>${U.n(av.errores)} no ${U.plural(av.errores, 'salió', 'salieron')}${av.error ? ': ' + av.error : ''}. Se pueden reintentar.</span>` : null}
+            ${av && av.dudosos ? html`<span>${U.n(av.dudosos)} en duda: Notifícame no respondió a tiempo y no se sabe si ${U.plural(av.dudosos, 'salió', 'salieron')}. No se les reenvía, para no repetir.</span>` : null}
+            ${av && av.paraManana ? html`<span>${U.n(av.paraManana)} quedan para mañana por el límite diario.</span>` : null}
+            ${av && av.detenido && !error ? html`<span>Se detuvo antes de terminar: faltan ${U.n(av.total - av.siguiente)}. Puedes seguir después; no se le repite a nadie.</span>` : null}
+            ${error && html`<span>Se detuvo: ${error}</span>`}`}
+      </div>`}
+      ${res && res.envios.length > 0 && html`<div class="sms-envios"><div class="sub">Envíos anteriores de esta falla</div>
+        <ul>${res.envios.slice(-3).reverse().map((x, k) => html`<li key=${k}>${lineaSms(x, now)}</li>`)}</ul></div>`}
+    </div>
   </${Modal}>`;
 }
 
@@ -5030,7 +5345,7 @@ function calcular(s, c, desde, per) {
     if (h.accion === 'PUBLICADA') { e.publicadas++; e.clientes += f.impacto.total || 0; e.tPub.push(Math.max(0, f.publicadaEn - f.inicio)); }
     if (h.accion === 'CERRADA') { e.cerradas++; if (f.cerradaEn) e.dur.push(f.cerradaEn - f.inicio); }
     if (h.accion === 'EDITADA' || h.accion === 'REABIERTA') e.ediciones++;
-    bitacora.push({ en: h.en, quien: h.por.nombre, texto: (ACCION[h.accion] || h.accion).toLowerCase() + ' la falla ' + U.numeroFalla(f) + (h.detalle ? ': ' + h.detalle : '') });
+    bitacora.push({ en: h.en, quien: h.por.nombre, texto: verboAccion(h.accion) + ' la falla ' + U.numeroFalla(f) + (h.detalle ? ': ' + h.detalle : '') });
   }));
   (s.cargas || []).forEach((b) => { if (b.en >= desde) bitacora.push({ en: b.en, quien: b.por.nombre, texto: 'subió la base de clientes (' + U.n(b.filas) + ' servicios)' }); });
   bitacora.sort((a, b) => b.en - a.en);

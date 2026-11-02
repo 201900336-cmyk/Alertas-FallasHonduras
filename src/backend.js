@@ -32,7 +32,8 @@ function BackendRemoto() {
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
-        if (!REINTENTABLES[accion] || !e.reintentar || intento >= 2) throw e;
+        const lectura = REINTENTABLES[accion] || (accion === 'sms' && datos && datos.op === 'resumen');
+        if (!lectura || !e.reintentar || intento >= 2) throw e;
         await esperar((intento ? 2000 : 800) * (1 + Math.random() * 0.5));
       }
     }
@@ -142,6 +143,7 @@ function BackendRemoto() {
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
+    sms: (d) => llamar('sms', d, d.op === 'lote' ? 200000 : 120000),
 
     /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
@@ -222,6 +224,7 @@ function BackendLocal() {
     return cache;
   }
   const quien = () => ({ u: ses.usuario.u, nombre: ses.usuario.nombre });
+  const smsDemo = { envios: new Map(), estados: new Map() };   // envíos en curso por falla; estado de cada contrato por falla y aviso
   /* Posibles fallas marcadas como reportadas (en la demostración, solo en esta PC); duran 6 horas */
   const marcasDemo = () => {
     const m = leerLS('alertas-demo-reportadas', {}), corte = Date.now() - 6 * U.HORA;
@@ -336,7 +339,7 @@ function BackendLocal() {
       const fallas = await Store.leerFallas();
       const logs = await Store.leerLogs(Date.now() - CONFIG.alerta.minutos * U.MIN);
       const marcas = marcasDemo();
-      const lista = Model.alertas(logs, Model.mapaFallas(fallas, Date.now()), Date.now(), {})
+      const lista = Model.alertas(logs, Model.mapaFallas(fallas, Date.now()), Date.now(), {}, Model.cierresPorNodo(fallas))
         .map((a) => Object.assign({ nodo: a.nodo, nivel: a.nivel, nClientes: a.nClientes, reportes: a.reportes, consultas: a.consultas, primero: a.primero, ultimo: a.ultimo },
           marcas[a.nodo] ? { reportada: marcas[a.nodo] } : {}));
       const um = CONFIG.alerta;
@@ -348,7 +351,7 @@ function BackendLocal() {
       const ahora = Date.now();
       const fallas = await Store.leerFallas();
       // Solo lo que llegó después de cerrar la última falla del nodo (resuelta o descartada)
-      const cierre = Math.max(0, ...fallas.filter((f) => f.cerradaEn && f.nodos.includes(nodo)).map((f) => f.cerradaEn));
+      const cierre = Model.cierresPorNodo(fallas).get(nodo) || 0;
       const logs = (await Store.leerLogs(ahora - CONFIG.alerta.minutos * U.MIN))
         .filter((l) => l.n === nodo && l.t > cierre && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
         .sort((a, b) => a.t - b.t);
@@ -390,6 +393,83 @@ function BackendLocal() {
 
     async telefonos() {
       throw errorAlertas('DEMO', 'En la demostración no hay teléfonos de clientes. Esta descarga funciona con la base real.');
+    },
+
+    /* SMS en la demostración: no sale ningún SMS. Se simula con los clientes de la base ficticia (la
+       mayoría con celular; algunos solo con fijo o sin teléfono), unos pocos números que fallan y otros
+       que quedan en duda, con el mismo protocolo que el servidor (iniciar, lote con paso, terminar). */
+    async sms(d) {
+      const fallas = await Store.leerFallas();
+      const f = fallas.find((x) => x.id === d.id);
+      if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
+      const tipo = f.estado === 'ACTIVA' ? 'FALLA' : 'RESTABLECIDO';
+      const clave = f.id + '|' + tipo;
+      const estados = smsDemo.estados.get(clave) || new Map();      // contrato → último estado
+      smsDemo.estados.set(clave, estados);
+      const avance = (m) => ({ envio: m.envio, pasos: m.pasos, siguiente: m.siguiente, total: m.total, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, error: m.error });
+      const cerrar = async (m, nota) => {
+        m.lista.slice(m.siguiente).forEach((k) => { if (estados.get(k) === 'Pendiente') estados.set(k, 'Cancelado'); });
+        smsDemo.envios.delete(m.falla);
+        if (!(m.enviados || m.errores || m.dudosos)) return null;
+        const ahora = Date.now();
+        const extra = [m.errores ? m.errores + ' con error' : '', m.dudosos ? m.dudosos + ' en duda' : ''].filter(Boolean);
+        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total, por: m.por.nombre, en: ahora }]);
+        f.historial.push({ accion: 'SMS', en: ahora, por: m.por, detalle: (m.tipo === 'RESTABLECIDO' ? 'Servicio restablecido' : 'Aviso de falla') + ' a ' + m.enviados
+          + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '') + (nota ? '; ' + nota : '') });
+        await Store.guardarFallas(fallas);
+        return f;
+      };
+      const m = smsDemo.envios.get(f.id);
+      if (d.op === 'resumen' || d.op === 'iniciar') {
+        const c = await indice();
+        const contratos = [...new Set(Model.filasDeNodos(c.ix, f.nodos).map((i) => String(Model.registro(c.ix, i).contrato)))];
+        const tel = (k) => (Number(k) % 17 ? 'cel' : Number(k) % 2 ? 'fijo' : '');
+        const cel = contratos.filter((k) => tel(k) === 'cel');
+        let ya = 0, enDuda = 0;
+        cel.forEach((k) => { const e = estados.get(k); if (e === 'Enviado') ya++; else if (e === 'Dudoso') enDuda++; });
+        if (d.op === 'resumen') {
+          return { configurado: true, demo: true, tipo, puede: tipo === 'FALLA' || !Model.descartada(f), clientes: contratos.length, celulares: cel.length, conCelular: cel.length,
+            soloFijo: contratos.filter((k) => tel(k) === 'fijo').length, sinTelefono: contratos.filter((k) => !tel(k)).length,
+            ya, enDuda, faltan: cel.length - ya - enDuda, quedanHoy: 15000, envios: f.sms || [],
+            enCurso: m ? { por: m.por.nombre, mio: true, tipo: m.tipo, mensaje: m.mensaje, total: m.total, siguiente: m.siguiente, enviados: m.enviados, libre: false } : null };
+        }
+        if (d.tipo != null && d.tipo !== tipo) throw errorAlertas('DATOS', tipo === 'FALLA' ? 'La falla sigue activa: el aviso que corresponde es el de falla.' : 'La falla ya se cerró: el aviso que corresponde es el de servicio restablecido.');
+        if (tipo === 'RESTABLECIDO' && Model.descartada(f)) throw errorAlertas('DATOS', 'La posible falla se descartó: no hay servicio restablecido que avisar.');
+        const mensaje = String(d.mensaje || '').replace(/ /g, ' ').replace(/[ \t]+/g, ' ').trim();
+        if (!mensaje) throw errorAlertas('DATOS', 'Escribe el mensaje.');
+        if (mensaje.length > 459) throw errorAlertas('DATOS', 'El mensaje es muy largo: máximo 459 caracteres.');
+        if (m && m.tipo === tipo && m.mensaje === mensaje && d.dudosos !== true) return Object.assign(avance(m), { reanudado: true });
+        if (m) await cerrar(m, 'se detuvo antes de terminar');
+        const lista = cel.filter((k) => !['Enviado', 'Dudoso', 'Pendiente'].includes(estados.get(k)) || (d.dudosos === true && estados.get(k) === 'Dudoso'));
+        const extra = { ya, enDuda, quedanHoy: 15000, paraManana: 0 };
+        if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '' }, extra);
+        lista.forEach((k) => estados.set(k, 'Pendiente'));
+        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, lista, total: lista.length, siguiente: 0, pasos: 0,
+          enviados: 0, errores: 0, dudosos: 0, error: '', por: quien(), conDuda: d.dudosos === true };
+        smsDemo.envios.set(f.id, nuevo);
+        return Object.assign(avance(nuevo), extra);
+      }
+      if (!m || m.envio !== d.envio) {
+        if (d.op === 'terminar') return { terminado: true, falla: null };
+        throw errorAlertas('DATOS', 'Este envío ya terminó o lo reemplazó otro. Abre otra vez Enviar SMS: solo se manda a quienes falten.');
+      }
+      if (d.op === 'lote') {
+        if (d.paso !== m.pasos || m.siguiente >= m.total) return avance(m);
+        await esperar(350);
+        m.lista.slice(m.siguiente, m.siguiente + 50).forEach((k) => {
+          if (Number(k) % 89 === 0) { m.errores++; estados.set(k, 'Error'); if (!m.error) m.error = 'Número no válido'; }
+          else if (Number(k) % 97 === 0 && estados.get(k) !== 'Dudoso' && !m.conDuda) { m.dudosos++; estados.set(k, 'Dudoso'); }
+          else { m.enviados++; estados.set(k, 'Enviado'); }
+          m.siguiente++;
+        });
+        m.pasos++;
+        return avance(m);
+      }
+      if (d.op === 'terminar') {
+        const falla = await cerrar(m, m.siguiente < m.total ? 'se detuvo antes de terminar' : '');
+        return Object.assign(avance(m), { terminado: true, falla });
+      }
+      throw errorAlertas('DATOS', 'Operación no válida.');
     },
 
     async estadisticas({ desde, porHora }) {

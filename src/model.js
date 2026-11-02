@@ -381,7 +381,18 @@ const Model = (() => {
   /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
   const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal]);
   const esInterno = (canal) => INTERNOS.has(canal);
-  function alertas(logs, mf, now, descartadas) {
+  /* Nodo -> cuándo se registró el cierre de su última falla (resuelta o descartada): lo de antes ya lo explicó esa falla */
+  const cierreDe = (f) => (f.historial || []).reduce((t, h) => (h.accion === 'CERRADA' && h.en > t ? h.en : t), f.cerradaEn || 0);
+  function cierresPorNodo(fallas) {
+    const m = new Map();
+    (fallas || []).forEach((f) => {
+      if (f.estado === 'ACTIVA' || !f.cerradaEn) return;
+      const t = cierreDe(f);
+      f.nodos.forEach((n) => { if (!(m.get(n) >= t)) m.set(n, t); });
+    });
+    return m;
+  }
+  function alertas(logs, mf, now, descartadas, cierres) {
     const desde = now - CONFIG.alerta.minutos * U.MIN;
     const por = new Map();
     for (const l of logs) {
@@ -390,7 +401,8 @@ const Model = (() => {
       const lst = mf.porNodo.get(l.n);
       if (lst && lst.some((f) => f.estado === 'ACTIVA')) continue;
       // Lo de antes de cerrar su última falla (resuelta o descartada) ya quedó explicado por esa falla
-      if (lst && lst.some((f) => f.cerradaEn && l.t <= f.cerradaEn)) continue;
+      const cierre = cierres && cierres.get(l.n);
+      if (cierre && l.t <= cierre) continue;
       const desc = descartadas && descartadas[l.n];
       if (desc && l.t <= desc) continue;
       let e = por.get(l.n);
@@ -462,6 +474,13 @@ const Model = (() => {
       cerrada: f && f.cerradaEn ? (U.esHoy(f.cerradaEn, now) ? 'hoy a ' : '') + momento(f.cerradaEn) : ''
     };
     return plantilla.replace(/\{(\w+)\}/g, (m, k) => (k in datos ? datos[k] : m)).replace(/\.\./g, '.');
+  }
+
+  /* Mensaje de SMS para los clientes de una falla (plantillas en CONFIG.sms). tipo: FALLA o RESTABLECIDO */
+  function textoSms(f, tipo, now) {
+    const clave = tipo === 'RESTABLECIDO' ? 'RESTABLECIDO' : esPosible(f) ? 'POSIBLE' : 'FALLA';
+    const eta = f.eta && f.eta > now ? ' antes de ' + (U.esHoy(f.eta, now) ? '' : U.diaRel(f.eta, now) + ' a ') + U.las(f.eta) : '';
+    return U.sinTildesSms(CONFIG.sms[clave].replace('{eta}', eta));
   }
 
   /* ---------- Correo para reportar una posible falla (al VOC o al personal interno) ----------
@@ -559,6 +578,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, textoSms, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

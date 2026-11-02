@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '2.5',                // se ve en la pestaña INICIO
+  VERSION: '2.6',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 36,             // una falla cerrada sigue visible para los asesores
@@ -46,8 +46,17 @@ const ALERTAS = {
   // Posible falla: 5 clientes distintos de un nodo sin falla publicada en 60 min (o 2 reportes de asesores).
   // Con 3 o 4 el nodo queda en observación. La marca de "reportada" dura 6 horas.
   ALERTA_MIN: 60, ALERTA_CLIENTES: 5, ALERTA_OBSERVAR: 3, ALERTA_REPORTES: 2, ALERTA_MARCA_HORAS: 6, ALERTA_MAX_CLIENTES: 60,
+  // SMS por Notifícame (la plataforma de SMS de Claro). La llave y el secreto viven en Propiedades del script:
+  // menú Alertas > 4. Conectar Notifícame. Un SMS por número; se mandan de 50 en 50, en paralelo.
+  NOTIFICAME_URL: 'https://notificame.claro.com.hn/v4/api/rest/',
+  SMS_LOTE: 50,
+  SMS_MAX: 459,                  // caracteres de un mensaje (3 partes de SMS)
+  // Cada SMS es una llamada de Google a otro servicio: con una cuenta de Gmail son unas 20 mil al día en total,
+  // y el ingreso con Genesys también usa (2 por ingreso). Con Google Workspace (100 mil al día) se puede subir.
+  SMS_POR_DIA: 15000,
+  DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', tiendas: 'Tiendas' },
+  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura' },
   ESCRIBEN: ['workforce', 'jefatura'],
   REGIONES: {
@@ -80,6 +89,7 @@ const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo',
 const COL_RESUMEN = ['Día', 'Consultas', 'Con falla', 'Sin resultado', 'Reportes', 'Datos (no editar)'];
 const COL_RESUMEN_AS = ['Día', 'Usuario', 'Nombre', 'Canal', 'Consultas', 'Con falla', 'Sin resultado'];
 const COL_DESCARGAS = ['Fecha', 'Usuario', 'Nombre', 'Fallas', 'Nodos', 'Clientes', 'Números en el archivo'];
+const COL_ENVIOS = ['Fecha', 'Falla', 'ID de Alertas', 'Tipo', 'Teléfono', 'Estado', 'Detalle', 'Envío', 'Envió'];
 const COL_TIENDAS = ['Tienda (una por fila: así aparece en la lista al entrar)'];
 /* Tiendas con las que se crea la hoja Tiendas. Después se agregan o quitan en la hoja, sin tocar el código. */
 const TIENDAS_INICIALES = [
@@ -95,10 +105,10 @@ const TIENDAS_INICIALES = [
 const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
-  telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_
+  telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_
 };
 const PUBLICAS = { config: true, login: true };
-const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, alerta: true, estadisticas: true, telefonos: true };
+const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, alerta: true, estadisticas: true, telefonos: true, sms: true };
 
 /* ============================================================================
  *  Entrada de la aplicación web
@@ -632,7 +642,7 @@ function filaAFalla_(f, n) {
     inicio: d.inicio || 0, eta: d.eta || null, publicadaEn: d.publicadaEn || 0, publicadaPor: d.publicadaPor || { u: '', nombre: String(f[9] || '') },
     cerradaEn: d.cerradaEn || null, cerradaPor: d.cerradaPor || null, notaCierre: String(f[12] || ''), referencia: String(f[13] || ''),
     detalle: String(f[14] || ''), impacto: d.impacto || { total: Number(f[15]) || 0, hfc: Number(f[16]) || 0, gpon: Number(f[17]) || 0, corp: 0, deps: [], munis: [] },
-    numero: String(f[19] == null ? '' : f[19]), historial: d.historial || [], deteccion: d.deteccion || null, _fila: n
+    numero: String(f[19] == null ? '' : f[19]), historial: d.historial || [], deteccion: d.deteccion || null, sms: d.sms || [], _fila: n
   };
 }
 /* Una posible falla (VALIDACION) que se cerró sin confirmarla: el VOC no encontró falla */
@@ -644,7 +654,8 @@ function fallaAFila_(f) {
     fecha(f.cerradaEn), f.cerradaPor ? f.cerradaPor.nombre : '', f.notaCierre, f.referencia, f.detalle,
     f.impacto.total, f.impacto.hfc, f.impacto.gpon,
     JSON.stringify({ estado: f.estado, motivo: f.motivo, nodos: f.nodos, inicio: f.inicio, eta: f.eta, publicadaEn: f.publicadaEn,
-      publicadaPor: f.publicadaPor, cerradaEn: f.cerradaEn, cerradaPor: f.cerradaPor, impacto: f.impacto, historial: f.historial, deteccion: f.deteccion || null }),
+      publicadaPor: f.publicadaPor, cerradaEn: f.cerradaEn, cerradaPor: f.cerradaPor, impacto: f.impacto, historial: f.historial, deteccion: f.deteccion || null,
+      sms: f.sms && f.sms.length ? f.sms : undefined }),
     f.numero || ''];
 }
 /* La columna "Número de falla" se agregó después: si la hoja Fallas no la tiene, se le pone al final */
@@ -1154,7 +1165,507 @@ function accionTelefonos_(d, ses) {
   if (!fallas.length) throw fallo_('DATOS', id === 'activas' ? 'No hay fallas activas.' : 'No encontré la falla ' + idFalla_(id) + '.');
   const nodos = {};
   fallas.forEach((f) => f.nodos.forEach((n) => { nodos[n] = true; }));
+  const cel = celularesDe_(nodos);
+  const numeros = cel.numeros, clientes = cel.clientes, conCelular = cel.conCelular, soloFijo = cel.soloFijo, sinTelefono = cel.sinTelefono;
 
+  const ids = fallas.map(nombreFalla_);
+  const listaNodos = Object.keys(nodos);
+  try {
+    const hd = hojaEn_(libro_(), ALERTAS.HOJAS.descargas, COL_DESCARGAS);
+    hd.appendRow([new Date(), ses.u, ses.n, ids.join(', ').slice(0, 300), listaNodos.join(', ').slice(0, 500), clientes, numeros.length]);
+  } catch (e) { console.error('No se pudo anotar la descarga: ' + (e && e.message)); }
+
+  const cuando = Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyy-MM-dd_HHmm');
+  const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + nombreFalla_(fallas[0]) + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
+  return {
+    archivo: nombre.replace(/[^A-Za-z0-9_\-]/g, '') + '.csv', fallas: ids, nodos: listaNodos.length,
+    clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono, telefonos: numeros
+  };
+}
+
+/* ============================================================================
+ *  SMS a los clientes de una falla, con Notifícame (la plataforma de SMS de Claro)
+ *
+ *  La llave (API key) y el secreto (API secret) se guardan en Propiedades del script con el
+ *  menú Alertas > 4. Conectar Notifícame: nunca llegan a la página ni a GitHub. Cada pedido va
+ *  firmado como pide la documentación del API REST v4 (y sus SDK):
+ *    firma = BASE64(HMAC-SHA1(secreto, llave + fecha + parámetros + cuerpo JSON))
+ *    encabezados: Date (RFC 1123) y Authorization: IM <llave>:<firma>
+ *  Se manda un SMS por número (messages/send_to_contact), de 50 en 50 y en paralelo. La página
+ *  maneja el avance pidiendo lote por lote; los números nunca salen del servidor.
+ *  Cada número enviado queda en la pestaña "Envíos SMS" (40 días): así no se le repite el mismo
+ *  aviso a nadie, aunque a la falla le agreguen nodos o se corte el envío a medias.
+ * ========================================================================== */
+const TIPOS_SMS = { FALLA: 'Aviso de falla', RESTABLECIDO: 'Servicio restablecido' };
+/* Estado de cada número en la pestaña "Envíos SMS" (una fila por número y envío):
+     Pendiente  apartado en un envío, todavía no se manda
+     Enviando   se está mandando ahora (se marca antes de llamar a Notifícame)
+     Enviado    Notifícame lo aceptó
+     Error      Notifícame lo rechazó (por ejemplo, número no válido): se puede volver a intentar
+     Dudoso     no se sabe si salió (Notifícame no respondió o se cortó): no se le reenvía, para no repetir
+     Cancelado  el envío se detuvo antes de mandarlo: queda para el próximo
+   El estado que vale es el de la última fila del número. */
+const SMS_NO_REPETIR = { Enviado: true, Enviando: true, Dudoso: true, Pendiente: true };
+const VUELO_SMS_MS = 4 * 60000;          // un grupo que lleva más que esto "mandándose" se cortó
+const ENVIO_SMS_VIEJO_MS = 10 * 60000;   // un envío que no avanza en 10 minutos lo puede tomar otra persona
+
+function notificameCfg_() {
+  let c = null;
+  try { c = JSON.parse(props_().getProperty('NOTIFICAME') || 'null'); } catch (e) { c = null; }
+  return c && c.key && c.secret ? { key: c.key, secret: c.secret, url: c.url || ALERTAS.NOTIFICAME_URL } : null;
+}
+function pedidoNotificame_(cfg, metodo, ruta, cuerpo) {
+  const fecha = new Date().toUTCString();                       // "Mon, 02 Nov 2026 20:03:00 GMT"
+  const json = cuerpo ? JSON.stringify(cuerpo) : '';
+  const firma = Utilities.base64Encode(Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_1, cfg.key + fecha + json, cfg.secret, Utilities.Charset.UTF_8));
+  const p = {
+    url: cfg.url + ruta, method: metodo, muteHttpExceptions: true, followRedirects: false,
+    headers: { Date: fecha, Authorization: 'IM ' + cfg.key + ':' + firma, 'X-IM-ORIGIN': 'IM_SDK_JAVASCRIPT_V4' }
+  };
+  if (json) {
+    p.contentType = 'application/json; charset=utf-8';
+    p.payload = Utilities.newBlob('').setDataFromString(json, 'UTF-8').getBytes();   // los mismos bytes que se firmaron
+  }
+  return p;
+}
+function respuestaNotificame_(r) {
+  const codigo = r.getResponseCode();
+  let datos = null;
+  try { datos = JSON.parse(r.getContentText('UTF-8') || 'null'); } catch (e) { datos = null; }
+  return { codigo: codigo, datos: datos };
+}
+function llamarNotificame_(cfg, metodo, ruta, cuerpo) {
+  const p = pedidoNotificame_(cfg, metodo, ruta, cuerpo);
+  const url = p.url;
+  delete p.url;
+  return respuestaNotificame_(UrlFetchApp.fetch(url, p));
+}
+function errorNotificame_(x) {
+  const d = (x && x.datos) || {};
+  if (x.codigo === 429 || Number(d.code) === 42900) return 'Notifícame pidió esperar: demasiados envíos seguidos.';
+  if (x.codigo === 401) return 'Notifícame rechazó la llave o el secreto. Revísalos en la base interna: Alertas > 4. Conectar Notifícame.';
+  const e = d.error && typeof d.error === 'object' ? d.error.message || d.error.description || JSON.stringify(d.error) : d.error;
+  const txt = String(e || d.message || d.mensaje || d.description || '').trim();
+  if (x.codigo === 403) return ('Notifícame no permitió el envío' + (txt ? ': ' + txt : ' (código 403)') + '. Revisa la cuenta de Notifícame.').slice(0, 200);
+  return (txt || 'Notifícame respondió con el código ' + x.codigo).slice(0, 200);
+}
+const idMensaje_ = (d) => String((d && (d.message_id || d.id || (d.data && (d.data.message_id || d.data.id)))) || '');
+// Lo que llega a la página nunca lleva un número de teléfono (tampoco con guiones o espacios: 9999-8888, +504 9999 8888)
+const sinNumeros_ = (t) => String(t || '').replace(/\+?\d(?:[\s-]?\d){6,}/g, '…');
+/* Qué pasó con un SMS según lo que respondió Notifícame. Si no salió por el límite de Notifícame ("espera")
+   o por la llave ("parar"), vuelve a quedar Pendiente. Enviado solo si la respuesta lo confirma: según el SDK
+   de Notifícame, un envío responde con message_id y status (PENDING, PROCESSING, READY, SENT…, o ERROR). */
+const SMS_EN_CAMINO = /^(WAITING_UPLOAD|PENDING|PROCESSING|READY|SENT|UNREAD|READ|REPLIED|FORWARDED|DELIVERED|QUEUED|ACCEPTED|SCHEDULED|SUCCESS|OK|ENVIADO)$/i;
+function clasificarSms_(x) {
+  const d = x.datos;
+  if (x.codigo === 429 || Number(d && d.code) === 42900) return { estado: 'Pendiente', detalle: errorNotificame_(x), espera: true };
+  if (x.codigo === 401 || x.codigo === 403) return { estado: 'Pendiente', detalle: errorNotificame_(x), parar: true };
+  if (x.codigo >= 200 && x.codigo < 300) {
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return { estado: 'Dudoso', detalle: 'Notifícame respondió ' + x.codigo + ' sin datos: no se sabe si salió' };
+    const st = String(d.status || '').trim();
+    const malo = (typeof d.error === 'string' && d.error) || (d.error && typeof d.error === 'object') || (Array.isArray(d.errors) && d.errors.length)
+      || d.success === false || d.ok === false || /^(ERROR|FAIL|FAILED|FAILURE|REJECTED|INVALID|DENIED)/i.test(st) || Number(d.code) >= 40000
+      || (Number(d.error_count) > 0 && Number(d.error_count) >= (Number(d.total_recipients) || 1));
+    if (malo) return { estado: 'Error', detalle: errorNotificame_(x) };
+    const id = idMensaje_(d);
+    const bueno = id || SMS_EN_CAMINO.test(st) || d.success === true || d.ok === true || Number(d.sent_count) > 0 || Number(d.sms_sent) > 0;
+    return bueno ? { estado: 'Enviado', detalle: id || st || 'Aceptado' }
+      : { estado: 'Dudoso', detalle: 'Notifícame respondió ' + x.codigo + ' sin confirmar el envío: no se sabe si salió' };
+  }
+  if (x.codigo === 408 || x.codigo >= 500) return { estado: 'Dudoso', detalle: errorNotificame_(x) + ' (no se sabe si salió)' };
+  return { estado: 'Error', detalle: errorNotificame_(x) };
+}
+/* Errores de UrlFetchApp que pasan antes de que salga cualquier pedido (Google no llega a Notifícame o se
+   acabó su cuota del día): ese grupo no salió y vuelve a Pendiente. Un corte a medio camino (Timeout u otro)
+   queda en duda. */
+const NO_SALIO_SMS = /Address unavailable|DNS error|unknown host|SSL|certificate|Invalid argument|Service invoked too many times|Bandwidth quota|quota exceeded/i;
+/* El mismo id para el mismo aviso al mismo número: si Notifícame no acepta ids repetidos, no se duplica */
+const idSms_ = (idFalla, tipo, num) => 'AL-' + idFalla_(idFalla) + '-' + (tipo === 'FALLA' ? 'F' : 'R') + '-' + num;
+
+/* Todo lo que cambia la pestaña Envíos SMS o el envío en curso va con el candado del script */
+function conCandadoSms_(fn, intentos) {
+  const lock = LockService.getScriptLock();
+  let tomado = false;
+  for (let i = 0; i < (intentos || 1) && !tomado; i++) tomado = lock.tryLock(30000);
+  if (!tomado) throw fallo_('OCUPADO', 'Hay otro cambio guardándose en este momento. Intenta de nuevo en unos segundos.');
+  try { return fn(); } finally {
+    try { SpreadsheetApp.flush(); } catch (e) { console.error('flush: ' + (e && e.message)); }   // lo escrito queda en la hoja antes de soltar el candado
+    lock.releaseLock();
+  }
+}
+/* El envío en curso de cada falla vive en Propiedades del script (no se pierde como la caché) */
+const claveEnvioSms_ = (idFalla) => 'SMS_ENVIO:' + idFalla_(idFalla);
+function envioSmsDe_(idFalla) { try { return JSON.parse(props_().getProperty(claveEnvioSms_(idFalla)) || 'null'); } catch (e) { return null; } }
+function guardarEnvioSms_(m) { props_().setProperty(claveEnvioSms_(m.falla), JSON.stringify(m)); }
+const avanceSms_ = (m) => ({ envio: m.envio, pasos: m.pasos, siguiente: m.siguiente, total: m.total, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, error: sinNumeros_(m.error) });
+
+/* Límite diario: cada SMS es una llamada de Google a otro servicio (20 mil al día con una cuenta de Gmail) */
+function cuotaSms_() {
+  const hoy = Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyy-MM-dd');
+  let c = null;
+  try { c = JSON.parse(props_().getProperty('SMS_CUOTA') || 'null'); } catch (e) { c = null; }
+  const usados = c && c.dia === hoy ? Number(c.usados) || 0 : 0;
+  return { dia: hoy, usados: usados, quedan: Math.max(0, ALERTAS.SMS_POR_DIA - usados) };
+}
+function gastarCuotaSms_(n) { const c = cuotaSms_(); props_().setProperty('SMS_CUOTA', JSON.stringify({ dia: c.dia, usados: Math.max(0, c.usados + n) })); }
+
+function hojaEnviosSms_() { return hojaEn_(libro_(), ALERTAS.HOJAS.envios, COL_ENVIOS); }
+/* Las filas de un envío van juntas (se agregan de una vez): basta la primera */
+function inicioBloqueSms_(h, envio) {
+  const ult = h.getLastRow();
+  if (ult < 2 || !envio) return 0;
+  const r = h.getRange(2, 8, ult - 1, 1).createTextFinder(envio).matchEntireCell(true).findNext();
+  if (!r) return 0;
+  const fila = r.getRow();
+  if (fila <= 2 || String(h.getRange(fila - 1, 8).getValue()) !== envio) return fila;
+  // Por si la búsqueda no devolvió la primera: se busca en la columna completa
+  const col = h.getRange(2, 8, ult - 1, 1).getValues();
+  for (let i = 0; i < col.length; i++) if (String(col[i][0]) === envio) return i + 2;
+  return fila;
+}
+/* Anota lo que pasó con el grupo que se estaba mandando (m.vuelo) y lo suma al envío (dentro del candado).
+   resultados: [[estado, detalle]] en el orden del grupo; null si no se sabe (quedan en duda, no se reenvían).
+   Lo que vuelve a Pendiente (límite o llave de Notifícame) se toma otra vez en el próximo grupo. */
+function cerrarVueloSms_(h, r0, m, resultados) {
+  const v = m.vuelo, cuenta = { Enviado: 0, Error: 0, Dudoso: 0 };
+  const sinSaber = ['Dudoso', 'Se cortó mientras se mandaba: no se sabe si salió'];
+  let lista = v.filas.map((fila, k) => (resultados ? resultados[k] : sinSaber));
+  if (r0 && v.filas.length) {
+    const a = v.filas[0], b = v.filas[v.filas.length - 1];
+    const rango = h.getRange(r0 + a, 6, b - a + 1, 2), tramo = rango.getValues();
+    // Una fila que ya no dice "Enviando" ya tiene su resultado (se anotó y no se alcanzó a guardar el envío): se respeta
+    lista = v.filas.map((fila, k) => (tramo[fila - a][0] !== 'Enviando' ? [String(tramo[fila - a][0]), tramo[fila - a][1]] : lista[k]));
+    v.filas.forEach((fila, k) => { tramo[fila - a] = [lista[k][0], String(lista[k][1] || '').slice(0, 200)]; });
+    rango.setValues(tramo);
+  }
+  lista.forEach((x) => { if (cuenta[x[0]] != null) cuenta[x[0]]++; });
+  m.enviados += cuenta.Enviado; m.errores += cuenta.Error; m.dudosos += cuenta.Dudoso;
+  m.siguiente = Math.min(m.total, m.enviados + m.errores + m.dudosos);
+  const malo = lista.filter((x) => x[0] === 'Error')[0];
+  if (malo && !m.error) m.error = String(malo[1] || '');
+  m.pasos = v.paso + 1; m.vuelo = null; m.renovado = Date.now();
+}
+/* Si hay un grupo en vuelo: se anota si ya terminó (o si se cortó hace rato). false = se está mandando ahora. */
+function resolverVueloSms_(h, r0, m) {
+  if (!m.vuelo) return true;
+  if (!m.vuelo.res && Date.now() - m.vuelo.en < VUELO_SMS_MS) return false;
+  cerrarVueloSms_(h, r0, m, m.vuelo.res || null);
+  return true;
+}
+/* Un grupo que terminó después de que su envío se cerró: se anota lo que se sabe. Lo que no salió
+   queda Cancelado (disponible para el próximo envío), nunca otra vez Pendiente en un envío cerrado. */
+function anotarTardeSms_(h, r0, filas, resultados) {
+  if (!r0 || !filas.length) return;
+  const a = filas[0], b = filas[filas.length - 1];
+  const rango = h.getRange(r0 + a, 6, b - a + 1, 2), tramo = rango.getValues();
+  filas.forEach((fila, k) => {
+    const actual = tramo[fila - a][0];
+    if (actual !== 'Enviando' && actual !== 'Dudoso') return;
+    tramo[fila - a] = [resultados[k][0] === 'Pendiente' ? 'Cancelado' : resultados[k][0], String(resultados[k][1] || '').slice(0, 200)];
+  });
+  rango.setValues(tramo);
+}
+
+/* El último estado de cada número de esta falla, por tipo de aviso */
+function estadosSms_(idFalla) {
+  const out = {};
+  Object.keys(TIPOS_SMS).forEach((t) => { out[t] = {}; });
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.envios);
+  if (!h || h.getLastRow() < 2) return out;
+  const id = idFalla_(idFalla);
+  h.getRange(2, 3, h.getLastRow() - 1, 4).getValues().forEach((x) => {   // ID de Alertas, Tipo, Teléfono, Estado
+    if (Object.prototype.hasOwnProperty.call(TIPOS_SMS, x[1]) && idFalla_(x[0]) === id) out[x[1]][String(x[2])] = String(x[3]);
+  });
+  return out;
+}
+function fallaSms_(id) {
+  const f = leerFallas_().filter((x) => x.id === String(id || '') || idFalla_(x.id) === idFalla_(id))[0];
+  if (!f) throw fallo_('DATOS', 'No encontré la falla ' + idFalla_(id) + '.');
+  return f;
+}
+function celularesDeFalla_(f) {
+  const nodos = {};
+  f.nodos.forEach((n) => { nodos[n] = true; });
+  return celularesDe_(nodos);
+}
+const tipoSmsDe_ = (f) => (f.estado === 'ACTIVA' ? 'FALLA' : 'RESTABLECIDO');
+/* Queda en la falla y en su historial (dentro del candado) */
+function registrarSmsEnFalla_(m, nota) {
+  const h = hoja_(ALERTAS.HOJAS.fallas);
+  const f = leerFallas_(h).filter((x) => x.id === m.falla)[0];
+  if (!f) return null;
+  const ahora = Date.now();
+  f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total, por: m.n, en: ahora }]).slice(-20);
+  const extra = [m.errores ? m.errores + ' con error' : '', m.dudosos ? m.dudosos + ' en duda' : ''].filter(String);
+  f.historial.push({ accion: 'SMS', en: ahora, por: { u: m.u, nombre: m.n },
+    detalle: TIPOS_SMS[m.tipo] + ' a ' + m.enviados + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '') + (nota ? '; ' + nota : '') });
+  columnaNumeroFallas_(h);
+  const fila = fallaAFila_(f);
+  h.getRange(f._fila, 1, 1, fila.length).setValues([fila]);
+  cache_().remove('fallasRecientes');
+  return sinFila_(f);
+}
+/* Cierra un envío (dentro del candado): lo apartado sin mandar queda Cancelado (disponible para el próximo),
+   lo que se estaba mandando cuando se cortó queda Dudoso, y se anota en la falla */
+function cerrarEnvioSms_(m, nota) {
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.envios);
+  const r0 = h && m.total ? inicioBloqueSms_(h, m.envio) : 0;
+  if (m.vuelo) cerrarVueloSms_(h, r0, m, m.vuelo.res || null);
+  if (r0) {
+    const rango = h.getRange(r0, 6, m.total, 1), est = rango.getValues();
+    let cancelados = 0, cambia = false;
+    est.forEach((x) => {
+      if (x[0] === 'Pendiente') { x[0] = 'Cancelado'; cancelados++; cambia = true; }
+      else if (x[0] === 'Enviando') { x[0] = 'Dudoso'; m.dudosos++; cambia = true; }
+    });
+    if (cambia) rango.setValues(est);
+    // lo apartado que no se mandó vuelve al límite de hoy (si el envío es de hoy)
+    if (cancelados && Utilities.formatDate(new Date(m.en), ALERTAS.ZONA, 'yyyy-MM-dd') === cuotaSms_().dia) gastarCuotaSms_(-cancelados);
+  }
+  let falla = null;
+  try { falla = m.enviados || m.errores || m.dudosos ? registrarSmsEnFalla_(m, nota) : null; } catch (e) {
+    console.error('No se pudo anotar el envío de SMS en la falla ' + idFalla_(m.falla) + ': ' + (e && e.message));
+  }
+  props_().deleteProperty(claveEnvioSms_(m.falla));
+  return falla;
+}
+
+function accionSms_(d, ses) {
+  const op = String(d.op || '');
+  if (op === 'resumen') return smsResumen_(d, ses);
+  if (op === 'iniciar') return smsIniciar_(d, ses);
+  if (op === 'lote') return smsLote_(d, ses);
+  if (op === 'terminar') return smsTerminar_(d, ses);
+  throw fallo_('DATOS', 'Operación no válida.');
+}
+/* Cuántos clientes de la falla tienen celular y en qué va el aviso (sin números) */
+function smsResumen_(d, ses) {
+  const f = fallaSms_(d.id), tipo = tipoSmsDe_(f);
+  const cel = celularesDeFalla_(f);
+  const est = estadosSms_(f.id)[tipo];
+  let ya = 0, enDuda = 0;
+  cel.numeros.forEach((x) => { if (est[x] === 'Enviado') ya++; else if (est[x] === 'Enviando' || est[x] === 'Dudoso') enDuda++; });
+  const m = envioSmsDe_(f.id);
+  return {
+    configurado: !!notificameCfg_(), tipo: tipo, puede: tipo === 'FALLA' || !descartada_(f),
+    clientes: cel.clientes, celulares: cel.numeros.length, conCelular: cel.conCelular, soloFijo: cel.soloFijo, sinTelefono: cel.sinTelefono,
+    ya: ya, enDuda: enDuda, faltan: cel.numeros.length - ya - enDuda, quedanHoy: cuotaSms_().quedan, envios: f.sms || [],
+    enCurso: m ? { por: m.n, mio: m.u === ses.u, tipo: m.tipo, mensaje: m.u === ses.u ? m.mensaje : '', total: m.total, siguiente: m.siguiente,
+      enviados: m.enviados, libre: Date.now() - m.renovado > ENVIO_SMS_VIEJO_MS } : null
+  };
+}
+/* Aparta a quienes les falta el aviso: quedan "Pendiente" en Envíos SMS antes de mandar nada */
+function smsIniciar_(d, ses) {
+  if (!notificameCfg_()) throw fallo_('NOTIFICAME', 'Falta conectar Notifícame. En la base interna: Alertas > 4. Conectar Notifícame.');
+  const f = fallaSms_(d.id), tipo = tipoSmsDe_(f);
+  if (d.tipo != null && String(d.tipo) !== tipo) {
+    throw fallo_('DATOS', tipo === 'FALLA' ? 'La falla sigue activa: el aviso que corresponde es el de falla.' : 'La falla ya se cerró: el aviso que corresponde es el de servicio restablecido.');
+  }
+  if (tipo === 'RESTABLECIDO' && descartada_(f)) throw fallo_('DATOS', 'La posible falla se descartó: no hay servicio restablecido que avisar.');
+  const mensaje = String(d.mensaje || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
+  if (!mensaje) throw fallo_('DATOS', 'Escribe el mensaje.');
+  if (mensaje.length > ALERTAS.SMS_MAX) throw fallo_('DATOS', 'El mensaje es muy largo: máximo ' + ALERTAS.SMS_MAX + ' caracteres.');
+  const conDuda = d.dudosos === true;
+  const cel = celularesDeFalla_(f);                    // fuera del candado: lee la base (unos segundos)
+  return conCandadoSms_(() => {
+    const ahora = Date.now();
+    let m = envioSmsDe_(f.id);
+    if (m) {
+      const libre = ahora - m.renovado > ENVIO_SMS_VIEJO_MS;
+      if (m.u !== ses.u && !libre) throw fallo_('OCUPADO', m.n + ' está enviando SMS de esta falla en este momento.');
+      if (m.u === ses.u && m.tipo === tipo && m.mensaje === mensaje && !libre && !conDuda) {
+        m.renovado = ahora;                             // la misma persona vuelve (recargó la página): sigue el mismo envío
+        guardarEnvioSms_(m);
+        return Object.assign(avanceSms_(m), { reanudado: true });
+      }
+      const h0 = hojaEnviosSms_();
+      if (!resolverVueloSms_(h0, inicioBloqueSms_(h0, m.envio), m)) throw fallo_('OCUPADO', 'Todavía se está mandando un grupo del envío anterior. Intenta de nuevo en unos segundos.');
+      cerrarEnvioSms_(m, 'se detuvo antes de terminar');
+    }
+    const est = estadosSms_(f.id)[tipo];
+    let ya = 0, enDuda = 0;
+    const pendientes = cel.numeros.filter((x) => {
+      if (est[x] === 'Enviado') ya++; else if (est[x] === 'Enviando' || est[x] === 'Dudoso') enDuda++;
+      return !SMS_NO_REPETIR[est[x]] || (conDuda && est[x] === 'Dudoso');   // los en duda, solo si se pide a propósito
+    });
+    const cuota = cuotaSms_(), lista = pendientes.slice(0, cuota.quedan);
+    const extra = { ya: ya, enDuda: enDuda, quedanHoy: cuota.quedan, paraManana: pendientes.length - lista.length };
+    if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '' }, extra);
+    const envio = 'S' + ahora.toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();
+    const fecha = new Date(ahora), nombre = nombreFalla_(f);
+    m = { envio: envio, falla: f.id, u: ses.u, n: ses.n, tipo: tipo, mensaje: mensaje, total: lista.length, siguiente: 0, pasos: 0, cursor: 0,
+      lote: ALERTAS.SMS_LOTE, problemas: 0, rechazos: 0, enviados: 0, errores: 0, dudosos: 0, error: '', en: ahora, renovado: ahora, vuelo: null };
+    // Primero el envío en curso y después las filas: si algo falla a medias, no quedan filas apartadas sin dueño
+    guardarEnvioSms_(m);
+    try { agregarFilas_(hojaEnviosSms_(), lista.map((x) => [fecha, nombre, f.id, tipo, x, 'Pendiente', '', envio, ses.n]), [5]); } catch (e) {
+      try { props_().deleteProperty(claveEnvioSms_(f.id)); } catch (e2) { /* el mantenimiento lo cierra */ }
+      throw e;
+    }
+    gastarCuotaSms_(lista.length);
+    return Object.assign(avanceSms_(m), extra);
+  });
+}
+/* Un grupo (hasta 50; menos si Notifícame pide ir más despacio):
+     1) con candado se toman los siguientes Pendiente y se marcan "Enviando";
+     2) sin candado se mandan en paralelo;
+     3) con candado se anota qué pasó con cada uno.
+   Si se corta entre 1 y 3, esos quedan en duda y no se reenvían. Si la página repite un grupo que ya se
+   hizo (se cortó la respuesta), "paso" no coincide y no se manda otra vez. */
+function smsLote_(d, ses) {
+  const cfg = notificameCfg_();
+  if (!cfg) throw fallo_('NOTIFICAME', 'Falta conectar Notifícame. En la base interna: Alertas > 4. Conectar Notifícame.');
+  const id = String(d.id || ''), envio = String(d.envio || ''), paso = Math.max(0, Math.floor(Number(d.paso)) || 0);
+  const fr = fallasRecientes_().filter((x) => x.id === id || idFalla_(x.id) === idFalla_(id))[0];   // fuera del candado
+  const prep = conCandadoSms_(() => {
+    const m = envioSmsDe_(id);
+    if (!m || m.envio !== envio) throw fallo_('DATOS', 'Este envío ya terminó o lo reemplazó otro. Abre otra vez Enviar SMS: solo se manda a quienes falten.');
+    if (m.u !== ses.u) throw fallo_('PERMISO', 'Este envío lo empezó ' + m.n + '.');
+    const h = hojaEnviosSms_(), r0 = inicioBloqueSms_(h, m.envio);
+    if (!r0) throw fallo_('DATOS', 'No encontré el envío en la pestaña Envíos SMS.');
+    if (m.vuelo) {
+      if (!resolverVueloSms_(h, r0, m)) throw fallo_('OCUPADO', 'Todavía se está mandando un grupo. Un momento.');
+      guardarEnvioSms_(m);
+    }
+    if (paso !== m.pasos || m.siguiente >= m.total) return { listo: avanceSms_(m) };
+    // Si la falla cambió mientras se enviaba (se cerró, se reabrió o se descartó), ese aviso ya no corresponde
+    const cambio = !fr ? 'La falla ya no está entre las recientes' : tipoSmsDe_(fr) !== m.tipo ? (m.tipo === 'FALLA' ? 'La falla se cerró' : 'La falla se reabrió')
+      : m.tipo === 'RESTABLECIDO' && descartada_(fr) ? 'La falla se descartó' : '';
+    if (cambio) throw fallo_('DATOS', cambio + ' mientras se enviaba: se detuvo para no mandar un aviso que ya no corresponde. Lo enviado quedó anotado.');
+    const desde = Math.min(m.cursor || 0, m.total);
+    if (desde >= m.total) { m.siguiente = m.total; guardarEnvioSms_(m); return { listo: avanceSms_(m) }; }
+    const filas = h.getRange(r0 + desde, 5, m.total - desde, 3).getValues();   // Teléfono, Estado, Detalle
+    const elegidos = [];
+    for (let i = 0; i < filas.length && elegidos.length < (m.lote || ALERTAS.SMS_LOTE); i++) if (filas[i][1] === 'Pendiente') elegidos.push(i);
+    if (!elegidos.length) { m.cursor = m.total; m.siguiente = m.total; guardarEnvioSms_(m); return { listo: avanceSms_(m) }; }
+    const a = elegidos[0], b = elegidos[elegidos.length - 1];
+    const tramo = filas.slice(a, b + 1).map((x) => [x[1], x[2]]);
+    elegidos.forEach((i) => { tramo[i - a] = ['Enviando', '']; });
+    const ahora = Date.now();
+    m.cursor = desde + a;
+    m.vuelo = { paso: m.pasos, filas: elegidos.map((i) => desde + i), en: ahora };
+    m.renovado = ahora;
+    // Primero se guarda el grupo en vuelo y después se marcan las filas: si algo falla a medias, nada queda trabado
+    guardarEnvioSms_(m);
+    try { h.getRange(r0 + desde + a, 6, b - a + 1, 2).setValues(tramo); } catch (e) {
+      try { m.vuelo = null; guardarEnvioSms_(m); } catch (e2) { /* se resuelve como grupo cortado */ }
+      throw e;
+    }
+    return { m: m, nums: elegidos.map((i) => String(filas[i][0])) };
+  });
+  if (prep.listo) return prep.listo;
+  const m = prep.m, nums = prep.nums;
+  let xs = null, noSalio = '';
+  try {
+    xs = UrlFetchApp.fetchAll(nums.map((t) => pedidoNotificame_(cfg, 'post', 'messages/send_to_contact',
+      { msisdn: t, message: m.mensaje, id: idSms_(m.falla, m.tipo, t) }))).map(respuestaNotificame_);
+  } catch (err) {
+    const txt = sinNumeros_(String(err && err.message || err)).slice(0, 200);
+    console.error('Notifícame no respondió a un grupo de ' + nums.length + ' SMS: ' + txt);
+    if (NO_SALIO_SMS.test(txt)) noSalio = /too many times|quota/i.test(txt)
+      ? 'Se acabó por hoy la cuota de Google para conectarse con otros servicios. Sigue mañana con Seguir enviando; no se le repite a nadie.'
+      : 'Google no pudo conectarse con Notifícame (' + txt.replace(/:\s*https?:\/\/\S+/g, '').slice(0, 80) + '). No salió ninguno de este grupo; intenta más tarde (no se le repite a nadie).';
+  }
+  // Si la conexión no llegó a salir, el grupo vuelve a Pendiente; si se cortó a medio camino, queda en duda
+  const res = nums.map((t, k) => (xs ? clasificarSms_(xs[k]) : noSalio ? { estado: 'Pendiente', detalle: '', parar: true }
+    : { estado: 'Dudoso', detalle: 'Notifícame no respondió: no se sabe si salió' }));
+  const resultados = res.map((r) => [r.estado, String(r.detalle || '').slice(0, 200)]);
+  const caida = !xs && !noSalio, esperas = res.some((r) => r.espera), parar = res.filter((r) => r.parar)[0];
+  const todosError = res.length >= 5 && res.every((r) => r.estado === 'Error');
+  let fin;
+  try {
+    fin = conCandadoSms_(() => {
+      const m2 = envioSmsDe_(id), h = hojaEnviosSms_(), r0 = inicioBloqueSms_(h, m.envio);
+      const mismo = !!m2 && m2.envio === m.envio;
+      if (!mismo || !m2.vuelo || m2.vuelo.en !== m.vuelo.en) {
+        // El grupo tardó tanto que ya se dio por cortado (o el envío se cerró): solo se anota lo que se sabe
+        if (!mismo) anotarTardeSms_(h, r0, m.vuelo.filas, resultados);
+        return { av: avanceSms_(mismo ? m2 : m), tarde: true };
+      }
+      cerrarVueloSms_(h, r0, m2, resultados);
+      if (caida || esperas) { m2.problemas = (m2.problemas || 0) + 1; m2.lote = Math.max(5, Math.floor(nums.length / 2)); }
+      else { m2.problemas = 0; m2.lote = Math.min(ALERTAS.SMS_LOTE, (m2.lote || ALERTAS.SMS_LOTE) + 10); }
+      m2.rechazos = todosError ? (m2.rechazos || 0) + 1 : 0;
+      guardarEnvioSms_(m2);
+      return { av: avanceSms_(m2), problemas: m2.problemas, rechazos: m2.rechazos, lote: m2.lote };
+    }, 3);
+  } catch (e) {
+    if (!e || e.codigo !== 'OCUPADO') throw e;
+    // Sin candado por mucho rato: lo que pasó queda guardado en el envío y se anota en cuanto se libere
+    try {
+      const m2 = envioSmsDe_(id);
+      if (m2 && m2.envio === m.envio && m2.vuelo && m2.vuelo.en === m.vuelo.en) {
+        m2.vuelo.res = resultados.map((x) => [x[0], String(x[1] || '').slice(0, 60)]);   // corto: una propiedad admite 9 KB
+        guardarEnvioSms_(m2);
+      }
+    } catch (e2) { console.error('No se pudo guardar el resultado del grupo: ' + (e2 && e2.message)); }
+    throw fallo_('OCUPADO', 'El grupo ya se mandó, pero el servidor está muy ocupado para anotarlo. Se anota en cuanto se libere; no se le repite a nadie.');
+  }
+  if (noSalio) throw fallo_('NOTIFICAME', noSalio);
+  if (parar) throw fallo_('NOTIFICAME', sinNumeros_(parar.detalle));
+  if (fin.tarde) return fin.av;
+  if (fin.rechazos >= 2) throw fallo_('NOTIFICAME', 'Notifícame rechazó dos grupos completos (' + sinNumeros_(res[0].detalle) + '). Se detuvo para no seguir gastando: revisa la cuenta de Notifícame.');
+  if (caida) {
+    if (fin.problemas >= 3) throw fallo_('NOTIFICAME', 'Notifícame no respondió varias veces seguidas. Lo enviado quedó anotado; los que iban en camino quedaron en duda y no se les reenvía. Intenta más tarde con Seguir enviando.');
+    return Object.assign(fin.av, { pausa: 10, aviso: 'Notifícame no respondió a un grupo de ' + nums.length + ': quedaron en duda y no se les reenvía. Se sigue en unos segundos.' });
+  }
+  if (esperas) {
+    if (fin.problemas >= 6) throw fallo_('NOTIFICAME', 'Notifícame sigue pidiendo esperar. Lo enviado quedó anotado; toca Seguir enviando en unos minutos (no se le repite a nadie).');
+    const seg = Math.min(30, 5 * fin.problemas);
+    return Object.assign(fin.av, { pausa: seg, aviso: 'Notifícame pidió ir más despacio: se sigue en ' + seg + ' segundos, de ' + fin.lote + ' en ' + fin.lote + '.' });
+  }
+  return fin.av;
+}
+/* Al terminar (o al detenerlo): queda en la falla y se libera para otros */
+function smsTerminar_(d, ses) {
+  const id = String(d.id || ''), envio = String(d.envio || '');
+  return conCandadoSms_(() => {
+    const m = envioSmsDe_(id);
+    if (!m || m.envio !== envio) return { terminado: true, falla: null };
+    if (m.u !== ses.u) throw fallo_('PERMISO', 'Este envío lo empezó ' + m.n + '.');
+    const h = hojaEnviosSms_();
+    if (!resolverVueloSms_(h, inicioBloqueSms_(h, m.envio), m)) throw fallo_('OCUPADO', 'Todavía se está mandando un grupo. Un momento.');
+    const falla = cerrarEnvioSms_(m, m.siguiente < m.total ? 'se detuvo antes de terminar' : '');
+    return Object.assign(avanceSms_(m), { terminado: true, falla: falla });
+  });
+}
+/* Mantenimiento: un envío que no avanza en 2 horas se cierra solo */
+function cerrarEnviosSmsViejos_() {
+  const p = props_().getProperties();
+  Object.keys(p).filter((k) => k.indexOf('SMS_ENVIO:') === 0).forEach((k) => {
+    let m = null;
+    try { m = JSON.parse(p[k]); } catch (e) { m = null; }
+    if (!m || !m.falla) { props_().deleteProperty(k); return; }
+    if (Date.now() - m.renovado <= 2 * 3600000) return;
+    try { cerrarEnvioSms_(m, 'se cortó y se cerró solo'); } catch (e) {
+      console.error('No se pudo cerrar el envío de SMS ' + m.envio + ': ' + (e && e.message));
+      try { props_().deleteProperty(k); } catch (e2) { /* se intenta en la próxima hora */ }
+    }
+  });
+}
+/* Mantenimiento: filas que quedaron Pendiente o Enviando sin un envío en curso (por ejemplo, si algo falló a
+   medias) y tienen más de 2 horas: Pendiente pasa a Cancelado (entra en el próximo envío) y Enviando a Dudoso */
+function limpiarHuerfanosSms_() {
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.envios);
+  if (!h || h.getLastRow() < 2) return 0;
+  const vivos = {}, p = props_().getProperties();
+  Object.keys(p).filter((k) => k.indexOf('SMS_ENVIO:') === 0).forEach((k) => { try { vivos[JSON.parse(p[k]).envio] = true; } catch (e) { /* nada */ } });
+  const n = h.getLastRow() - 1, corte = Date.now() - 2 * 3600000;
+  const fechas = h.getRange(2, 1, n, 1).getValues(), est = h.getRange(2, 6, n, 1).getValues(), envs = h.getRange(2, 8, n, 1).getValues();
+  let cambios = 0;
+  for (let i = 0; i < n; i++) {
+    const e = est[i][0];
+    if ((e === 'Pendiente' || e === 'Enviando') && !vivos[String(envs[i][0])] && new Date(fechas[i][0]).getTime() < corte) {
+      est[i][0] = e === 'Pendiente' ? 'Cancelado' : 'Dudoso';
+      cambios++;
+    }
+  }
+  if (cambios) h.getRange(2, 6, n, 1).setValues(est);
+  return cambios;
+}
+
+/* Los celulares de los clientes de unos nodos: uno por cliente (su primer celular), sin repetir.
+   nodos: { CODIGO: true }. Los fijos (empiezan con 2) no reciben SMS. */
+function celularesDe_(nodos) {
   const h = libro_().getSheetByName(ALERTAS.HOJAS.base);
   if (!h || h.getLastRow() < 2) throw fallo_('BASE', 'Todavía no hay base de clientes.');
   const cols = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(String);
@@ -1183,20 +1694,7 @@ function accionTelefonos_(d, ses) {
     else if (lista.length) soloFijo++;
     else sinTelefono++;
   });
-
-  const ids = fallas.map(nombreFalla_);
-  const listaNodos = Object.keys(nodos);
-  try {
-    const hd = hojaEn_(libro_(), ALERTAS.HOJAS.descargas, COL_DESCARGAS);
-    hd.appendRow([new Date(), ses.u, ses.n, ids.join(', ').slice(0, 300), listaNodos.join(', ').slice(0, 500), clientes, numeros.length]);
-  } catch (e) { console.error('No se pudo anotar la descarga: ' + (e && e.message)); }
-
-  const cuando = Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyy-MM-dd_HHmm');
-  const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + nombreFalla_(fallas[0]) + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
-  return {
-    archivo: nombre.replace(/[^A-Za-z0-9_\-]/g, '') + '.csv', fallas: ids, nodos: listaNodos.length,
-    clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono, telefonos: numeros
-  };
+  return { numeros: numeros, clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono };
 }
 
 /* ============================================================================
@@ -1417,9 +1915,16 @@ function nodosEnFalla_() {
   const enFalla = {};
   fallasRecientes_().forEach((f) => f.nodos.forEach((n) => {
     if (f.estado === 'ACTIVA') enFalla[n] = true;
-    else if (enFalla[n] !== true && f.cerradaEn) enFalla[n] = Math.max(enFalla[n] || 0, f.cerradaEn);
+    else if (enFalla[n] !== true && f.cerradaEn) enFalla[n] = Math.max(enFalla[n] || 0, cierreDe_(f));
   }));
   return enFalla;
+}
+/* Cuándo se cerró de verdad: la hora en que se registró el cierre (la "hora de solución" que se escribe
+   al cerrar puede ser anterior, y con minutos redondeados) */
+function cierreDe_(f) {
+  let t = f.cerradaEn || 0;
+  (f.historial || []).forEach((h) => { if (h.accion === 'CERRADA' && h.en > t) t = h.en; });
+  return t;
 }
 function accionAlertas_() {
   const hit = cache_().get('alertas');
@@ -1718,7 +2223,19 @@ function limpiarConsultas() {
       if (nueva) ss.deleteSheet(nueva);
       props_().deleteProperty('CARGA');
     }
-    return { resumidoHasta: resumido, borradas: borradas };
+
+    // 5. Envíos de SMS: los que quedaron abandonados se cierran, y a quién se le mandó cada aviso se guarda
+    //    40 días. Con el mismo candado que los envíos, para no borrar mientras se anota.
+    let smsBorrados = 0, smsHuerfanos = 0;
+    try {
+      smsBorrados = conCandadoSms_(() => {
+        cerrarEnviosSmsViejos_();
+        smsHuerfanos = limpiarHuerfanosSms_();
+        const he = libro_().getSheetByName(ALERTAS.HOJAS.envios);
+        return he && he.getLastRow() >= 2 ? borrarFilas_(he, filaDesde_(he, Date.now() - ALERTAS.DIAS_ENVIOS_SMS * DIA, he.getLastRow())) : 0;
+      });
+    } catch (err) { console.error('No se pudieron limpiar los envíos de SMS: ' + (err && err.message)); }
+    return { resumidoHasta: resumido, borradas: borradas, smsBorrados: smsBorrados, smsHuerfanos: smsHuerfanos };
   } finally { lock.releaseLock(); }
 }
 
@@ -1731,6 +2248,7 @@ function onOpen() {
     .addItem('1. Configurar por primera vez', 'configurar')
     .addItem('2. Conectar Genesys', 'dialogoGenesys')
     .addItem('3. Contraseñas de acceso', 'dialogoClaves')
+    .addItem('4. Conectar Notifícame (SMS)', 'dialogoNotificame')
     .addSeparator()
     .addItem('Mostrar las pestañas', 'mostrarPestanas')
     .addItem('Ocultar y proteger las pestañas', 'ocultarPestanas')
@@ -2004,6 +2522,72 @@ function guardarGenesys(d) {
   }));
   limpiarCfg_();
   return true;
+}
+
+/* ----- Notifícame: la llave y el secreto del API (solo la cuenta dueña los cambia) ----- */
+function notificameGuardado_() {
+  try { return JSON.parse(props_().getProperty('NOTIFICAME') || '{}') || {}; } catch (e) { return {}; }
+}
+function dialogoNotificame() {
+  const c = notificameGuardado_();
+  const fin = (t) => (t ? ' (termina en ' + esc_(String(t).slice(-4)) + ')' : '');
+  const html = estiloDialogo_() +
+    '<p>Datos de <b>Notifícame &gt; Conexión con el API &gt; Credenciales y accesos</b>. Se guardan en el servidor de Alertas: no aparecen en GitHub ni en la página.</p>' +
+    '<label>API key<input id="key" autocomplete="off" placeholder="' + (c.key ? 'Guardada' + fin(c.key) + '. Vacía, no cambia' : '') + '"></label>' +
+    '<label>API secret<input id="secret" type="password" autocomplete="new-password" placeholder="' + (c.secret ? 'Guardada. Vacía, no cambia' : '') + '"></label>' +
+    '<label>Dirección del API REST<input id="url" value="' + esc_(c.url || ALERTAS.NOTIFICAME_URL) + '" autocomplete="off"></label>' +
+    '<label>Celular para un SMS de prueba (opcional)<input id="prueba" placeholder="Ejemplo: 9999 9999" autocomplete="off"></label>' +
+    '<p class="nota">Al guardar, Alertas prueba la conexión. Si escribes un celular, le manda un SMS de prueba.</p>' +
+    '<div class="acc"><button onclick="google.script.host.close()">Cerrar</button>' +
+    '<button class="pri" id="btn" onclick="guardar()">Guardar y probar</button></div><p id="msg"></p>' +
+    '<script>function guardar(){var v=function(i){return document.getElementById(i).value;};var b=document.getElementById("btn"),m=document.getElementById("msg");' +
+    'b.disabled=true;m.textContent="Probando la conexión…";' +
+    'google.script.run.withSuccessHandler(function(t){b.disabled=false;m.textContent=t;document.getElementById("key").value="";document.getElementById("secret").value="";})' +
+    '.withFailureHandler(function(e){b.disabled=false;m.textContent=e.message;}).guardarNotificame({key:v("key"),secret:v("secret"),url:v("url"),prueba:v("prueba")});}</script>';
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(480).setHeight(560), 'Conectar Notifícame');
+}
+function guardarNotificame(d) {
+  if (!esDueno_()) throw new Error('Solo la cuenta dueña del archivo puede conectar Notifícame.');
+  const antes = notificameGuardado_();
+  const key = String(d && d.key || '').trim() || antes.key || '';
+  const secret = String(d && d.secret || '').trim() || antes.secret || '';
+  let url = String(d && d.url || '').trim() || ALERTAS.NOTIFICAME_URL;
+  if (!key || !secret) throw new Error('Escribe la API key y la API secret.');
+  if (!/^[\x21-\x7e]{6,300}$/.test(key) || !/^[\x21-\x7e]{6,300}$/.test(secret)) throw new Error('La API key o la API secret no tienen el formato esperado (sin espacios).');
+  if (!/^https:\/\/[^\s"'<>]+$/.test(url)) throw new Error('La dirección del API tiene que empezar con https://');
+  if (!/\/$/.test(url)) url += '/';
+  props_().setProperty('NOTIFICAME', JSON.stringify({ key: key, secret: secret, url: url, en: Date.now(), por: Session.getEffectiveUser().getEmail() }));
+  return probarNotificame_(d && d.prueba);
+}
+/* Prueba la conexión (account/status) y, si se pide, manda un SMS de prueba. Devuelve el texto para el diálogo. */
+function probarNotificame_(prueba) {
+  const cfg = notificameCfg_();
+  let x;
+  try { x = llamarNotificame_(cfg, 'get', 'account/status', null); } catch (err) {
+    return 'Quedó guardado, pero el servidor de Alertas (en Google) no pudo conectarse con Notifícame: ' + String(err && err.message || err).slice(0, 160)
+      + '. Si Notifícame solo abre dentro de la red de Claro, hay que pedirle a TI que lo habilite para internet.';
+  }
+  if (!(x.codigo >= 200 && x.codigo < 300 && x.datos && typeof x.datos === 'object')) return 'Quedó guardado, pero Notifícame respondió: ' + errorNotificame_(x);
+  const dd = x.datos;
+  const cuenta = String(dd.name || dd.account_name || dd.company || (dd.account && dd.account.name) || '').slice(0, 80);
+  let txt = 'Conexión lista con Notifícame' + (cuenta ? ' (' + cuenta + ')' : '') + '.';
+  const dig = String(prueba || '').replace(/\D+/g, '');
+  if (dig) {
+    const tel = /^[3789]\d{7}$/.test(dig) ? '504' + dig : /^504[3789]\d{7}$/.test(dig) ? dig : '';
+    if (!tel) return txt + ' El celular de prueba no es válido: escribe los 8 dígitos de un celular de Honduras.';
+    let y;
+    // Con tilde, ñ y barra: así la prueba confirma también la firma de un mensaje con esos caracteres
+    try { y = llamarNotificame_(cfg, 'post', 'messages/send_to_contact', { msisdn: tel, message: 'Prueba de Alertas: la conexión con Notifícame funciona (señal 1/2).', id: 'PRUEBA-' + Date.now() }); } catch (err) {
+      return txt + ' El SMS de prueba no salió: no se pudo conectar con Notifícame (' + String(err && err.message || err).slice(0, 120) + ').';
+    }
+    const c = clasificarSms_(y);
+    // Qué campos trae la respuesta: sirve para confirmar cómo responde Notifícame cuando un SMS sale bien
+    const campos = y.datos && typeof y.datos === 'object' ? Object.keys(y.datos).slice(0, 12).join(', ') : 'sin datos';
+    txt += c.estado === 'Enviado' ? ' SMS de prueba enviado al ' + tel.slice(3, 7) + ' ' + tel.slice(7) + ' (respuesta: ' + campos + ').'
+      : c.estado === 'Dudoso' ? ' Notifícame respondió (código ' + y.codigo + ') sin un dato que confirme el envío: revisa si te llegó el SMS de prueba. Campos de la respuesta: ' + campos + '.'
+      : ' El SMS de prueba no salió: ' + c.detalle + ' (código ' + y.codigo + ', respuesta: ' + campos + ').';
+  }
+  return txt;
 }
 
 /* ----- Contraseñas (Tiendas y accesos temporales) ----- */

@@ -185,6 +185,42 @@ const A = {
     if (r.telefonos.length) U.descargarTexto(r.archivo, 'telefono\r\n' + r.telefonos.join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
     return r;
   },
+  /* SMS a los clientes de una falla con Notifícame. El servidor aparta a quienes les falta el aviso y
+     anota cada número antes de mandarlo; la página pide grupo por grupo (hasta 50 SMS cada uno) con el
+     número de paso. Si una respuesta se corta y la página repite el pedido, el servidor no vuelve a
+     mandar ese grupo. Si es la misma persona con el mismo mensaje, "iniciar" sigue el envío sin terminar. */
+  smsResumen: (id) => Backend.sms({ op: 'resumen', id }),
+  async enviarSms(id, tipo, mensaje, alAvance, detenido, conDuda) {
+    // Corte de red o servidor ocupado: se repite el mismo pedido (no duplica nada)
+    const pedir = async (datos, veces) => {
+      for (let k = 1; ; k++) {
+        try { return await Backend.sms(datos); } catch (e) {
+          if (!/^(RED|OCUPADO|SERVIDOR)$/.test(e.codigo) || k > veces) throw e;
+          await esperar(Math.min(12000, 2000 * k));
+        }
+      }
+    };
+    const ini = await pedir({ op: 'iniciar', id, tipo, mensaje, dudosos: !!conDuda }, 2);   // dudosos: también a los que quedaron en duda
+    let av = Object.assign({ aviso: '' }, ini);
+    if (!av.total) return Object.assign(av, { nada: true });
+    alAvance(av);
+    let error = null;
+    while (av.siguiente < av.total && !detenido()) {
+      try {
+        const r = await pedir({ op: 'lote', id, envio: av.envio, paso: av.pasos }, 6);
+        av = Object.assign({}, av, r, { aviso: r.aviso || '' });
+        alAvance(av);
+        // Notifícame pidió ir más despacio: se espera lo que dijo el servidor (se puede detener mientras tanto)
+        for (const t = Date.now() + (Number(r.pausa) || 0) * 1000; Date.now() < t && !detenido();) await esperar(250);
+      } catch (e) { error = e; break; }
+    }
+    let fin = null;
+    try { fin = await pedir({ op: 'terminar', id, envio: av.envio }, 6); } catch (e) { if (!error) error = e; }
+    if (fin && fin.falla) G.set((s) => ({ fallas: s.fallas.map((f) => (f.id === fin.falla.id ? fin.falla : f)) }));
+    const res = Object.assign({}, av, fin && fin.envio ? fin : {}, { aviso: '', detenido: !error && av.siguiente < av.total });
+    if (error) { error.avance = res; throw error; }
+    return res;
+  },
   editarFalla: (id, cambios, detalle) => A.falla('editar', { id, falla: cambios, detalle }),
   cerrarFalla: (id, cerradaEn, nota) => A.falla('cerrar', { id, cerradaEn, nota }),
   reabrirFalla: (id) => A.falla('reabrir', { id }),

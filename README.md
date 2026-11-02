@@ -33,7 +33,7 @@ Navegador (GitHub Pages)             Google (privado)                           
 |---|---|---|
 | **Concentrix** (CC N1 y Redes Sociales) | Botón **Entrar con Genesys** | Consulta, mapa de fallas y guion |
 | **Tiendas** | Usuario genérico y contraseña, más su tienda (de una lista) y su nombre | Lo mismo que Concentrix |
-| **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas (con la descarga de celulares para SMS), Base y Estadísticas |
+| **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas (con el envío de SMS por Notifícame), Base y Estadísticas |
 | **Jefatura** | Genesys, con su correo en la hoja **Usuarios** | Todo lo de Workforce |
 | Acceso temporal de Workforce | Usuario y contraseña (para cuando Genesys falle) | Lo mismo que Workforce |
 
@@ -52,7 +52,7 @@ Necesitas: la cuenta de Google donde vivirá el Sheet, tu repositorio de GitHub 
 3. Vuelve a la hoja y recárgala. Aparece el menú **Alertas**.
 4. **Alertas > 1. Configurar por primera vez.** Google te pedirá autorizar el script. Es tu propio script: si sale "Google no verificó esta app", entra a **Configuración avanzada > Ir a…**.
 
-Esto crea las hojas **Base**, **Fallas**, **Usuarios**, **Cargas** y **Tiendas** (más una oculta, **Catalogo**), y un segundo archivo, **Alertas - Consultas**, en tu Drive, con las hojas **Consultas**, **Resumen** y **Resumen_asesores**. También programa un mantenimiento que corre solo cada hora: arma el resumen de cada día y borra el detalle de más de 30 días. La hoja **Descargas SMS** aparece sola con la primera descarga de teléfonos.
+Esto crea las hojas **Base**, **Fallas**, **Usuarios**, **Cargas** y **Tiendas** (más una oculta, **Catalogo**), y un segundo archivo, **Alertas - Consultas**, en tu Drive, con las hojas **Consultas**, **Resumen** y **Resumen_asesores**. También programa un mantenimiento que corre solo cada hora: arma el resumen de cada día y borra el detalle de más de 30 días. La hoja **Descargas SMS** aparece sola con la primera descarga de teléfonos, y **Envíos SMS** con el primer SMS enviado desde Alertas.
 
 > Solo las hojas **Usuarios** y **Tiendas** se editan a mano. Las demás las escribe Alertas.
 
@@ -174,13 +174,62 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 
 ## Avisar a los clientes por SMS (Notifícame)
 
-Para que el cliente sepa de la falla antes de llamar (y bajar el tráfico al Call Center), Workforce descarga los celulares de los clientes afectados y los sube a Notifícame.
+Para que el cliente sepa de la falla antes de llamar (y bajar el tráfico al Call Center), Workforce le manda un SMS desde Alertas, con el API de Notifícame.
 
-1. En **Fallas > Activas**, cada falla tiene el botón **Teléfonos para SMS**. Descarga un archivo con los celulares de los clientes de los nodos de esa falla. Por ejemplo, si la falla es GRA01 con 425 clientes, trae los celulares de esos 425; los que no tienen celular en la base quedan fuera.
-2. Con más de una falla activa aparece además **Teléfonos de todas**: un solo archivo con los celulares de todas las fallas activas, sin repetir.
-3. Al terminar, la tarjeta muestra cuántos números trae el archivo, cuántos clientes solo tienen teléfono fijo y cuántos no tienen teléfono en la base.
+### Conectar Notifícame (una sola vez, la cuenta dueña del archivo)
 
-**El archivo** es un CSV delimitado por comas (UTF-8), con el encabezado `telefono` y un número por línea, de 11 dígitos con 504 adelante:
+1. En Notifícame: **Conexión con el API > Credenciales y accesos > Ver credenciales** (te manda un código a tu correo) y copia la **API key** y la **API secret**.
+2. En la base interna: **Alertas > 4. Conectar Notifícame (SMS)**. Pega la key y la secret. La dirección del API REST ya viene puesta (`https://notificame.claro.com.hn/v4/api/rest/`).
+3. **Guardar y probar**: Alertas prueba la conexión y, si escribes un celular, le manda un SMS de prueba y dice qué campos respondió Notifícame.
+
+La key y la secret quedan en las Propiedades del script: no están en GitHub ni llegan a la página. Si en Notifícame usan **Regenerar credenciales**, hay que volver a pegarlas aquí.
+
+### Enviar
+
+1. En **Fallas > Activas**, cada falla tiene **Enviar SMS** (aviso de falla). Las resueltas (36 horas) tienen **SMS de restablecido**. El aviso lo decide el estado de la falla: con la falla activa solo sale el de falla y, cerrada, solo el de restablecido. A una posible falla descartada no se le manda restablecido.
+2. La ventana dice a cuántos clientes les llega, de cuántos tiene la falla (con celular, solo fijo o sin teléfono), y trae el mensaje ya escrito:
+   - **Aviso de falla**: «Claro informa: hay una falla en la red de su zona que afecta su servicio. Ya trabajamos para restablecerlo antes de las 3:00 p. m. Disculpe las molestias.» La hora sale de la solución estimada; si no tiene, no la menciona. En una posible falla, el mensaje dice que se está revisando.
+   - **Servicio restablecido**: «Claro informa: el servicio en su zona ya fue restablecido. Si sigue sin servicio, apague su equipo 30 segundos y vuelva a encenderlo. Gracias.»
+   - Se puede cambiar. El contador dice cuántos caracteres y cuántos SMS por cliente usa: con tildes en á, í, ó, ú cada SMS admite 70 caracteres en vez de 160, y **Quitar tildes** lo arregla. Los mensajes sugeridos están en `src/config.js` (`sms`).
+3. **Enviar a N clientes**, confirmar, y la barra muestra el avance. Se puede **Detener**.
+4. Al terminar dice cuántos salieron, cuántos no (con el motivo que dio Notifícame) y cuántos quedaron en duda. **Reintentar los que fallaron** vuelve a mandar solo a los que fallaron.
+
+**Nunca se le repite un aviso a nadie.** Antes de mandar nada, Alertas aparta en la pestaña **Envíos SMS** a cada cliente que le falta el aviso (40 días de registro), y cada número pasa por estos estados:
+
+| Estado | Qué quiere decir | ¿Se le vuelve a mandar? |
+| --- | --- | --- |
+| Pendiente | Apartado en un envío, todavía no sale | Sale en ese envío |
+| Enviando | Va en camino a Notifícame | No |
+| Enviado | Notifícame confirmó que lo recibió (con `message_id` o `status`, como en su SDK) | No |
+| Error | Notifícame lo rechazó (por ejemplo, número no válido) | Sí, con **Reintentar** |
+| Dudoso | Notifícame no respondió a tiempo, o respondió sin confirmar: no se sabe si salió | No, salvo que se pida (ver abajo) |
+| Cancelado | El envío se detuvo antes de mandarlo | Sí, en el próximo envío |
+
+- Si a la falla le agregan nodos, **Enviar SMS** va solo a los clientes nuevos. El aviso de falla y el de restablecido se cuentan aparte.
+- **Si se cierra la página a medio envío**, al volver a abrir **Enviar SMS** la misma persona ve «Tienes un envío sin terminar» y **Seguir enviando** termina el mismo envío. Si cambia el mensaje, ese envío se cierra y el nuevo va a quienes falten.
+- **Si una respuesta se corta**, la página repite el pedido con el mismo número de paso y el servidor no vuelve a mandar ese grupo.
+- **Si Notifícame pide esperar** (límite de solicitudes), Alertas espera unos segundos y sigue solo, con grupos más chicos. Si lo pide 6 veces seguidas, se detiene; lo que no salió se manda después con **Seguir enviando**.
+- **Si Notifícame no responde** a un grupo, esos números quedan en duda y se sigue con el resto. Si pasa 3 veces seguidas, se detiene.
+- **Si Google no puede conectarse con Notifícame** (o se acabó su cuota del día), ese grupo no salió: vuelve a Pendiente, se detiene y lo dice.
+- **A los que quedaron en duda** no se les reenvía. Si en los reportes de Notifícame se ve que no les llegó, la ventana tiene **Mandarles también a ellos** (a algunos les puede llegar dos veces).
+- **Si cierran o descartan la falla mientras sale el aviso de falla**, el envío se detiene solo: a los que faltaban ya no les llega un aviso que no corresponde.
+- **Si Notifícame rechaza la llave**, se detiene y lo dice. **Si rechaza dos grupos completos** (por ejemplo, la cuenta sin saldo), se detiene para no seguir gastando.
+- Un envío que alguien dejó abierto y no avanza en 10 minutos lo puede tomar otra persona de Workforce. Si queda abierto más de 2 horas, el mantenimiento de cada hora lo cierra solo y libera las filas que hayan quedado apartadas.
+
+**Cómo funciona:**
+
+- Uno por cliente (contrato): su primer celular en la base. En Honduras los celulares empiezan con 3, 7, 8 o 9; los fijos (empiezan con 2) no reciben SMS. Si dos clientes tienen el mismo celular, va una sola vez.
+- Los números nunca salen del servidor: la página solo ve cuántos son. El servidor los manda a Notifícame de 50 en 50 (un SMS por número, como pide el API), cada pedido firmado con la key y la secret (HMAC-SHA1). Cada SMS lleva un id fijo por falla, aviso y número (`AL-<falla>-F-<número>`), el mismo si alguna vez se intentara otra vez.
+- Mientras una persona envía los SMS de una falla, nadie más puede mandar los de esa misma falla (sí los de otra falla).
+- La tarjeta de la falla muestra el último envío y el historial de cambios lo registra («Aviso de falla a 1,251 clientes (9 con error, 2 en duda)»).
+- Solo Workforce y Jefatura pueden enviar. Los asesores no ven nada de esto.
+- **Límite diario: 15,000 SMS.** Cada SMS es una llamada de Google a Notifícame, y Google permite unas 20,000 por día con una cuenta de Gmail (100,000 con Google Workspace); Alertas deja margen para lo demás. Si una falla no cabe en lo que queda del día, se manda a los que caben y la ventana dice cuántos quedan para mañana. Lo que se aparta y no se manda vuelve al límite del día. Se cambia en `SMS_POR_DIA` de `servidor/Code.gs`.
+
+### Descargar los celulares (respaldo)
+
+**Descargar celulares** baja un CSV para subirlo a mano a Notifícame, por si hiciera falta. Con más de una falla activa aparece además **Teléfonos de todas**: un solo archivo con los celulares de todas las fallas activas, sin repetir.
+
+El archivo es un CSV delimitado por comas (UTF-8), con el encabezado `telefono` y un número por línea, de 11 dígitos con 504 adelante:
 
 ```
 telefono
@@ -188,17 +237,7 @@ telefono
 50488000003
 ```
 
-Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-02_0815.csv`.
-
-**Qué números entran:**
-
-- Uno por cliente (contrato): su primer celular en la base. En Honduras los celulares empiezan con 3, 7, 8 o 9.
-- Los teléfonos fijos (empiezan con 2) quedan fuera porque no reciben SMS.
-- Si dos clientes tienen el mismo celular, va una sola vez.
-
-**Para no mandar el mismo SMS dos veces:** para una falla nueva, usa el botón de su tarjeta. **Teléfonos de todas** vuelve a traer a los clientes de las fallas que ya avisaron. Lo mismo pasa si a una falla le agregan nodos después de avisar: la descarga trae otra vez a todos los clientes de la falla.
-
-Cada descarga queda anotada en la hoja **Descargas SMS** del Sheet (quién, cuándo, qué fallas y nodos, cuántos clientes y cuántos números). Si la base subida no trae la columna `TELEFONO`, el botón lo avisa.
+Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-02_0815.csv`. La descarga trae a todos los clientes de la falla, aunque ya les haya llegado el SMS desde Alertas. Cada descarga queda anotada en la pestaña **Descargas SMS** (quién, cuándo, qué fallas y nodos, cuántos clientes y cuántos números). Si la base subida no trae la columna `TELEFONO`, el botón lo avisa.
 
 ## Cambios futuros
 
@@ -217,6 +256,7 @@ Cada descarga queda anotada en la hoja **Descargas SMS** del Sheet (quién, cuá
 - **Lo interno de cada falla** (referencia, notas, historial de cambios y correos de Workforce) solo viaja a Workforce y Jefatura. A Concentrix y Tiendas el servidor les manda solo lo que muestra su pantalla, que incluye el número de falla.
 - **Posibles fallas**: la lista y el detalle (con los nombres de los clientes) solo los reciben Workforce y Jefatura, sin teléfonos ni DNI. El correo se copia en la PC de quien lo va a enviar; Alertas no manda correos solo.
 - **Teléfonos**: solo Workforce y Jefatura descargan los celulares, solo de los nodos de una falla, y cada descarga queda anotada en **Descargas SMS**. El archivo tiene datos personales: después de subirlo a Notifícame, conviene borrarlo de la computadora.
+- **SMS por Notifícame**: la API key y la API secret viven solo en las Propiedades del script (las pega la cuenta dueña en **Alertas > 4. Conectar Notifícame**). Al enviar desde Alertas, los números van del servidor a Notifícame y nunca llegan a la página; quién envió, cuándo y a qué números queda en **Envíos SMS** por 40 días. Los mensajes de error de Notifícame llegan a la página sin números de teléfono.
 - **Alertas > Cerrar todas las sesiones** obliga a todos a volver a entrar (por ejemplo, si una contraseña se filtró).
 - **Pestañas ocultas y protegidas**, como el archivo de auditorías: **Alertas > Ocultar y proteger las pestañas** deja a la vista solo **INICIO** (con el aviso de archivo confidencial) y protege todas las pestañas de los dos archivos (la base interna y el de consultas) para que solo la cuenta dueña las pueda cambiar.
   - **Alertas > Mostrar las pestañas** las pone a la vista para revisar los datos o editar Usuarios y Tiendas; siguen protegidas. Cada vez que se abre el archivo se vuelven a ocultar solas.
@@ -264,7 +304,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 196 pruebas del servidor en un emulador de Apps Script
+npm test                           # 260 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

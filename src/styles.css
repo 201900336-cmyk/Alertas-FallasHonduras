@@ -696,6 +696,30 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .bitacora li:last-child { border-bottom: 0; }
 .bitacora .cuando { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 
+/* ---------- Enviar SMS (Notifícame) ---------- */
+.sms-modal { display: flex; flex-direction: column; gap: 14px; }
+.sms-cifras { display: flex; flex-direction: column; gap: 4px; }
+.sms-cifras .sub { margin: 0; line-height: 1.45; }
+.sms-cifra { display: flex; align-items: baseline; gap: 10px; }
+.sms-cifra b { font-size: 34px; font-weight: 800; font-stretch: 112%; line-height: 1.05; }
+.sms-cifra span { font-size: 15px; color: var(--ink-2); font-weight: 600; }
+.sms-tipo { align-self: flex-start; }
+.sms-texto { min-height: 104px; resize: vertical; font-size: 15px; line-height: 1.45; }
+.sms-contador { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: -6px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.sms-contador[data-aviso="si"] span { color: var(--resuelta-text); font-weight: 600; }
+.sms-modal .aviso-linea button { margin-left: 6px; border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.sms-modal .sms-duda { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-weight: 650; color: var(--ink); cursor: pointer; }
+.sms-modal .sms-duda input { width: 16px; height: 16px; margin: 0; accent-color: var(--ink); flex: none; }
+.sms-barra { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.sms-barra i { display: block; height: 100%; background: var(--ok); border-radius: 999px; transition: width 300ms ease; }
+.sms-resultado { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 12px; background: var(--ok-soft); color: var(--ok-text); font-size: 14px; }
+.sms-resultado b { font-size: 16px; }
+.sms-resultado span { color: var(--ink-2); }
+.sms-resultado.con-error { background: var(--resuelta-soft); color: var(--resuelta-text); }
+.sms-envios ul { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
+.sms-envios li { padding: 6px 0; border-top: 1px solid var(--line); }
+.sms-confirmar, .sms-progreso-txt { font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+
 /* ---------- Teléfonos para SMS ---------- */
 .nota-sms { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; padding: 10px 12px; border-radius: var(--r-s); background: var(--surface-2, var(--bg)); color: var(--ink-2); font-size: 13.5px; line-height: 1.45; }
 .nota-sms svg { flex: none; margin-top: 2px; color: var(--ink-3); }

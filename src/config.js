@@ -88,6 +88,14 @@ const CONFIG = {
     ]
   },
 
+  // SMS a los clientes de una falla (Notifícame). {eta} se cambia por " antes de las 3:00 p. m." si la falla
+  // tiene hora estimada. Sin tildes en á, í, ó, ú: así cada SMS admite 160 caracteres (con tildes, 70).
+  sms: {
+    FALLA: 'Claro informa: hay una falla en la red de su zona que afecta su servicio. Ya trabajamos para restablecerlo{eta}. Disculpe las molestias.',
+    POSIBLE: 'Claro informa: estamos revisando un inconveniente en la red de su zona. Le avisaremos cuando su servicio se restablezca. Disculpe las molestias.',
+    RESTABLECIDO: 'Claro informa: el servicio en su zona ya fue restablecido. Si sigue sin servicio, apague su equipo 30 segundos y vuelva a encenderlo. Gracias.'
+  },
+
   // Nota corta para pegar en la descripción del caso en Qflow, según el resultado de la consulta. Así todos
   // documentan igual. {nodo} {numero} {motivo} {inicio} {eta} {cerrada} {contrato} se reemplazan con los datos
   // del cliente y la falla; {inicio} y {cerrada} ya traen "las" o el día ("ayer a las 3:00 p. m.").

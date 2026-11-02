@@ -3,7 +3,9 @@
    - /exec            como la aplicación web de Apps Script (sin respuesta a OPTIONS, igual que Google)
    - /genesys/...     un Genesys falso con PKCE real (authorize y token)
    - /app/            la página (index.html) con un config.js que apunta aquí
-   - /test/genesys    elige con qué usuario "entra" el próximo login de Genesys          */
+   - /test/genesys    elige con qué usuario "entra" el próximo login de Genesys
+   - /test/sms        cuántos SMS recibió el Notifícame falso (cuántos mal firmados y cuántos repetidos);
+                      con ?limite=10,1 el próximo grupo solo acepta 10 (Notifícame pide esperar) */
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), vm = require('vm');
 const { crearEntorno } = require('./gas-emulador');
@@ -35,7 +37,13 @@ async function precargar() {
   for (const f of ['parser.js', 'config.js', 'util.js', 'model.js', 'demo.js']) vm.runInContext(fs.readFileSync(path.join(RAIZ, 'src', f), 'utf8').replace("if (typeof module !== 'undefined') module.exports = ALERTAS_PARSER;", ''), lib);
   const P = vm.runInContext('ALERTAS_PARSER', lib), Model = vm.runInContext('Model', lib), Demo = vm.runInContext('Demo', lib);
   let base;
-  if (BASE === 'demo') base = Demo.generar(Date.now()).base;
+  if (BASE === 'demo') {
+    base = Demo.generar(Date.now()).base;
+    // Teléfonos ficticios para probar los SMS: la mayoría con celular, algunos solo fijo o sin teléfono
+    const num = (j, pre) => '504' + pre + String(j).padStart(7, '0').slice(-7);
+    base.cols.telefono = Array.from(base.cols.contrato, (c, i) => (i % 11 === 0 ? '' : i % 11 === 1 ? num(i, '2') : num(i, i % 2 ? '9' : '3')));
+    base.tieneTelefono = true;
+  }
   else { const b = fs.readFileSync(BASE); base = await P.parseFile(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength), path.basename(BASE)); }
   const cat = Model.catalogo(Model.indexar(base));
   g.E.genesys.tokens.set('tok-precarga', { name: 'Ana Lopez', email: 'ana.lopez@claro.com.hn' });
@@ -45,6 +53,7 @@ async function precargar() {
   const fin = g.post({ accion: 'base', token: tok, datos: { op: 'finalizar', id: ini.id, catalogo: cat } });
   if (!fin.ok) throw new Error(fin.error);
   console.log('Base precargada:', base.filas, 'filas');
+  console.log('Notifícame (falso):', C.guardarNotificame({ key: g.E.notificame.key, secret: g.E.notificame.secret }));
 }
 
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css' };
@@ -104,6 +113,14 @@ const servidor = http.createServer((req, res) => {
   if (url.pathname === '/test/ocupado') {
     if (url.searchParams.get('n')) ocupado = { n: Number(url.searchParams.get('n')), modo: url.searchParams.get('modo') || 'html' };
     json({ quedan: ocupado.n }); return;
+  }
+  if (url.pathname === '/test/sms') {
+    // ?limite=10,1: en el próximo grupo Notifícame acepta solo 10 (los demás: "espere"), para probar pausas y cortes
+    const lim = url.searchParams.get('limite');
+    if (lim) { const [porLote, lotes] = lim.split(',').map(Number); g.E.notificame.limite = { porLote, lotes: lotes || 1 }; }
+    const N = g.E.notificame, ids = new Map();
+    N.enviados.forEach((e) => ids.set(e.id, (ids.get(e.id) || 0) + 1));
+    json({ enviados: N.enviados.length, malFirmados: N.malFirmados, repetidos: [...ids.values()].filter((v) => v > 1).length }); return;
   }
   if (url.pathname === '/test/genesys') { proximo = { name: url.searchParams.get('nombre'), email: url.searchParams.get('correo') }; json({ ok: true }); return; }
   if (url.pathname === '/test/cliente') {

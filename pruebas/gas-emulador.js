@@ -30,7 +30,17 @@ function crearEntorno(opciones = {}) {
     },
     dueno: opciones.dueno || 'dueno.alertas@gmail.com', activo: null, urlServicio: opciones.url || 'https://script.google.com/macros/s/PRUEBA/exec',
     ahora: null,
-    usuario: null    // quién ejecuta (un menú del archivo); null = el dueño, como la aplicación web
+    usuario: null,   // quién ejecuta (un menú del archivo); null = el dueño, como la aplicación web
+    // Notifícame falso: revisa la firma de cada pedido como el API REST v4 y anota lo que se envía
+    notificame: { url: 'https://notificame.claro.com.hn/v4/api/rest/', key: 'IMKEY-PRUEBA-1234', secret: 'IMSECRET-PRUEBA-5678',
+      enviados: [], rechazar: new Set(), caido: false, malFirmados: 0, pedidos: 0,
+      // Para probar cortes y carreras:
+      responder: null,   // (cuerpo) => null | { codigo, datos (objeto o texto), enviado }: otra respuesta para ese SMS
+      limite: null,      // { porLote, lotes }: en los próximos "lotes" grupos solo acepta "porLote" (los demás: 403 con código 42900)
+      cortarTras: null,  // en el próximo grupo manda estos y después se cae (fetchAll lanza y se pierden todas las respuestas)
+      durante: null,     // función que corre en medio del próximo grupo (como otro pedido que llega mientras se manda)
+      grupos: [] },      // tamaño de cada grupo que llegó con fetchAll
+    candadoOcupado: 0,   // cuántos de los próximos intentos de tomar el candado fallan
   };
   let idSeq = 1;
   const ahora = () => (E.ahora != null ? E.ahora : Date.now());
@@ -275,6 +285,7 @@ function crearEntorno(opciones = {}) {
     openById(id) { const l = E.libros.get(id); if (!l) throw new Error('Unexpected error while getting the method or property openById on object SpreadsheetApp.'); return l; },
     getActiveSpreadsheet() { return E.activo; },
     getActive() { return E.activo; },
+    flush() { E.cuota.flush = (E.cuota.flush || 0) + 1; },
     ProtectionType: { SHEET: 'SHEET', RANGE: 'RANGE' },
     create(nombre) { return nuevoLibro(nombre); },
     getUi() { return ui; }
@@ -297,20 +308,29 @@ function crearEntorno(opciones = {}) {
       E.cache.set(k, { v, vence: ahora() + s * 1000 });
     },
     putAll(obj, s) { Object.keys(obj).forEach((k) => cache.put(k, obj[k], s)); },
-    remove(k) { E.cache.delete(k); }
+    remove(k) { E.cache.delete(k); },
+    removeAll(keys) { keys.forEach((k) => E.cache.delete(k)); }
   };
-  const candado = { tryLock() { return true; }, waitLock() {}, releaseLock() {}, hasLock() { return true; } };
+  const candado = {
+    tryLock() { if (E.candadoOcupado > 0) { E.candadoOcupado--; return false; } return true; },
+    waitLock() { if (E.candadoOcupado > 0) { E.candadoOcupado--; throw new Error('No se pudo obtener el candado'); } },
+    releaseLock() {}, hasLock() { return true; }
+  };
 
   /* ---------------- Utilities ---------------- */
   const Utilities = {
-    DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
+    DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' }, MacAlgorithm: { HMAC_SHA_1: 'sha1', HMAC_SHA_256: 'sha256' },
+    computeHmacSignature(alg, valor, clave) { return aSigned(crypto.createHmac(alg, aBuffer(clave)).update(aBuffer(valor)).digest()); },
     computeDigest(alg, valor) { return aSigned(crypto.createHash(alg).update(aBuffer(valor)).digest()); },
     computeHmacSha256Signature(valor, clave) { return aSigned(crypto.createHmac('sha256', aBuffer(clave)).update(aBuffer(valor)).digest()); },
     base64Encode(v) { return aBuffer(v).toString('base64'); },
     base64EncodeWebSafe(v) { return aBuffer(v).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'); },
     base64Decode(s) { return aSigned(Buffer.from(s, 'base64')); },
     base64DecodeWebSafe(s) { return aSigned(Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64')); },
-    newBlob(datos) { const b = aBuffer(datos); return { getBytes: () => aSigned(b), getDataAsString: () => b.toString('utf8') }; },
+    newBlob(datos) {
+      const blob = (b) => ({ getBytes: () => aSigned(b), getDataAsString: () => b.toString('utf8'), setDataFromString: (t) => blob(Buffer.from(String(t), 'utf8')) });
+      return blob(aBuffer(datos));
+    },
     getUuid() { return crypto.randomUUID(); },
     sleep() {},
     formatDate(fecha, zona, patron) {
@@ -326,9 +346,53 @@ function crearEntorno(opciones = {}) {
   /* ---------------- Genesys falso para UrlFetchApp ----------------
      Cada token: { name, email } y, para probar ataques, { org, cliente, sinTokensMe }.
      tokens/me responde como Genesys: organization, homeOrganization, authorizedScope y OAuthClient. */
+  /* Notifícame falso: firma = BASE64(HMAC-SHA1(secreto, llave + Date + cuerpo)), Authorization: IM llave:firma */
+  function notificame(url, params) {
+    const N = E.notificame;
+    N.pedidos++;
+    if (N.caido) throw new Error(N.caido === true ? 'Address unavailable: ' + url : N.caido + ': ' + url);   // true: Google no llega a Notifícame
+    const ruta = String(url).slice(N.url.length), h = params.headers || {}, metodo = String(params.method || 'get').toLowerCase();
+    const cuerpo = params.payload == null ? '' : Array.isArray(params.payload) ? aBuffer(params.payload).toString('utf8') : String(params.payload);
+    const fecha = String(h.Date || ''), m = /^IM ([^:]+):(.+)$/.exec(String(h.Authorization || ''));
+    const esperada = crypto.createHmac('sha1', N.secret).update(N.key + fecha + cuerpo, 'utf8').digest('base64');
+    const fechaOk = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(fecha) && Math.abs(Date.parse(fecha) - ahora()) < 15 * 60000;
+    if (!m || m[1] !== N.key || m[2] !== esperada || !fechaOk || !h['X-IM-ORIGIN']) { N.malFirmados++; return [401, { code: 40100, error: 'Unauthorized' }]; }
+    if (ruta === 'account/status' && metodo === 'get') return [200, { name: 'CALL CENTER CLARO', status: 'ACTIVE' }];
+    if (ruta === 'messages/send_to_contact' && metodo === 'post') {
+      if (!/application\/json/.test(String(params.contentType || ''))) return [415, { error: 'Unsupported Media Type' }];
+      const b = JSON.parse(cuerpo);
+      const otra = N.responder ? N.responder(b) : null;
+      if (otra) { if (otra.enviado) N.enviados.push({ msisdn: b.msisdn, message: b.message, id: b.id }); return [otra.codigo, otra.datos]; }
+      if (!/^504\d{8}$/.test(String(b.msisdn)) || !b.message) return [400, { code: 40001, error: 'Datos incompletos' }];
+      if (N.rechazar.has(b.msisdn)) return [400, { code: 40002, error: 'Número no válido' }];
+      N.enviados.push({ msisdn: b.msisdn, message: b.message, id: b.id });
+      return [200, { message_id: 'M' + N.enviados.length, status: 'SENT', msisdn: b.msisdn, sms_sent: 1 }];
+    }
+    return [404, { error: 'No encontrado' }];
+  }
+  const respuesta = (codigo, cuerpo) => ({ getResponseCode: () => codigo, getContentText: () => cuerpo });
   const UrlFetchApp = {
+    fetchAll(pedidos) {
+      const N = E.notificame;
+      N.grupos.push(pedidos.length);
+      if (N.durante) { const fn = N.durante; N.durante = null; fn(); }
+      const lim = N.limite && N.limite.lotes > 0 ? N.limite : null;
+      if (lim) lim.lotes--;
+      const corte = N.cortarTras;
+      N.cortarTras = null;
+      return pedidos.map((p, k) => {
+        if (corte != null && k >= corte) throw new Error('Timeout: ' + p.url);
+        if (lim && k >= lim.porLote) { E.cuota.urlFetch++; N.pedidos++; return respuesta(403, JSON.stringify({ code: 42900, error: 'Ha excedido el límite de solicitudes. Intente nuevamente más tarde' })); }
+        const q = Object.assign({}, p); delete q.url; return UrlFetchApp.fetch(p.url, q);
+      });
+    },
     fetch(url, params = {}) {
       E.cuota.urlFetch++;
+      if (String(url).indexOf(E.notificame.url) === 0) {
+        const [codigo, datos] = notificame(url, params);
+        if (codigo >= 400 && !params.muteHttpExceptions) throw new Error('Request failed for ' + url + ' returned code ' + codigo);
+        return respuesta(codigo, typeof datos === 'string' ? datos : JSON.stringify(datos));
+      }
       const m = String(url).match(/^https:\/\/api\.([^/]+)\/api\/v2\/(users\/me|tokens\/me)(\?[^#]*)?$/);
       let codigo = 404, cuerpo = '{"message":"no encontrado"}';
       if (m) {
