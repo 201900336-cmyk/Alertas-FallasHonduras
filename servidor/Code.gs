@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '2.6',                // se ve en la pestaña INICIO
+  VERSION: '2.7',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 36,             // una falla cerrada sigue visible para los asesores
@@ -1335,7 +1335,7 @@ const idSms_ = (idFalla, tipo, num) => 'AL-' + idFalla_(idFalla) + '-' + (tipo =
 
 /* Números de control: celulares del equipo que reciben cada mensaje para confirmar que llegó. Los guarda la
    cuenta dueña (menú Alertas > 5. Números de control) en Propiedades del script; nunca llegan a la página.
-   Cada uno recibe cada mensaje distinto una vez por falla (aviso de falla y restablecido aparte): en la
+   Cada uno recibe una vez por falla cada mensaje aprobado que se mande: en la
    pestaña Envíos SMS sus filas llevan en "Control" la huella del mensaje. Van al principio del envío. */
 function celularHn_(t) {
   const d = String(t || '').replace(/\D+/g, '');
@@ -2699,7 +2699,7 @@ function dialogoControlSms() {
     '<style>textarea{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:8px;font:13px monospace;border:1px solid #c7ced7;border-radius:6px;height:250px}</style>' +
     '<p>Celulares del equipo que reciben cada SMS que se manda desde Alertas, para confirmar que llegó. Uno por línea, con o sin 504.</p>' +
     '<label>Números de control<textarea id="nums" spellcheck="false">' + esc_(lista.join('\n')) + '</textarea></label>' +
-    '<p class="nota">Reciben cada mensaje distinto una vez por falla (el aviso de falla y el de restablecido aparte), al principio del envío. ' +
+    '<p class="nota">Reciben una vez por falla cada mensaje aprobado que se mande, al principio del envío. ' +
     'También van al principio del archivo de Descargar celulares. Se guardan en el servidor de Alertas: no llegan a la página ni a GitHub.</p>' +
     '<div class="acc"><button onclick="google.script.host.close()">Cerrar</button>' +
     '<button class="pri" id="btn" onclick="guardar()">Guardar</button></div><p id="msg"></p>' +
