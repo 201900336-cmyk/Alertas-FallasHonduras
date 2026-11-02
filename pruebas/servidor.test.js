@@ -539,7 +539,13 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = sms(tWf, { op: 'resumen', id: f1.id });
   ok(r.ok && r.datos.configurado === false && r.datos.tipo === 'FALLA' && r.datos.celulares === espera.size && r.datos.faltan === espera.size && r.datos.ya === 0 && !conNumeros(r.datos),
     `el resumen dice cuántos celulares hay (${espera.size}) sin mandar ningún número a la página`, r.datos);
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: 'Hola' });
+  const aprobados = r.ok ? r.datos.mensajes : [];
+  const aprobado = (k) => (aprobados.find((x) => x.id === k) || {}).texto;
+  ok(r.ok && r.datos.puede && r.datos.mensajeMotivo === 'FIBRA' && aprobados.map((x) => x.id).join() === 'FIBRA,ENERGIA,CORTO,TERCEROS,POSTES,VIA'
+    && aprobado('ENERGIA') === 'CLARO: Estimado cliente, debido a una interrupcion en el suministro electrico en su zona, su servicio podria verse afectado temporalmente. El servicio se normalizara al restablecerse la energia. Gracias.'
+    && /^CLARO:\nAviso: Detectamos una posible afectacion en la red/.test(aprobado('FIBRA')),
+    'el resumen trae los 6 mensajes aprobados, tal cual, y el del motivo de la falla (corte de fibra)', aprobados.map((x) => x.id));
+  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   ok(!r.ok && r.codigo === 'NOTIFICAME' && /Conectar Notifícame/.test(r.error), 'sin conectar Notifícame, dice dónde conectarlo', r);
   g.E.usuario = 'otra.persona@claro.com.hn';
   let errN = null;
@@ -571,32 +577,44 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(g.ejecutar("sinNumeros_('Número 9999-8888, +504 3333 2222 y 50411112222 no válidos; código 40010')") === 'Número …, … y … no válidos; código 40010',
     'a la página no llegan números de teléfono, tampoco con guiones o espacios');
 
-  /* Qué se puede mandar */
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: 'x'.repeat(460) });
-  ok(!r.ok && r.codigo === 'DATOS' && /muy largo/.test(r.error), 'un mensaje de más de 3 SMS se rechaza', r);
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'RESTABLECIDO', mensaje: 'Ya volvió el servicio' });
-  let r2 = sms(tWf, { op: 'iniciar', id: f1.id, tipo: '__proto__', mensaje: 'Hola' });
-  ok(!r.ok && r.codigo === 'DATOS' && /sigue activa/.test(r.error) && !r2.ok && r2.codigo === 'DATOS', 'con la falla activa solo sale el aviso de falla (otro tipo se rechaza)', [r, r2]);
+  /* Qué se puede mandar: solo los mensajes aprobados, tal cual */
+  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: 'Hola, este es un texto libre' });
+  let r2 = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: '__proto__' });
+  const r3 = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'RESTABLECIDO' });
+  ok(!r.ok && r.codigo === 'DATOS' && /mensajes aprobados/.test(r.error) && !r2.ok && r2.codigo === 'DATOS' && !r3.ok && N.enviados.length === 0,
+    'un texto libre o una clave que no es de un mensaje aprobado se rechaza (no sale nada)', [r, r2, r3]);
+  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'RESTABLECIDO', aprobado: 'FIBRA' });
+  ok(!r.ok && r.codigo === 'DATOS', 'si la página cree que la falla está en otro estado, se rechaza', r);
   r = sms(tWf, { op: 'resumen', id: fPos.id });
-  r2 = sms(tWf, { op: 'iniciar', id: fPos.id, mensaje: 'Ya volvió el servicio' });
-  ok(r.ok && r.datos.tipo === 'RESTABLECIDO' && r.datos.puede === false && !r2.ok && /se descartó/.test(r2.error), 'a una posible falla descartada no se le avisa "servicio restablecido"', [r.datos && r.datos.puede, r2]);
+  r2 = sms(tWf, { op: 'iniciar', id: fPos.id, aprobado: 'ENERGIA' });
+  ok(r.ok && r.datos.puede === false && /cuando el servicio se restablece no se manda SMS/.test(r.datos.noPuede) && !r2.ok && /restablece/.test(r2.error),
+    'a una falla cerrada (o descartada) no se le manda SMS', [r.datos && r.datos.noPuede, r2]);
+  const activos0 = new Set(g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
+  const nodoEq = b2.dicts.nodo.find((n) => /^[A-Z]{3}(GC)?\d{2}$/.test(String(n)) && !activos0.has(n) && !setN.has(n));
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: [nodoEq], motivo: 'EQUIPO' } } });
+  const fEq = r.ok ? r.datos.falla : {};
+  r = sms(tWf, { op: 'resumen', id: fEq.id });
+  r2 = sms(tWf, { op: 'iniciar', id: fEq.id, tipo: 'FALLA', aprobado: 'ENERGIA' });
+  ok(r.ok && r.datos.puede === false && /Reemplazo de equipo" no tiene un mensaje aprobado/.test(r.datos.noPuede) && r.datos.mensajeMotivo === '' && !r2.ok && /no tiene un mensaje aprobado/.test(r2.error),
+    'una falla de un motivo sin mensaje aprobado (reemplazo de equipo) no manda SMS', [r.datos && r.datos.noPuede, r2]);
+  g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: fEq.id, cerradaEn: Date.now() - 60000, nota: 'Prueba de SMS' } });
 
   /* Envío normal: primero se apartan todos, después se mandan de 50 en 50 */
-  const msj = 'Claro informa: hay una falla en la red de su zona. Ya trabajamos para restablecer su servicio. Disculpe las molestias, señor cliente: atención é';
+  const msj = aprobado('FIBRA');
   // Una pestaña Envíos SMS de la versión anterior (9 columnas, sin "Control"): se completa sola
   const hVieja = g.E.activo.insertSheet('Envíos SMS');
   hVieja.getRange(1, 1, 1, 9).setValues([['Fecha', 'Falla', 'ID de Alertas', 'Tipo', 'Teléfono', 'Estado', 'Detalle', 'Envío', 'Envió']]);
   if (hVieja.getMaxColumns() > 9) hVieja.deleteColumns(10, hVieja.getMaxColumns() - 9);
   const filasAntes0 = hEnv() ? hEnv().getLastRow() : 1;
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj });
+  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   const env1 = r.ok ? r.datos : {};
   ok(r.ok && env1.total === espera.size && env1.ya === 0 && env1.pasos === 0 && contar(filasDe(env1.envio)).Pendiente === espera.size && N.enviados.length === 0 && !conNumeros(r.datos),
     `iniciar aparta los ${espera.size} celulares en Envíos SMS (Pendiente) antes de mandar nada`, r.datos);
   ok(lease(f1.id) && lease(f1.id).envio === env1.envio, 'el envío en curso queda en Propiedades del script (no en la caché, que Google puede borrar)');
   ok(hEnv().getRange(1, 10).getValue() === 'Control' && hEnv().getMaxColumns() >= 10, 'a una pestaña Envíos SMS de antes se le agrega sola la columna Control');
-  r = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj });
+  r = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   ok(!r.ok && r.codigo === 'OCUPADO' && /Ana López está enviando/.test(r.error), 'mientras tanto, otra persona de Workforce no puede mandar a la misma falla', r);
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj + '  ' });
+  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   ok(r.ok && r.datos.reanudado && r.datos.envio === env1.envio && hEnv().getLastRow() === filasAntes0 + espera.size, 'si la misma persona vuelve con el mismo mensaje (recargó la página), sigue el mismo envío', r.datos);
   const lista1 = [...espera];
   const sinSaldo = lista1[1], malos = [lista1[3], lista1[7]], html = lista1[11], caido503 = lista1[17];
@@ -610,7 +628,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     `de 50 en 50 (${av1.lotes} grupos): ${av1.enviados} enviados, 3 rechazados y 2 en duda (respuesta sin datos o 503)`, av1);
   ok(/^(Número no válido|Saldo insuficiente para el …)$/.test(av1.error), 'el error que llega a la página no trae números de teléfono: "' + av1.error + '"');
   ok(N.malFirmados === 1 && repetidos() === 0 && N.enviados.every((e) => e.message === msj && espera.has(e.msisdn) && e.id === 'AL-' + f1.id + '-F-' + e.msisdn),
-    'cada pedido va firmado, con el mensaje exacto (tildes y ñ), un id fijo por falla, aviso y número, y sin repetir', [N.malFirmados, N.enviados.length, N.enviados[0]]);
+    'cada pedido va firmado, con el mensaje aprobado exacto (con su salto de línea), un id fijo por falla, aviso y número, y sin repetir', [N.malFirmados, N.enviados.length, N.enviados[0]]);
   const antesRep = N.enviados.length;
   r = sms(tWf, { op: 'lote', id: f1.id, envio: env1.envio, paso: 0 });
   ok(r.ok && N.enviados.length === antesRep && r.datos.enviados === av1.enviados && r.datos.pasos === av1.pasos, 'si la página repite un grupo que ya se hizo (se cortó la respuesta), no se manda otra vez', r.datos);
@@ -632,7 +650,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = sms(tWf, { op: 'resumen', id: f1.id });
   ok(r.ok && r.datos.configurado && r.datos.ya === espera.size - 5 && r.datos.enDuda === 2 && r.datos.faltan === 3 && r.datos.envios.length === 1 && !r.datos.enCurso,
     'el resumen sabe a cuántos ya les llegó y cuántos quedaron en duda: faltan los 3 con error', r.datos);
-  r = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj });
+  r = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   const env2 = r.ok ? r.datos : {};
   ok(r.ok && env2.total === 3 && env2.ya === espera.size - 5 && env2.enDuda === 2, 'otra vez solo va a los 3 con error (ya lo puede mandar otra persona); a los que quedaron en duda no se les reenvía', r.datos);
   const av2 = mandarTodo(tWfTemp, f1.id, env2);
@@ -640,41 +658,57 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const unaVez = new Set(N.enviados.filter((e) => e.id.indexOf('AL-' + f1.id + '-F-') === 0).map((e) => e.msisdn));
   ok(av2.enviados === 3 && repetidos() === 0 && unaVez.size === espera.size && r.ok && r.datos.falla.sms.length === 2, 'con eso le llegó a todos, una sola vez a cada uno', [av2, unaVez.size]);
 
-  /* Servicio restablecido: límite de Notifícame, conexión caída y grupos que tardan */
+  /* Cuando el servicio se restablece no se manda SMS */
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id, cerradaEn: Date.now() - 60000, nota: 'Prueba de SMS' } });
-  ok(r.ok && r.datos.falla.estado === 'CERRADA', 'se cierra la falla para el aviso de servicio restablecido');
-  r = sms(tWf, { op: 'resumen', id: f1.id });
-  ok(r.ok && r.datos.tipo === 'RESTABLECIDO' && r.datos.puede && r.datos.faltan === espera.size && r.datos.ya === 0, 'cerrada, el aviso es otro (servicio restablecido) y va a todos', r.datos);
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', mensaje: msj });
-  ok(!r.ok && r.codigo === 'DATOS' && /ya se cerró/.test(r.error), 'con la falla cerrada ya no sale el aviso de falla', r);
-  const msjR = 'Claro informa: el servicio en su zona ya fue restablecido. Si no tiene servicio, apague su equipo 30 segundos y vuelva a encenderlo.';
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'RESTABLECIDO', mensaje: msjR });
+  r2 = sms(tWf, { op: 'resumen', id: f1.id });
+  const r4 = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'RESTABLECIDO', aprobado: 'FIBRA' });
+  ok(r.ok && r.datos.falla.estado === 'CERRADA' && r2.ok && !r2.datos.puede && /no se manda SMS/.test(r2.datos.noPuede) && !r4.ok && r4.codigo === 'DATOS',
+    'al cerrar la falla ya no se manda SMS (no hay aviso de servicio restablecido)', [r2.datos && r2.datos.noPuede, r4]);
+  g.post({ accion: 'falla', token: tWf, datos: { op: 'reabrir', id: f1.id } });
+
+  /* Otra falla (caída de postes) para probar el límite de Notifícame, la conexión caída y los grupos que tardan */
+  const porNodo = new Map();
+  for (let i = 0; i < b2.filas; i++) { if (/(^|\s)504[3789]/.test(String(b2.cols.telefono[i] || ''))) { const n = b2.dicts.nodo[b2.cols.nodo[i]]; porNodo.set(n, (porNodo.get(n) || 0) + 1); } }
+  const activosR = new Set(g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
+  const nodosR = [];
+  for (const [n] of [...porNodo].sort((a, b) => b[1] - a[1])) { if (activosR.has(n) || setN.has(n)) continue; nodosR.push(n); if (celularesEsperados(nodosR).size >= 150 || nodosR.length >= 12) break; }
+  const esperaR = celularesEsperados(nodosR);
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: nodosR, motivo: 'POSTES' } } });
+  const fR = r.ok ? r.datos.falla : {};
+  const msjR = aprobado('POSTES');
+  const paraAsesorR = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: -1 } }).datos.fallas.find((f) => f.id === fR.id);
+  const paraWfR = g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.find((f) => f.id === fR.id);
+  ok(r.ok && fR.motivo === 'POSTES' && paraAsesorR && paraAsesorR.motivo === 'OTRO' && paraAsesorR.motivoTexto === 'Caída de postes' && /caída de postes/.test(paraAsesorR.clienteTexto)
+    && paraWfR && paraWfR.motivo === 'POSTES',
+    'se publica con un motivo nuevo; a los asesores les llega como "Otro" con su nombre y su texto (una página abierta desde antes lo muestra bien) y a Workforce, el real',
+    [paraAsesorR && paraAsesorR.motivo, paraWfR && paraWfR.motivo]);
+  r = sms(tWf, { op: 'iniciar', id: fR.id, tipo: 'FALLA', aprobado: 'POSTES' });
   const env3 = r.ok ? r.datos : {};
-  ok(r.ok && env3.total === espera.size, 'el aviso de servicio restablecido va a los ' + espera.size, r.datos);
-  const enviadosR = () => N.enviados.filter((e) => e.id.indexOf('AL-' + f1.id + '-R-') === 0).length;
+  ok(r.ok && env3.total === esperaR.size && esperaR.size >= 100, 'una falla por caída de postes, con su mensaje aprobado, a ' + esperaR.size + ' celulares', r.datos);
+  const enviadosR = () => N.enviados.filter((e) => e.id.indexOf('AL-' + fR.id + '-F-') === 0).length;
   N.limite = { porLote: 10, lotes: 2 };
   N.grupos.length = 0;
-  const sx1 = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: 0 });
-  const sx2 = sx1.ok ? sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: sx1.datos.pasos }) : sx1;
+  const sx1 = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: 0 });
+  const sx2 = sx1.ok ? sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: sx1.datos.pasos }) : sx1;
   ok(sx1.ok && sx1.datos.enviados === 10 && sx1.datos.pausa === 5 && /más despacio/.test(sx1.datos.aviso) && sx2.ok && sx2.datos.enviados === 20 && sx2.datos.pausa === 10 && N.grupos.join() === '50,25',
     'si Notifícame pide esperar (403 con código 42900), sigue solo: más despacio (50, luego 25) y con pausas', [sx1.datos, sx2.datos, N.grupos]);
-  ok(contar(filasDe(env3.envio)).Pendiente === espera.size - 20 && enviadosR() === 20, 'los que no salieron por el límite vuelven a Pendiente para el siguiente grupo');
-  const sx3 = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: sx2.datos.pasos });
+  ok(contar(filasDe(env3.envio)).Pendiente === esperaR.size - 20 && enviadosR() === 20, 'los que no salieron por el límite vuelven a Pendiente para el siguiente grupo');
+  const sx3 = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: sx2.datos.pasos });
   ok(sx3.ok && !sx3.datos.pausa && N.grupos[2] === 12 && sx3.datos.enviados === 32, 'pasado el límite sigue normal (y vuelve a subir de a 10 por grupo)', [sx3.datos, N.grupos]);
   N.cortarTras = 5;
-  const sx4 = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: sx3.datos.pasos });
+  const sx4 = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: sx3.datos.pasos });
   ok(sx4.ok && N.grupos[3] === 22 && sx4.datos.dudosos === 22 && sx4.datos.pausa === 10 && /no respondió/.test(sx4.datos.aviso) && enviadosR() === 37,
     'si la conexión se cae a medio grupo, los 22 quedan en duda (5 sí habían salido) y el envío sigue', sx4.datos);
   const dentro = {};
   N.durante = () => {
-    dentro.otro = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'RESTABLECIDO', mensaje: msjR });
-    dentro.resumen = sms(tWfTemp, { op: 'resumen', id: f1.id });
-    dentro.repetido = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: sx4.datos.pasos });
-    dentro.terminar = sms(tWf, { op: 'terminar', id: f1.id, envio: env3.envio });
+    dentro.otro = sms(tWfTemp, { op: 'iniciar', id: fR.id, tipo: 'FALLA', aprobado: 'POSTES' });
+    dentro.resumen = sms(tWfTemp, { op: 'resumen', id: fR.id });
+    dentro.repetido = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: sx4.datos.pasos });
+    dentro.terminar = sms(tWf, { op: 'terminar', id: fR.id, envio: env3.envio });
     g.E.ahora = Date.now() + 5 * 60000;                       // pasan 5 minutos y el grupo sigue sin terminar
-    dentro.tarde = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: sx4.datos.pasos });
+    dentro.tarde = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: sx4.datos.pasos });
   };
-  const sx5 = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: sx4.datos.pasos });
+  const sx5 = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: sx4.datos.pasos });
   g.E.ahora = null;
   const enC = dentro.resumen && dentro.resumen.ok && dentro.resumen.datos.enCurso;
   ok(dentro.otro && !dentro.otro.ok && dentro.otro.codigo === 'OCUPADO' && enC && enC.por === 'Ana López' && !enC.mio && !enC.mensaje && !enC.libre,
@@ -686,43 +720,41 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(sx5.ok && sx5.datos.dudosos === 33 && enviadosR() === 48 && contar(filasDe(env3.envio)).Dudoso === 33, 'cuando ese grupo por fin termina, no cambia lo ya anotado ni se vuelve a mandar', sx5.datos);
   N.durante = () => { g.E.candadoOcupado = 3; };            // el servidor no se desocupa para anotar el grupo
   const antesStash = enviadosR();
-  const sx6 = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: dentro.tarde.datos.pasos });
-  const g6 = N.grupos[N.grupos.length - 1], l6 = lease(f1.id);
+  const sx6 = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: dentro.tarde.datos.pasos });
+  const g6 = N.grupos[N.grupos.length - 1], l6 = lease(fR.id);
   ok(!sx6.ok && sx6.codigo === 'OCUPADO' && /no se le repite/.test(sx6.error) && l6 && l6.vuelo && l6.vuelo.res && l6.vuelo.res.length === g6 && enviadosR() === antesStash + g6,
     'si el servidor está muy ocupado para anotar un grupo que ya salió, lo que pasó queda guardado en el envío', [sx6, l6 && l6.vuelo]);
-  const sx7 = sms(tWf, { op: 'lote', id: f1.id, envio: env3.envio, paso: dentro.tarde.datos.pasos });
+  const sx7 = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: dentro.tarde.datos.pasos });
   ok(sx7.ok && sx7.datos.pasos === dentro.tarde.datos.pasos + 1 && sx7.datos.enviados === sx5.datos.enviados + g6 && enviadosR() === antesStash + g6,
     'al repetir el pedido se anota sin volver a mandarlo', sx7.datos);
-  const av3 = mandarTodo(tWf, f1.id, Object.assign({}, env3, sx7.datos));
-  r = sms(tWf, { op: 'terminar', id: f1.id, envio: env3.envio });
+  const av3 = mandarTodo(tWf, fR.id, Object.assign({}, env3, sx7.datos));
+  r = sms(tWf, { op: 'terminar', id: fR.id, envio: env3.envio });
   const estR = contar(filasDe(env3.envio));
-  ok(!av3.fallo && av3.siguiente === env3.total && av3.enviados + av3.dudosos === espera.size && estR.Enviado === av3.enviados && estR.Dudoso === 33 && repetidos() === 0 && enviadosR() === av3.enviados + 5 + 11,
+  ok(!av3.fallo && av3.siguiente === env3.total && av3.enviados + av3.dudosos === esperaR.size && estR.Enviado === av3.enviados && estR.Dudoso === 33 && repetidos() === 0 && enviadosR() === av3.enviados + 5 + 11,
     `al final: ${av3.enviados} enviados y 33 en duda; a nadie le llegó dos veces`, [av3, estR]);
-  ok(r.ok && /^Servicio restablecido a \d+ clientes \(33 en duda\)$/.test(r.datos.falla.historial.slice(-1)[0].detalle), 'y queda en el historial de la falla', r.datos && r.datos.falla && r.datos.falla.historial.slice(-1));
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'RESTABLECIDO', mensaje: msjR });
-  ok(r.ok && r.datos.total === 0 && r.datos.enDuda === 33 && !lease(f1.id), 'sin pedirlo, a los 33 en duda no se les manda otra vez', r.datos);
-  r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'RESTABLECIDO', mensaje: msjR, dudosos: true });
+  ok(r.ok && /^Aviso de falla a \d+ clientes \(33 en duda\)$/.test(r.datos.falla.historial.slice(-1)[0].detalle), 'y queda en el historial de la falla', r.datos && r.datos.falla && r.datos.falla.historial.slice(-1));
+  r = sms(tWf, { op: 'iniciar', id: fR.id, tipo: 'FALLA', aprobado: 'POSTES' });
+  ok(r.ok && r.datos.total === 0 && r.datos.enDuda === 33 && !lease(fR.id), 'sin pedirlo, a los 33 en duda no se les manda otra vez', r.datos);
+  r = sms(tWf, { op: 'iniciar', id: fR.id, tipo: 'FALLA', aprobado: 'POSTES', dudosos: true });
   const envD = r.ok ? r.datos : {};
-  const avD = mandarTodo(tWf, f1.id, envD);
-  sms(tWf, { op: 'terminar', id: f1.id, envio: envD.envio });
-  r = sms(tWf, { op: 'resumen', id: f1.id });
-  ok(envD.total === 33 && avD.enviados === 33 && r.ok && r.datos.enDuda === 0 && r.datos.ya === espera.size, 'si se pide a propósito, también se les manda a los que quedaron en duda', [envD.total, avD.enviados, r.datos && r.datos.ya]);
+  const avD = mandarTodo(tWf, fR.id, envD);
+  sms(tWf, { op: 'terminar', id: fR.id, envio: envD.envio });
+  r = sms(tWf, { op: 'resumen', id: fR.id });
+  ok(envD.total === 33 && avD.enviados === 33 && r.ok && r.datos.enDuda === 0 && r.datos.ya === esperaR.size, 'si se pide a propósito, también se les manda a los que quedaron en duda', [envD.total, avD.enviados, r.datos && r.datos.ya]);
   // Ese reenvío repitió a propósito a 16 que sí habían recibido el SMS: no cuentan para las revisiones de repetidos que siguen
-  for (let i = N.enviados.length - 1; i >= 0; i--) if (N.enviados[i].id.indexOf('AL-' + f1.id + '-R-') === 0) N.enviados.splice(i, 1);
-  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'reabrir', id: f1.id } });
+  for (let i = N.enviados.length - 1; i >= 0; i--) if (N.enviados[i].id.indexOf('AL-' + fR.id + '-F-') === 0) N.enviados.splice(i, 1);
+  g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: fR.id, cerradaEn: Date.now() - 60000, nota: 'Prueba de SMS' } });
 
   /* Otra falla: límite diario, llave que deja de servir, cambio de mensaje, rechazos y mantenimiento */
   const activasN = new Set(g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
-  const porNodo = new Map();
-  for (let i = 0; i < b2.filas; i++) { if (/(^|\s)504[3789]/.test(String(b2.cols.telefono[i] || ''))) { const n = b2.dicts.nodo[b2.cols.nodo[i]]; porNodo.set(n, (porNodo.get(n) || 0) + 1); } }
   const nodos2 = [];
-  for (const [n] of [...porNodo].sort((a, b) => b[1] - a[1])) { if (activasN.has(n) || setN.has(n)) continue; nodos2.push(n); if (celularesEsperados(nodos2).size >= 160 || nodos2.length >= 12) break; }
+  for (const [n] of [...porNodo].sort((a, b) => b[1] - a[1])) { if (activasN.has(n) || setN.has(n) || nodosR.includes(n)) continue; nodos2.push(n); if (celularesEsperados(nodos2).size >= 230 || nodos2.length >= 12) break; }
   const espera2 = celularesEsperados(nodos2);
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: nodos2, motivo: 'ENERGIA' } } });
   const f2 = r.ok ? r.datos.falla : {};
-  ok(r.ok && espera2.size >= 160, `otra falla para seguir probando: ${nodos2.length} nodos, ${espera2.size} celulares`, r.ok ? espera2.size : r);
+  ok(r.ok && espera2.size >= 230, `otra falla para seguir probando: ${nodos2.length} nodos, ${espera2.size} celulares`, r.ok ? espera2.size : r);
   g.ejecutar("props_().setProperty('SMS_CUOTA', JSON.stringify({ dia: cuotaSms_().dia, usados: ALERTAS.SMS_POR_DIA - 40 }))");
-  r = sms(tWf, { op: 'iniciar', id: f2.id, tipo: 'FALLA', mensaje: msj });
+  r = sms(tWf, { op: 'iniciar', id: f2.id, tipo: 'FALLA', aprobado: 'ENERGIA' });
   const env4 = r.ok ? r.datos : {};
   ok(r.ok && env4.total === 40 && env4.quedanHoy === 40 && env4.paraManana === espera2.size - 40 && sms(tWf, { op: 'resumen', id: f2.id }).datos.quedanHoy === 0,
     'con el límite diario casi lleno, solo aparta los que caben hoy; el resto queda para mañana', r.datos);
@@ -744,12 +776,11 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && !r.datos.falla && contar(filasDe(env4.envio)).Cancelado === 40 && sms(tWf, { op: 'resumen', id: f2.id }).datos.quedanHoy === 40,
     'al detenerlo, lo apartado queda Cancelado (para el próximo envío) y vuelve al límite de hoy', r.datos);
   g.ejecutar("props_().deleteProperty('SMS_CUOTA')");
-  r = sms(tWf, { op: 'iniciar', id: f2.id, tipo: 'FALLA', mensaje: msj });
+  r = sms(tWf, { op: 'iniciar', id: f2.id, tipo: 'FALLA', aprobado: 'ENERGIA' });
   const env5 = r.ok ? r.datos : {};
   r2 = env5.envio ? sms(tWf, { op: 'lote', id: f2.id, envio: env5.envio, paso: 0 }) : r;
   ok(r.ok && env5.total === espera2.size && r2.ok && r2.datos.enviados === 50, 'los cancelados vuelven a entrar en el siguiente envío', [r.datos, r2.datos]);
-  const msj2 = 'Claro informa: falla de energía comercial en su zona. Estimamos restablecer el servicio hoy.';
-  r = sms(tWf, { op: 'iniciar', id: f2.id, tipo: 'FALLA', mensaje: msj2 });
+  r = sms(tWf, { op: 'iniciar', id: f2.id, tipo: 'FALLA', aprobado: 'CORTO' });
   const env6 = r.ok ? r.datos : {};
   const f2a = g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.find((f) => f.id === f2.id);
   ok(r.ok && !r.datos.reanudado && env6.envio !== env5.envio && env6.total === espera2.size - 50 && f2a.sms.length === 1 && /se detuvo antes de terminar/.test(f2a.historial.slice(-1)[0].detalle),
@@ -782,14 +813,14 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   /* Dos fallas enviando a la vez, y el mantenimiento borrando filas viejas en medio */
   const activas3 = new Set(g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
   const nodos3 = [];
-  for (const [n] of [...porNodo].sort((a, b) => b[1] - a[1])) { if (activas3.has(n) || setN.has(n) || nodos2.includes(n)) continue; nodos3.push(n); if (celularesEsperados(nodos3).size >= 150 || nodos3.length >= 12) break; }
+  for (const [n] of [...porNodo].sort((a, b) => b[1] - a[1])) { if (activas3.has(n) || setN.has(n) || nodosR.includes(n) || nodos2.includes(n)) continue; nodos3.push(n); if (celularesEsperados(nodos3).size >= 150 || nodos3.length >= 12) break; }
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: nodos3, motivo: 'FIBRA' } } });
   const f3 = r.ok ? r.datos.falla : {};
   g.ejecutar("(() => { const orig = agregarFilas_; globalThis.__fallarFilas = 1; agregarFilas_ = function () { if (globalThis.__fallarFilas > 0) { globalThis.__fallarFilas--; throw new Error('Hoja no disponible'); } return orig.apply(null, arguments); }; })()");
   const filasAntesF = hEnv().getLastRow();
-  r = sms(tWfTemp, { op: 'iniciar', id: f3.id, tipo: 'FALLA', mensaje: msj });
+  r = sms(tWfTemp, { op: 'iniciar', id: f3.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   ok(!r.ok && !lease(f3.id) && hEnv().getLastRow() === filasAntesF, 'si no se pueden apartar las filas, no queda un envío a medias que trabe la falla', r);
-  r = sms(tWfTemp, { op: 'iniciar', id: f3.id, tipo: 'FALLA', mensaje: msj });
+  r = sms(tWfTemp, { op: 'iniciar', id: f3.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   const env7 = r.ok ? r.datos : {};
   ok(r.ok && env7.total >= 150 && lease(f2.id) && lease(f3.id) && lease(f3.id).n === 'Mario Rivera', 'otra persona manda a otra falla al mismo tiempo (' + env7.total + ' celulares)', r);
   const sy1 = sms(tWfTemp, { op: 'lote', id: f3.id, envio: env7.envio, paso: 0 });
@@ -831,7 +862,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const activas4 = new Set(g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
   const nodos4 = [];
   for (const [n] of [...porNodo].sort((a, b) => b[1] - a[1])) {
-    if (activas4.has(n) || setN.has(n) || nodos2.includes(n) || nodos3.includes(n)) continue;
+    if (activas4.has(n) || setN.has(n) || nodosR.includes(n) || nodos2.includes(n) || nodos3.includes(n)) continue;
     nodos4.push(n);
     if (celularesEsperados(nodos4).size >= 60 || nodos4.length >= 12) break;
   }
@@ -853,9 +884,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = sms(tWf, { op: 'resumen', id: f4.id });
   ok(r.ok && r.datos.control === 4 && Object.keys(r.datos.controlHechos).length === 0 && !conNumeros(r.datos),
     'el resumen dice cuántos números de control van (4: el que también es cliente lo recibe como cliente), sin mandar los números', r.datos && r.datos.control);
-  const msjC = 'Claro informa: falla de energía en su zona. Le avisaremos cuando se restablezca.';
+  const msjC = aprobado('ENERGIA');
   const antesC = N.enviados.length;
-  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', mensaje: msjC });
+  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', aprobado: 'ENERGIA' });
   const envC = r.ok ? r.datos : {}, filasC = filasDe(envC.envio);
   ok(r.ok && envC.total === espera4.size + 4 && envC.control === 4 && filasC.slice(0, 4).every((x) => ctrlNums.includes(String(x[4])) && /^M[0-9a-f]{8}$/.test(String(x[9])))
     && filasC.slice(4).every((x) => x[9] === '') && !conNumeros(r.datos), 'iniciar pone primero los 4 números de control (con la huella del mensaje) y después a los clientes', [envC.total, envC.control]);
@@ -873,12 +904,12 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = sms(tWf, { op: 'resumen', id: f4.id });
   ok(r.ok && r.datos.controlHechos[g.ejecutar('hashSms_(' + JSON.stringify(msjC) + ')')] === 4 && U.hashSms(msjC) === g.ejecutar('hashSms_(' + JSON.stringify(msjC) + ')'),
     'el resumen sabe que los 4 ya tienen ese mensaje (la página calcula la misma huella)', r.datos && r.datos.controlHechos);
-  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', mensaje: msjC });
+  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', aprobado: 'ENERGIA' });
   const envC2 = r.ok ? r.datos : {};
   const avC2 = mandarTodo(tWf, f4.id, envC2);
   sms(tWf, { op: 'terminar', id: f4.id, envio: envC2.envio });
   ok(envC2.total === 4 && envC2.control === 0 && avC2.enviados === 2 && avC2.errores === 2, 'al reintentar con el mismo mensaje, a los números de control no se les repite', [envC2.total, envC2.control]);
-  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', mensaje: msjC + ' Disculpe las molestias.' });
+  r = sms(tWf, { op: 'iniciar', id: f4.id, tipo: 'FALLA', aprobado: 'VIA' });
   const envC3 = r.ok ? r.datos : {};
   ok(r.ok && envC3.total === 2 + 4 && envC3.control === 4, 'con otro mensaje sí lo reciben: una vez por cada mensaje distinto', r.datos);
   sms(tWf, { op: 'terminar', id: f4.id, envio: envC3.envio });

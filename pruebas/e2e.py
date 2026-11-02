@@ -251,22 +251,28 @@ with sync_playwright() as p:
        'Estadísticas: detección de fallas, sin la posible falla descartada (la cuenta aparte)', det_txt[:300])
     x.locator('.deteccion').screenshot(path=OUT + 'e06f_deteccion.png')
 
-    print('7b. SMS a los clientes con Notifícame')
+    print('7b. SMS a los clientes con Notifícame (solo mensajes aprobados)')
+    x.goto(APP + '#fallas'); x.wait_for_selector('.pestanas', timeout=15000)
+    x.click('button[role=tab]:has-text("Resueltas")'); x.wait_for_selector('.falla-card', timeout=10000)
+    ok(x.locator('.falla-card', has_text='F1254585').locator('button.enviar-sms').count() == 0, 'una falla resuelta ya no tiene botón de SMS (no se avisa el servicio restablecido)')
+    x.evaluate("(n) => A.publicarFalla({ nodos: n, motivo: 'POSTES', numero: 'F1254600' })", ejemplos[:2]); x.wait_for_timeout(800)
+    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)   # Concentrix recibe el aviso de la falla nueva
     def abrir_sms():
         x.goto(APP + '#fallas'); x.wait_for_selector('.pestanas', timeout=15000)
-        x.click('button[role=tab]:has-text("Resueltas")'); x.wait_for_selector('.falla-card', timeout=10000)
-        t = x.locator('.falla-card', has_text='F1254585')
+        x.click('button[role=tab]:has-text("Activas")'); x.wait_for_selector('.falla-card', timeout=10000)
+        t = x.locator('.falla-card', has_text='F1254600')
         t.locator('button.enviar-sms').click()
         x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
         return t
-    t_res = abrir_sms()
+    t_sms = abrir_sms()
     n_sms = int(re.sub(r'\D', '', x.locator('.sms-cifra b').inner_text()))
-    msj_sms = x.locator('.sms-texto').input_value()
+    msj_sms = x.locator('.sms-texto').inner_text()
     n_ctrl = 3                                                       # números de control del servidor de prueba
+    ok(n_sms > 0 and x.locator('.sms-aprobado').input_value() == 'POSTES' and x.locator('.sms-aprobado option').count() == 6
+       and msj_sms.startswith('CLARO:') and 'Se reporta dano en infraestructura publica (postes)' in msj_sms,
+       f'en una falla por caída de postes sale su mensaje aprobado, tal cual, para {n_sms} clientes (y se puede elegir otro de los 6 aprobados)')
+    ok(x.locator('textarea').count() == 0 and 'tal como está aprobado' in x.locator('.sms-contador').inner_text(), 'el texto no se puede editar: ' + x.locator('.sms-contador').inner_text())
     ok('Además va a 3 números de control del equipo' in x.locator('.sms-cifras').inner_text(), 'dice que también van los 3 números de control del equipo')
-    ok(n_sms > 0 and x.locator('.sms-modal .campo > span').first.inner_text() == 'Mensaje · Servicio restablecido' and 'restablecido' in msj_sms,
-       f'en una falla resuelta, el SMS de servicio restablecido va a {n_sms} clientes con celular')
-    ok('1 SMS por cliente' in x.locator('.sms-contador').inner_text(), 'el mensaje sugerido cabe en un SMS: ' + x.locator('.sms-contador').inner_text())
     x.locator('.modal').screenshot(path=OUT + 'e06g_sms.png')
     antes_sms = http('/test/sms?limite=10,1')['enviados']        # el primer grupo: Notifícame acepta 10 y pide esperar
     x.click('.modal-pie .btn-primario'); x.click('.modal-pie button:has-text("Sí, enviar")')
@@ -275,10 +281,10 @@ with sync_playwright() as p:
     van = 10 - n_ctrl                                                # el primer grupo: los 3 de control y 7 clientes
     x.locator('.modal').screenshot(path=OUT + 'e06h_sms_pausa.png')
     x.reload(); x.wait_for_selector('.usuario-txt', timeout=60000)   # se cerró la página a medio envío
-    t_res = abrir_sms()
+    t_sms = abrir_sms()
     seguir = x.locator('.modal-pie .btn-primario').inner_text()
     ok('sin terminar: van ' + str(van) + ' de ' + str(n_sms) in x.locator('.sms-modal').inner_text() and seguir == 'Seguir enviando a ' + str(n_sms - van)
-       and x.locator('.sms-texto').input_value() == msj_sms, 'al volver, ofrece seguir el mismo envío: "' + seguir + '"')
+       and x.locator('.sms-texto').inner_text() == msj_sms, 'al volver, ofrece seguir el mismo envío: "' + seguir + '"')
     x.locator('.modal').screenshot(path=OUT + 'e06h_sms_seguir.png')
     x.click('.modal-pie .btn-primario'); x.click('.modal-pie button:has-text("Sí, enviar")')
     x.wait_for_selector('.sms-resultado', timeout=180000); x.wait_for_timeout(300)
@@ -288,8 +294,8 @@ with sync_playwright() as p:
        and 'También salió a los 3 números de control' in res_txt, f'Notifícame recibió los {n_sms} SMS y los 3 de control, una vez cada uno y bien firmados', r_sms)
     x.locator('.modal').screenshot(path=OUT + 'e06h_sms_listo.png')
     x.click('.modal-pie button:has-text("Listo")'); x.wait_for_timeout(300)
-    ok('Servicio restablecido a ' + str(n_sms) + ' clientes y 3 de control' in t_res.locator('dl.meta').inner_text().replace(',', ''), 'la tarjeta muestra el envío, con los de control')
-    t_res.locator('button.enviar-sms').click(); x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
+    ok('Aviso de falla a ' + str(n_sms) + ' clientes y 3 de control' in t_sms.locator('dl.meta').inner_text().replace(',', ''), 'la tarjeta muestra el envío, con los de control')
+    t_sms.locator('button.enviar-sms').click(); x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
     ok('Ya les llegó a todos' in x.locator('.sms-cifras').inner_text() and x.locator('.modal-pie .btn-primario').is_disabled(), 'al abrirlo otra vez, no se le repite a nadie')
     x.keyboard.press('Escape')
 

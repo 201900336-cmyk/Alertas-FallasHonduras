@@ -153,7 +153,7 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
   - Marca en qué fallas llamó: **Llamó 2 veces** en una falla ya cerrada y, en la falla activa, **Ya había llamado 1 vez** si llamó antes por la misma falla (sin contar la llamada de ahora). Cuentan las consultas de Concentrix y Tiendas de los últimos 30 días (las búsquedas de Workforce no son llamadas del cliente), y varias búsquedas en menos de 10 minutos cuentan como una llamada.
   - Cada falla sale con su número de falla.
   - Sale de las fallas publicadas en Alertas para el nodo actual del cliente; si el cliente se cambió de nodo, no salen las de su nodo anterior.
-- **Workforce HN**: en **Fallas > Nueva falla** escribe los nodos (por ejemplo `NODO01, NODO02`), elige el motivo y la hora estimada, revisa a cuántos clientes afecta y **Publicar falla**. Puede editarla, cerrarla o reabrirla.
+- **Workforce HN**: en **Fallas > Nueva falla** escribe los nodos (por ejemplo `NODO01, NODO02`), elige el motivo y la hora estimada, revisa a cuántos clientes afecta y **Publicar falla**. Puede editarla, cerrarla o reabrirla. Los motivos: posible falla general, falla de energía comercial, corte de fibra óptica, corto circuito externo, daño en infraestructura por terceros, caída de postes, eventos en vía pública, reemplazo de equipo, limpieza de ruido, mantenimiento preventivo y otro.
 - En el paso 4 van el **número de falla** (por ejemplo `F1254585`), la referencia del correo o ticket y las notas. El número de falla es como se nombra la falla en todo Alertas y también lo ven los asesores: en el panel de fallas, en el veredicto y en el historial del cliente. Se guarda en mayúsculas, sin espacios ni guiones. La referencia y las notas solo las ve Workforce HN.
 - Si una falla todavía no tiene número de falla, sale con el ID que le pone Alertas: **F**, la fecha (año, mes y día) y el número del día, sin guiones, por ejemplo `F26110201`. La tarjeta avisa "Sin número todavía" y se agrega con **Editar**. Las publicadas antes del 2 nov se guardaron con guiones (`F-261030-05`) y salen sin ellos (`F26103005`). El historial encuentra una falla por su número de falla o por su ID, y el CSV trae los dos.
 - Una falla cerrada sigue visible para los asesores **36 horas** y luego sale de su panel. Workforce la conserva en el historial.
@@ -189,7 +189,7 @@ La key y la secret quedan en las Propiedades del script: no están en GitHub ni 
 Para confirmar que el mensaje llegó, cada envío también va a los celulares del equipo. Se guardan en la base interna: **Alertas > 5. Números de control (SMS)** (solo la cuenta dueña). Se pegan uno por línea, con o sin 504; Alertas quita los repetidos y avisa lo que no es un celular de Honduras.
 
 - Van al principio del envío, así llegan en los primeros segundos.
-- Cada número de control recibe cada mensaje distinto una vez por falla (el aviso de falla y el de restablecido aparte). Si se reintentan los que fallaron con el mismo texto, no se les repite; si se cambia el texto, sí les llega el nuevo.
+- Cada número de control recibe cada mensaje distinto una vez por falla. Si se reintentan los que fallaron con el mismo mensaje, no se les repite; si se elige otro mensaje aprobado, sí les llega.
 - Si un número de control también es cliente de la falla, le llega una sola vez.
 - Se cuentan aparte de los clientes: «Aviso de falla a 1,251 clientes y a 17 números de control».
 - Solo salen junto con clientes: si no hay clientes a quienes mandar, no se les manda nada.
@@ -198,11 +198,23 @@ Para confirmar que el mensaje llegó, cada envío también va a los celulares de
 
 ### Enviar
 
-1. En **Fallas > Activas**, cada falla tiene **Enviar SMS** (aviso de falla). Las resueltas (36 horas) tienen **SMS de restablecido**. El aviso lo decide el estado de la falla: con la falla activa solo sale el de falla y, cerrada, solo el de restablecido. A una posible falla descartada no se le manda restablecido.
-2. La ventana dice a cuántos clientes les llega, de cuántos tiene la falla (con celular, solo fijo o sin teléfono), y trae el mensaje ya escrito:
-   - **Aviso de falla**: «Claro informa: hay una falla en la red de su zona que afecta su servicio. Ya trabajamos para restablecerlo antes de las 3:00 p. m. Disculpe las molestias.» La hora sale de la solución estimada; si no tiene, no la menciona. En una posible falla, el mensaje dice que se está revisando.
-   - **Servicio restablecido**: «Claro informa: el servicio en su zona ya fue restablecido. Si sigue sin servicio, apague su equipo 30 segundos y vuelva a encenderlo. Gracias.»
-   - Se puede cambiar. El contador dice cuántos caracteres y cuántos SMS por cliente usa (160 caracteres por SMS, 153 por parte si son varias). Notifícame quita las tildes de á, í, ó, ú: el cliente ve «conexion» en vez de «conexión», y la ñ, la é y la / sí llegan (probado el 2 nov). Por eso esas tildes no cambian el largo, y **Verlo así** muestra el mensaje como le llega. Comillas curvas o emojis puede que no lleguen bien y harían que cada SMS admita 70 caracteres: **Cambiarlos** los arregla. Los mensajes sugeridos están en `src/config.js` (`sms`).
+1. En **Fallas > Activas**, cada falla tiene **Enviar SMS**. Cuando el servicio se restablece no se manda SMS: las fallas cerradas no tienen el botón.
+2. **Solo se mandan los mensajes aprobados por Claro, tal cual** (documento «Segmentación de motivos 2.0», eventos externos o fortuitos). Hay uno por motivo:
+
+   | Motivo de la falla | Mensaje aprobado |
+   | --- | --- |
+   | Corte de fibra óptica | Fibra dañada (accidentes / terceros) |
+   | Falla de energía comercial | Falla de energía eléctrica |
+   | Corto circuito externo | Corto circuito externo |
+   | Daño en infraestructura por terceros | Daño en infraestructura por terceros |
+   | Caída de postes | Caída de postes |
+   | Eventos en vía pública | Eventos en vía pública |
+
+   - La ventana trae el mensaje del motivo de la falla; se puede elegir otro de los aprobados, pero no escribir ni cambiar el texto. Muestra cuántos caracteres y cuántos SMS por cliente usa.
+   - Una falla de otro motivo (posible falla general, reemplazo de equipo, limpieza de ruido, mantenimiento u otro) no manda SMS: la ventana lo dice y muestra qué motivos tienen mensaje. Si una posible falla se confirma, se edita con el motivo real y desde ahí se puede mandar.
+   - Los textos viven en el servidor (`SMS_APROBADOS` en `servidor/Code.gs`): la página manda solo la clave del mensaje, así que no sale ningún texto que no esté aprobado. Para cambiarlos, se cambian ahí (y la copia de la demostración en `src/backend.js`).
+   - Notifícame quita las tildes de á, í, ó, ú (probado el 2 nov); los mensajes aprobados ya vienen sin tildes.
+   - La ventana dice a cuántos clientes les llega, de cuántos tiene la falla (con celular, solo fijo o sin teléfono).
 3. **Enviar a N clientes**, confirmar (dice también a cuántos números de control va), y la barra muestra el avance. Se puede **Detener**.
 4. Al terminar dice cuántos salieron, cuántos no (con el motivo que dio Notifícame) y cuántos quedaron en duda. **Reintentar los que fallaron** vuelve a mandar solo a los que fallaron.
 
@@ -217,7 +229,7 @@ Para confirmar que el mensaje llegó, cada envío también va a los celulares de
 | Dudoso | Notifícame no respondió a tiempo, o respondió sin confirmar: no se sabe si salió | No, salvo que se pida (ver abajo) |
 | Cancelado | El envío se detuvo antes de mandarlo | Sí, en el próximo envío |
 
-- Si a la falla le agregan nodos, **Enviar SMS** va solo a los clientes nuevos. El aviso de falla y el de restablecido se cuentan aparte.
+- Si a la falla le agregan nodos, **Enviar SMS** va solo a los clientes nuevos.
 - **Si se cierra la página a medio envío**, al volver a abrir **Enviar SMS** la misma persona ve «Tienes un envío sin terminar» y **Seguir enviando** termina el mismo envío. Si cambia el mensaje, ese envío se cierra y el nuevo va a quienes falten.
 - **Si una respuesta se corta**, la página repite el pedido con el mismo número de paso y el servidor no vuelve a mandar ese grupo.
 - **Si Notifícame pide esperar** (límite de solicitudes), Alertas espera unos segundos y sigue solo, con grupos más chicos. Si lo pide 6 veces seguidas, se detiene; lo que no salió se manda después con **Seguir enviando**.
@@ -317,7 +329,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 272 pruebas del servidor en un emulador de Apps Script
+npm test                           # 273 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

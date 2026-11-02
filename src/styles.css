@@ -704,7 +704,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .sms-cifra b { font-size: 34px; font-weight: 800; font-stretch: 112%; line-height: 1.05; }
 .sms-cifra span { font-size: 15px; color: var(--ink-2); font-weight: 600; }
 .sms-tipo { align-self: flex-start; }
-.sms-texto { min-height: 104px; resize: vertical; font-size: 15px; line-height: 1.45; }
+.sms-texto { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--surface-2); color: var(--ink); font-size: 15px; line-height: 1.45; margin-top: -4px; }
 .sms-contador { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: -6px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .sms-contador[data-aviso="si"] span { color: var(--resuelta-text); font-weight: 600; }
 .sms-modal .aviso-linea button { margin-left: 6px; border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }

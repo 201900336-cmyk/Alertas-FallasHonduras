@@ -190,7 +190,7 @@ const A = {
      número de paso. Si una respuesta se corta y la página repite el pedido, el servidor no vuelve a
      mandar ese grupo. Si es la misma persona con el mismo mensaje, "iniciar" sigue el envío sin terminar. */
   smsResumen: (id) => Backend.sms({ op: 'resumen', id }),
-  async enviarSms(id, tipo, mensaje, alAvance, detenido, conDuda) {
+  async enviarSms(id, tipo, mensaje, alAvance, detenido, conDuda) {   // mensaje: clave del mensaje aprobado
     // Corte de red o servidor ocupado: se repite el mismo pedido (no duplica nada)
     const pedir = async (datos, veces) => {
       for (let k = 1; ; k++) {
@@ -200,7 +200,8 @@ const A = {
         }
       }
     };
-    const ini = await pedir({ op: 'iniciar', id, tipo, mensaje, dudosos: !!conDuda }, 2);   // dudosos: también a los que quedaron en duda
+    // "aprobado": la clave del mensaje aprobado (el servidor pone el texto); dudosos: también a los que quedaron en duda
+    const ini = await pedir({ op: 'iniciar', id, tipo, aprobado: mensaje, dudosos: !!conDuda }, 2);
     let av = Object.assign({ aviso: '' }, ini);
     if (!av.total) return Object.assign(av, { nada: true });
     alAvance(av);
@@ -262,9 +263,11 @@ function aplicarTema(t) {
 const RUTAS = ['consulta', 'fallas', 'base', 'stats'];
 function rutaActual() { const h = (location.hash || '').replace('#', ''); return RUTAS.includes(h) ? h : 'consulta'; }
 function ir(r) { if (location.hash !== '#' + r) location.hash = r; G.set({ ruta: r }); }
-function nombreMotivo(f) { return f.motivo === 'OTRO' ? (f.motivoTexto || 'Otro motivo') : MOTIVO[f.motivo].nombre; }
-function cortoMotivo(f) { return f.motivo === 'OTRO' ? (f.motivoTexto || 'Otro motivo') : MOTIVO[f.motivo].corto; }
-function clienteMotivo(f) { return f.motivo === 'OTRO' ? (f.clienteTexto || 'una afectación en la red de su zona') : MOTIVO[f.motivo].cliente; }
+// Un motivo que esta página no conoce (por ejemplo, uno nuevo del servidor) se muestra como "Otro", con su texto
+const motivoConocido = (f) => (f.motivo !== 'OTRO' && MOTIVO[f.motivo]) || null;
+function nombreMotivo(f) { const m = motivoConocido(f); return m ? m.nombre : f.motivoTexto || 'Otro motivo'; }
+function cortoMotivo(f) { const m = motivoConocido(f); return m ? m.corto : f.motivoTexto || 'Otro motivo'; }
+function clienteMotivo(f) { const m = motivoConocido(f); return m ? m.cliente : f.clienteTexto || 'una afectación en la red de su zona'; }
 function puede(vista) { const u = G.s.user; return !!u && CONFIG.roles[u.rol].vistas.includes(vista); }
 const esWorkforce = () => { const u = G.s.user; return !!u && (u.rol === 'workforce' || u.rol === 'jefatura'); };
 
@@ -322,6 +325,14 @@ const ICONOS = {
   VALIDACION: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/><path d="M11 7.8v3.6"/><path d="M11 14.2h.01"/>',
   ENERGIA: '<path d="M13 3 5 13.5h6L10 21l8-10.5h-6L13 3z"/>',
   FIBRA: '<circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.2 8.6 20 18M8.2 15.4 20 6"/>',
+  // Corto circuito: un cable cortado con chispa
+  CORTO: '<path d="M3 12h5.5M15.5 12H21"/><path d="m12.5 7-2.5 5h4l-2.5 5"/>',
+  // Daño por terceros: una torre o estructura con una grieta
+  TERCEROS: '<path d="M4 20h16"/><path d="M7 20 10.5 4h3L17 20"/><path d="m11.2 9 2 2-2.2 2 1.8 2"/>',
+  // Caída de postes: un poste inclinado con sus cables
+  POSTES: '<path d="M3 20h18"/><path d="M9 20 15.5 5"/><path d="M11.8 13.7 6 12.5M14.2 8.1 20 11"/>',
+  // Vía pública: una calle con su línea central
+  VIA: '<path d="M7 3 4 21M17 3l3 18"/><path d="M12 4v3M12 10.5v3M12 17v3"/>',
   EQUIPO: '<path d="M4 8h13l-3.5-3.5"/><path d="M20 16H7l3.5 3.5"/>',
   RUIDO: '<path d="M2 12h3l2.2-6 3.3 12 3.1-9 2.2 6 1.7-3H22"/>',
   MANTENIMIENTO: '<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="m9.2 15 2 2 3.8-4"/>',

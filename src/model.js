@@ -465,7 +465,7 @@ const Model = (() => {
     const hora = (t) => U.hora(t).replace(/\u00a0/g, ' ');
     // "las 3:00 p. m.", "la 1:30 p. m.", "ayer a las 9:15 a. m." o "el 30 oct a las 9:15 a. m."
     const momento = (t) => { const h = hora(t), art = /^1:/.test(h) ? 'la ' : 'las '; return U.esHoy(t, now) ? art + h : U.diaRel(t, now) + ' a ' + art + h; };
-    const motivo = !f ? '' : f.motivo === 'OTRO' ? String(f.motivoTexto || 'otro motivo').replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ])/, (c) => c.toLowerCase())
+    const motivo = !f ? '' : f.motivo === 'OTRO' || !MOTIVO[f.motivo] ? String(f.motivoTexto || 'otro motivo').replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ])/, (c) => c.toLowerCase())
       : MOTIVO[f.motivo].nombre.replace(/^Falla de /, '').toLowerCase();
     const datos = {
       contrato: String(rec.contrato), nodo: rec.nodo, numero: f ? U.numeroFalla(f) : '', motivo,
@@ -476,12 +476,7 @@ const Model = (() => {
     return plantilla.replace(/\{(\w+)\}/g, (m, k) => (k in datos ? datos[k] : m)).replace(/\.\./g, '.');
   }
 
-  /* Mensaje de SMS para los clientes de una falla (plantillas en CONFIG.sms). tipo: FALLA o RESTABLECIDO */
-  function textoSms(f, tipo, now) {
-    const clave = tipo === 'RESTABLECIDO' ? 'RESTABLECIDO' : esPosible(f) ? 'POSIBLE' : 'FALLA';
-    const eta = f.eta && f.eta > now ? ' antes de ' + (U.esHoy(f.eta, now) ? '' : U.diaRel(f.eta, now) + ' a ') + U.las(f.eta) : '';
-    return U.sinTildesSms(CONFIG.sms[clave].replace('{eta}', eta));
-  }
+
 
   /* ---------- Correo para reportar una posible falla (al VOC o al personal interno) ----------
      d: el detalle (servidor: detallePosibleFalla_). Devuelve el asunto y el cuerpo en HTML (con la
@@ -578,6 +573,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, textoSms, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

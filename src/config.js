@@ -54,6 +54,15 @@ const CONFIG = {
       cliente: 'una interrupción del suministro de energía eléctrica que afecta nuestros equipos en su zona' },
     { id: 'FIBRA', nombre: 'Corte de fibra óptica', corto: 'Corte de fibra',
       cliente: 'un daño en la fibra óptica que lleva el servicio a su zona' },
+    // Eventos externos con mensaje de SMS aprobado ("Segmentación de motivos 2.0")
+    { id: 'CORTO', nombre: 'Corto circuito externo', corto: 'Corto circuito externo',
+      cliente: 'un corto circuito externo, ajeno a nuestra red, en su zona' },
+    { id: 'TERCEROS', nombre: 'Daño en infraestructura por terceros', corto: 'Daño por terceros',
+      cliente: 'daños causados por terceros en la infraestructura de su zona' },
+    { id: 'POSTES', nombre: 'Caída de postes', corto: 'Caída de postes',
+      cliente: 'la caída de postes por un incidente externo en su zona' },
+    { id: 'VIA', nombre: 'Eventos en vía pública', corto: 'Vía pública',
+      cliente: 'daños ocasionados por terceros en la vía pública de su zona' },
     { id: 'EQUIPO', nombre: 'Reemplazo de equipo', corto: 'Reemplazo de equipo',
       cliente: 'el reemplazo de un equipo de nuestra red que da servicio a su zona' },
     { id: 'RUIDO', nombre: 'Limpieza de ruido', corto: 'Limpieza de ruido',
@@ -88,13 +97,8 @@ const CONFIG = {
     ]
   },
 
-  // SMS a los clientes de una falla (Notifícame). {eta} se cambia por " antes de las 3:00 p. m." si la falla
-  // tiene hora estimada. Sin tildes en á, í, ó, ú: así cada SMS admite 160 caracteres (con tildes, 70).
-  sms: {
-    FALLA: 'Claro informa: hay una falla en la red de su zona que afecta su servicio. Ya trabajamos para restablecerlo{eta}. Disculpe las molestias.',
-    POSIBLE: 'Claro informa: estamos revisando un inconveniente en la red de su zona. Le avisaremos cuando su servicio se restablezca. Disculpe las molestias.',
-    RESTABLECIDO: 'Claro informa: el servicio en su zona ya fue restablecido. Si sigue sin servicio, apague su equipo 30 segundos y vuelva a encenderlo. Gracias.'
-  },
+  // Los SMS a los clientes (Notifícame) son solo los mensajes aprobados por Claro: están en el servidor
+  // (SMS_APROBADOS en servidor/Code.gs), uno por motivo de evento externo, y se mandan tal cual.
 
   // Nota corta para pegar en la descripción del caso en Qflow, según el resultado de la consulta. Así todos
   // documentan igual. {nodo} {numero} {motivo} {inicio} {eta} {cerrada} {contrato} se reemplazan con los datos

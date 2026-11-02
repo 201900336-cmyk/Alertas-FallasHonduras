@@ -225,7 +225,16 @@ function BackendLocal() {
   }
   const quien = () => ({ u: ses.usuario.u, nombre: ses.usuario.nombre });
   const smsDemo = { envios: new Map(), estados: new Map(), control: new Map() };   // control: falla|aviso|huella → números de control que ya lo tienen
-  const CONTROL_DEMO = ['C1', 'C2', 'C3', 'C4'];   // en la demostración, 4 "números de control" del equipo   // envíos en curso por falla; estado de cada contrato por falla y aviso
+  const CONTROL_DEMO = ['C1', 'C2', 'C3', 'C4'];   // en la demostración, 4 "números de control" del equipo
+  // Copia de los mensajes aprobados del servidor (SMS_APROBADOS en servidor/Code.gs), para la demostración
+  const SMS_APROBADOS_DEMO = {
+    FIBRA: ['Fibra dañada (accidentes / terceros)', 'CLARO:\nAviso: Detectamos una posible afectacion en la red debido a danos causados por terceros en la fibra optica de su sector. Nuestro equipo tecnico ya trabaja en la reparacion urgente. Gracias'],
+    ENERGIA: ['Falla de energía eléctrica', 'CLARO: Estimado cliente, debido a una interrupcion en el suministro electrico en su zona, su servicio podria verse afectado temporalmente. El servicio se normalizara al restablecerse la energia. Gracias.'],
+    CORTO: ['Corto circuito externo', 'CLARO: Informamos que una incidencia electrica ajena a nuestra infraestructura afecta su conexion. Estamos coordinando para restablecer el servicio a la brevedad posible.'],
+    TERCEROS: ['Daño en infraestructura por terceros', 'CLARO: Estimado cliente, El servicio presenta posibles intermitencias debido a eventos externos en la infraestructura de la zona. Estamos trabajando en su normalizacion.'],
+    POSTES: ['Caída de postes', 'CLARO:\nAviso: Se reporta dano en infraestructura publica (postes) por un incidente externo, afectando su servicio. Estamos coordinando para restablecer el suministro a la brevedad.'],
+    VIA: ['Eventos en vía pública', 'CLARO: Estimado cliente, se reportan danos ocasionados por terceros en la via publica que afectan la infraestructura de su zona. Nuestro equipo tecnico ya trabaja en la reparacion.']
+  };   // envíos en curso por falla; estado de cada contrato por falla y aviso
   /* Posibles fallas marcadas como reportadas (en la demostración, solo en esta PC); duran 6 horas */
   const marcasDemo = () => {
     const m = leerLS('alertas-demo-reportadas', {}), corte = Date.now() - 6 * U.HORA;
@@ -424,6 +433,9 @@ function BackendLocal() {
         return f;
       };
       const m = smsDemo.envios.get(f.id);
+      const noPuede = f.estado !== 'ACTIVA' ? 'La falla ya se cerró: cuando el servicio se restablece no se manda SMS.'
+        : !SMS_APROBADOS_DEMO[f.motivo] ? 'El motivo "' + nombreMotivo(f) + '" no tiene un mensaje aprobado: no se manda SMS. Tienen mensaje: '
+          + Object.keys(SMS_APROBADOS_DEMO).map((k) => MOTIVO[k].nombre).join(', ') + '.' : '';
       if (d.op === 'resumen' || d.op === 'iniciar') {
         const c = await indice();
         const contratos = [...new Set(Model.filasDeNodos(c.ix, f.nodos).map((i) => String(Model.registro(c.ix, i).contrato)))];
@@ -434,17 +446,19 @@ function BackendLocal() {
         if (d.op === 'resumen') {
           const hechos = {};
           smsDemo.control.forEach((v, k) => { if (k.indexOf(clave + '|') === 0) hechos[k.slice(clave.length + 1)] = v.size; });
-          return { configurado: true, demo: true, tipo, puede: tipo === 'FALLA' || !Model.descartada(f), clientes: contratos.length, celulares: cel.length, conCelular: cel.length,
+          return { configurado: true, demo: true, tipo, puede: !noPuede, noPuede, mensajeMotivo: SMS_APROBADOS_DEMO[f.motivo] ? f.motivo : '',
+            mensajes: Object.keys(SMS_APROBADOS_DEMO).map((k) => ({ id: k, nombre: SMS_APROBADOS_DEMO[k][0], texto: SMS_APROBADOS_DEMO[k][1] })),
+            clientes: contratos.length, celulares: cel.length, conCelular: cel.length,
             soloFijo: contratos.filter((k) => tel(k) === 'fijo').length, sinTelefono: contratos.filter((k) => !tel(k)).length,
             ya, enDuda, faltan: cel.length - ya - enDuda, quedanHoy: 15000, envios: f.sms || [], control: CONTROL_DEMO.length, controlHechos: hechos,
             enCurso: m ? { por: m.por.nombre, mio: true, tipo: m.tipo, mensaje: m.mensaje, total: m.total, siguiente: m.siguiente, enviados: m.enviados,
               control: m.ctrl, cHechos: m.cEnv, libre: false } : null };
         }
-        if (d.tipo != null && d.tipo !== tipo) throw errorAlertas('DATOS', tipo === 'FALLA' ? 'La falla sigue activa: el aviso que corresponde es el de falla.' : 'La falla ya se cerró: el aviso que corresponde es el de servicio restablecido.');
-        if (tipo === 'RESTABLECIDO' && Model.descartada(f)) throw errorAlertas('DATOS', 'La posible falla se descartó: no hay servicio restablecido que avisar.');
-        const mensaje = String(d.mensaje || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
-        if (!mensaje) throw errorAlertas('DATOS', 'Escribe el mensaje.');
-        if (mensaje.length > 459) throw errorAlertas('DATOS', 'El mensaje es muy largo: máximo 459 caracteres.');
+        if (noPuede) throw errorAlertas('DATOS', noPuede);
+        if (d.tipo != null && d.tipo !== tipo) throw errorAlertas('DATOS', 'La falla cambió: abre otra vez Enviar SMS.');
+        const ap = Object.prototype.hasOwnProperty.call(SMS_APROBADOS_DEMO, String(d.aprobado || '')) ? SMS_APROBADOS_DEMO[d.aprobado] : null;
+        if (!ap) throw errorAlertas('DATOS', 'Elige uno de los mensajes aprobados.');
+        const mensaje = ap[1];
         if (m && m.tipo === tipo && m.mensaje === mensaje && d.dudosos !== true) return Object.assign(avance(m), { reanudado: true });
         if (m) await cerrar(m, 'se detuvo antes de terminar');
         const lista = cel.filter((k) => !['Enviado', 'Dudoso', 'Pendiente'].includes(estados.get(k)) || (d.dudosos === true && estados.get(k) === 'Dudoso'));

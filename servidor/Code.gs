@@ -50,7 +50,6 @@ const ALERTAS = {
   // menú Alertas > 4. Conectar Notifícame. Un SMS por número; se mandan de 50 en 50, en paralelo.
   NOTIFICAME_URL: 'https://notificame.claro.com.hn/v4/api/rest/',
   SMS_LOTE: 50,
-  SMS_MAX: 459,                  // caracteres de un mensaje (3 partes de SMS)
   // Cada SMS es una llamada de Google a otro servicio: con una cuenta de Gmail son unas 20 mil al día en total,
   // y el ingreso con Genesys también usa (2 por ingreso). Con Google Workspace (100 mil al día) se puede subir.
   SMS_POR_DIA: 15000,
@@ -71,8 +70,9 @@ const ALERTAS = {
   // VALIDACION: posible falla general que se publica mientras el VOC la confirma. Si se cierra sin
   // cambiarle el motivo, queda descartada: los asesores dejan de verla y no entra al historial del cliente.
   MOTIVOS: {
-    VALIDACION: 'Posible falla general', ENERGIA: 'Falla de energía comercial', FIBRA: 'Corte de fibra óptica', EQUIPO: 'Reemplazo de equipo',
-    RUIDO: 'Limpieza de ruido', MANTENIMIENTO: 'Mantenimiento preventivo', OTRO: 'Otro motivo'
+    VALIDACION: 'Posible falla general', ENERGIA: 'Falla de energía comercial', FIBRA: 'Corte de fibra óptica',
+    CORTO: 'Corto circuito externo', TERCEROS: 'Daño en infraestructura por terceros', POSTES: 'Caída de postes', VIA: 'Eventos en vía pública',
+    EQUIPO: 'Reemplazo de equipo', RUIDO: 'Limpieza de ruido', MANTENIMIENTO: 'Mantenimiento preventivo', OTRO: 'Otro motivo'
   }
 };
 
@@ -544,7 +544,7 @@ function historialNodos_(nodos, completo, version) {
   nodos.forEach((n) => { out[n] = []; });
   fallasHistorial_(version).forEach((f) => f.nodos.forEach((n) => {
     if (!out[n]) return;
-    const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.fin };
+    const x = motivoCompatible_({ id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.fin });
     if (f.numero) x.numero = f.numero;
     out[n].push(x);
   }));
@@ -680,11 +680,24 @@ function sinFila_(f) { const c = {}; Object.keys(f).forEach((k) => { if (k !== '
 /* Lo que recibe quien atiende (Concentrix y Tiendas): con el número de falla (es como se nombra la falla),
    pero sin referencia, notas internas, historial ni correos. Esa parte solo la ve Workforce HN. */
 function fallaPublica_(f) {
-  return {
+  return motivoCompatible_({
     id: f.id, numero: f.numero || '', estado: f.estado, motivo: f.motivo, motivoTexto: f.motivoTexto, clienteTexto: f.clienteTexto, nodos: f.nodos,
     inicio: f.inicio, eta: f.eta, publicadaEn: f.publicadaEn, publicadaPor: { nombre: (f.publicadaPor && f.publicadaPor.nombre) || '' },
     cerradaEn: f.cerradaEn, impacto: f.impacto
-  };
+  });
+}
+/* Los motivos nuevos del 2 nov (eventos externos con mensaje de SMS aprobado): a los asesores se les mandan como
+   "Otro" con su nombre y su texto para el cliente. Así una página abierta desde antes, que no los conoce, los muestra
+   bien en vez de fallar. Workforce recibe el motivo real (lo necesita para editar y para los SMS). */
+const MOTIVOS_NUEVOS = {
+  CORTO: 'un corto circuito externo, ajeno a nuestra red, en su zona',
+  TERCEROS: 'daños causados por terceros en la infraestructura de su zona',
+  POSTES: 'la caída de postes por un incidente externo en su zona',
+  VIA: 'daños ocasionados por terceros en la vía pública de su zona'
+};
+function motivoCompatible_(x) {
+  if (!Object.prototype.hasOwnProperty.call(MOTIVOS_NUEVOS, x.motivo)) return x;
+  return Object.assign({}, x, { motivo: 'OTRO', motivoTexto: ALERTAS.MOTIVOS[x.motivo], clienteTexto: MOTIVOS_NUEVOS[x.motivo] });
 }
 
 /* Activas y cerradas en las últimas 48 horas (con las descartadas), en caché 10 minutos */
@@ -1201,6 +1214,31 @@ function accionTelefonos_(d, ses) {
  *  aviso a nadie, aunque a la falla le agreguen nodos o se corte el envío a medias.
  * ========================================================================== */
 const TIPOS_SMS = { FALLA: 'Aviso de falla', RESTABLECIDO: 'Servicio restablecido' };
+/* Mensajes aprobados por Claro ("Segmentación de motivos 2.0", eventos externos o fortuitos): solo se mandan estos,
+   tal cual, sin tildes. La clave es el motivo de la falla que lo usa; una falla de otro motivo no manda SMS.
+   Desde el 2 nov no se manda SMS cuando el servicio ya se restableció. */
+const SMS_APROBADOS = {
+  FIBRA: { nombre: 'Fibra dañada (accidentes / terceros)',
+    texto: 'CLARO:\nAviso: Detectamos una posible afectacion en la red debido a danos causados por terceros en la fibra optica de su sector. Nuestro equipo tecnico ya trabaja en la reparacion urgente. Gracias' },
+  ENERGIA: { nombre: 'Falla de energía eléctrica',
+    texto: 'CLARO: Estimado cliente, debido a una interrupcion en el suministro electrico en su zona, su servicio podria verse afectado temporalmente. El servicio se normalizara al restablecerse la energia. Gracias.' },
+  CORTO: { nombre: 'Corto circuito externo',
+    texto: 'CLARO: Informamos que una incidencia electrica ajena a nuestra infraestructura afecta su conexion. Estamos coordinando para restablecer el servicio a la brevedad posible.' },
+  TERCEROS: { nombre: 'Daño en infraestructura por terceros',
+    texto: 'CLARO: Estimado cliente, El servicio presenta posibles intermitencias debido a eventos externos en la infraestructura de la zona. Estamos trabajando en su normalizacion.' },
+  POSTES: { nombre: 'Caída de postes',
+    texto: 'CLARO:\nAviso: Se reporta dano en infraestructura publica (postes) por un incidente externo, afectando su servicio. Estamos coordinando para restablecer el suministro a la brevedad.' },
+  VIA: { nombre: 'Eventos en vía pública',
+    texto: 'CLARO: Estimado cliente, se reportan danos ocasionados por terceros en la via publica que afectan la infraestructura de su zona. Nuestro equipo tecnico ya trabaja en la reparacion.' }
+};
+const mensajesAprobados_ = () => Object.keys(SMS_APROBADOS).map((k) => ({ id: k, nombre: SMS_APROBADOS[k].nombre, texto: SMS_APROBADOS[k].texto }));
+/* Por qué no se puede mandar SMS a una falla ('' si se puede) */
+function sinSmsPara_(f) {
+  if (f.estado !== 'ACTIVA') return 'La falla ya se cerró: cuando el servicio se restablece no se manda SMS.';
+  if (!SMS_APROBADOS[f.motivo]) return 'El motivo "' + nombreMotivo_(f) + '" no tiene un mensaje aprobado: no se manda SMS. Tienen mensaje: '
+    + Object.keys(SMS_APROBADOS).map((k) => ALERTAS.MOTIVOS[k]).join(', ') + '.';
+  return '';
+}
 /* Estado de cada número en la pestaña "Envíos SMS" (una fila por número y envío):
      Pendiente  apartado en un envío, todavía no se manda
      Enviando   se está mandando ahora (se marca antes de llamar a Notifícame)
@@ -1499,8 +1537,10 @@ function smsResumen_(d, ses) {
   let ya = 0, enDuda = 0;
   cel.numeros.forEach((x) => { if (est[x] === 'Enviado') ya++; else if (est[x] === 'Enviando' || est[x] === 'Dudoso') enDuda++; });
   const m = envioSmsDe_(f.id);
+  const noPuede = sinSmsPara_(f);
   return {
-    configurado: !!notificameCfg_(), tipo: tipo, puede: tipo === 'FALLA' || !descartada_(f),
+    configurado: !!notificameCfg_(), tipo: tipo, puede: !noPuede, noPuede: noPuede,
+    mensajes: mensajesAprobados_(), mensajeMotivo: SMS_APROBADOS[f.motivo] ? f.motivo : '',
     clientes: cel.clientes, celulares: cel.numeros.length, conCelular: cel.conCelular, soloFijo: cel.soloFijo, sinTelefono: cel.sinTelefono,
     ya: ya, enDuda: enDuda, faltan: cel.numeros.length - ya - enDuda, quedanHoy: cuotaSms_().quedan, envios: f.sms || [],
     control: ctrl.length, controlHechos: hechos,
@@ -1513,13 +1553,13 @@ function smsResumen_(d, ses) {
 function smsIniciar_(d, ses) {
   if (!notificameCfg_()) throw fallo_('NOTIFICAME', 'Falta conectar Notifícame. En la base interna: Alertas > 4. Conectar Notifícame.');
   const f = fallaSms_(d.id), tipo = tipoSmsDe_(f);
-  if (d.tipo != null && String(d.tipo) !== tipo) {
-    throw fallo_('DATOS', tipo === 'FALLA' ? 'La falla sigue activa: el aviso que corresponde es el de falla.' : 'La falla ya se cerró: el aviso que corresponde es el de servicio restablecido.');
-  }
-  if (tipo === 'RESTABLECIDO' && descartada_(f)) throw fallo_('DATOS', 'La posible falla se descartó: no hay servicio restablecido que avisar.');
-  const mensaje = String(d.mensaje || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
-  if (!mensaje) throw fallo_('DATOS', 'Escribe el mensaje.');
-  if (mensaje.length > ALERTAS.SMS_MAX) throw fallo_('DATOS', 'El mensaje es muy largo: máximo ' + ALERTAS.SMS_MAX + ' caracteres.');
+  const noPuede = sinSmsPara_(f);
+  if (noPuede) throw fallo_('DATOS', noPuede);
+  if (d.tipo != null && String(d.tipo) !== tipo) throw fallo_('DATOS', 'La falla cambió: abre otra vez Enviar SMS.');
+  // Solo un mensaje aprobado, tal cual: la página manda su clave, nunca el texto
+  const aprobado = Object.prototype.hasOwnProperty.call(SMS_APROBADOS, String(d.aprobado || '')) ? SMS_APROBADOS[String(d.aprobado)] : null;
+  if (!aprobado) throw fallo_('DATOS', 'Elige uno de los mensajes aprobados.');
+  const mensaje = aprobado.texto;
   const conDuda = d.dudosos === true, huella = hashSms_(mensaje);
   const cel = celularesDeFalla_(f);                    // fuera del candado: lee la base (unos segundos)
   return conCandadoSms_(() => {
