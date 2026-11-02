@@ -41,10 +41,12 @@ function crearEntorno(opciones = {}) {
     constructor(rango, texto) { this.rango = rango; this.texto = String(texto); this.entera = false; this.mayus = false; }
     matchEntireCell(v) { this.entera = !!v; return this; }
     matchCase(v) { this.mayus = !!v; return this; }
-    useRegularExpression() { return this; }
+    useRegularExpression(v) { this.regex = v !== false; return this; }
     _buscar(solo) {
       const r = this.rango, h = r.hoja, out = [];
       const buscado = this.mayus ? this.texto : this.texto.toLowerCase();
+      // Con expresión regular: con celda entera, la expresión tiene que abarcar toda la celda (como en Sheets)
+      const re = this.regex ? new RegExp(this.entera ? '^(?:' + this.texto + ')$' : this.texto, this.mayus ? '' : 'i') : null;
       for (let i = 0; i < r.nr; i++) {
         const fila = h.filas[r.r - 1 + i];
         if (!fila) continue;
@@ -52,8 +54,9 @@ function crearEntorno(opciones = {}) {
           const v = fila[r.c - 1 + j];
           if (v === undefined || v === '') continue;
           let t = mostrar(v);
+          if (re ? !re.test(t) : false) continue;
           if (!this.mayus) t = t.toLowerCase();
-          if (this.entera ? t === buscado : t.indexOf(buscado) >= 0) {
+          if (re || (this.entera ? t === buscado : t.indexOf(buscado) >= 0)) {
             out.push(new Rango(h, r.r + i, r.c + j, 1, 1));
             if (solo) return out;
           }

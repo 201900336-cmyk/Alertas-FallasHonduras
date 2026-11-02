@@ -28,7 +28,7 @@ function BackendRemoto() {
 
   /* Las consultas de solo lectura se reintentan solas si el servidor estuvo ocupado un momento
      (con cientos de personas a la vez, Apps Script a veces rechaza una solicitud suelta). */
-  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, estadisticas: 1, contactos: 1 };
+  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1 };
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
@@ -128,6 +128,8 @@ function BackendRemoto() {
     reportar: (rec) => llamar('reportar', { contrato: rec.contrato, nodo: rec.nodo }),
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
     alertas: () => llamar('alertas', {}),
+    alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
+    marcarAlerta: (nodo, reportada) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo }),
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
@@ -211,6 +213,12 @@ function BackendLocal() {
     return cache;
   }
   const quien = () => ({ u: ses.usuario.u, nombre: ses.usuario.nombre });
+  /* Posibles fallas marcadas como reportadas (en la demostración, solo en esta PC); duran 6 horas */
+  const marcasDemo = () => {
+    const m = leerLS('alertas-demo-reportadas', {}), corte = Date.now() - 6 * U.HORA;
+    Object.keys(m).forEach((k) => { if (!(m[k] && m[k].en > corte)) delete m[k]; });
+    return m;
+  };
   async function confirmar(tipo, texto, cambios) {
     const m = await Store.confirmar({ tipo, texto, por: quien() }, cambios);
     return m.version;
@@ -316,9 +324,55 @@ function BackendLocal() {
     async alertas() {
       const fallas = await Store.leerFallas();
       const logs = await Store.leerLogs(Date.now() - CONFIG.alerta.minutos * U.MIN);
+      const marcas = marcasDemo();
       const lista = Model.alertas(logs, Model.mapaFallas(fallas, Date.now()), Date.now(), {})
-        .map((a) => ({ nodo: a.nodo, nClientes: a.nClientes, reportes: a.reportes, consultas: a.consultas, primero: a.primero, ultimo: a.ultimo }));
-      return { alertas: lista, ahora: Date.now() };
+        .map((a) => Object.assign({ nodo: a.nodo, nivel: a.nivel, nClientes: a.nClientes, reportes: a.reportes, consultas: a.consultas, primero: a.primero, ultimo: a.ultimo },
+          marcas[a.nodo] ? { reportada: marcas[a.nodo] } : {}));
+      const um = CONFIG.alerta;
+      return { alertas: lista, ahora: Date.now(), umbral: { minutos: um.minutos, clientes: um.clientesDistintos, observar: um.observar, reportes: um.reportes } };
+    },
+    /* Los clientes de una posible falla con sus datos de la base, igual que el servidor */
+    async alertaDetalle(nodo) {
+      const c = await indice();
+      const ahora = Date.now();
+      const fallas = await Store.leerFallas();
+      const logs = (await Store.leerLogs(ahora - CONFIG.alerta.minutos * U.MIN))
+        .filter((l) => l.n === nodo && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
+        .sort((a, b) => a.t - b.t);
+      const por = new Map();
+      let reportes = 0;
+      for (const l of logs) {
+        if (l.tipo === 'reporte') reportes++;
+        if (!l.c) continue;
+        const k = String(l.c);
+        const x = por.get(k) || { contrato: k, primera: l.t, ultima: l.t, veces: 0, canales: [], reporte: false };
+        x.veces++; x.ultima = Math.max(x.ultima, l.t);
+        const canal = l.canal === 'Tiendas' ? 'Tiendas' + (l.tienda ? ': ' + l.tienda : '') : l.canal;
+        if (!x.canales.includes(canal)) x.canales.push(canal);
+        if (l.tipo === 'reporte') x.reporte = true;
+        por.set(k, x);
+      }
+      const clientes = [...por.values()].slice(0, 60).map((x) => {
+        const r = c.ix ? Model.buscar(c.ix, x.contrato) : null;
+        const regs = r && r.filas ? r.filas.map((i) => Model.registro(c.ix, i)) : [];
+        const b = regs.find((y) => y.nodo === nodo) || regs[0];
+        return Object.assign({}, x, {
+          enBase: !!b, nombre: b ? b.nombre : '', nodo: b ? b.nodo : nodo, tecnologia: b ? b.tecnologia : '', olt: b ? b.olt : '', nap: b ? b.nap : '',
+          colonia: b ? b.colonia : '', municipio: b ? b.municipio : '', departamento: b ? b.departamento : '', categoria: b ? b.categoria : ''
+        });
+      });
+      const mf = Model.mapaFallas(fallas, ahora);
+      return {
+        nodo, ahora, minutos: CONFIG.alerta.minutos, nClientes: por.size, reportes, consultas: logs.length,
+        desde: logs.length ? logs[0].t : null, hasta: logs.length ? logs[logs.length - 1].t : null, clientes,
+        reportada: marcasDemo()[nodo] || null, enFalla: (mf.porNodo.get(nodo) || []).some((f) => f.estado === 'ACTIVA')
+      };
+    },
+    async marcarAlerta(nodo, reportada) {
+      const m = marcasDemo();
+      if (reportada) m[nodo] = { por: ses.usuario.nombre, en: Date.now() }; else delete m[nodo];
+      guardarLS('alertas-demo-reportadas', m);
+      return { nodo, reportada: m[nodo] || null };
     },
 
     async telefonos() {

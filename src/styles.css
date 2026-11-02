@@ -407,15 +407,66 @@ button { cursor: pointer; }
 .pestanas button[aria-selected="true"]::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--ink); }
 .pestanas .n { font-size: 12px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-.alertas { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
-.alerta {
+/* Posibles fallas (Workforce): nodos con muchos clientes consultando y sin falla publicada */
+.posibles { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.posibles-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.posibles-txt h2 { margin: 0; font-size: 16px; font-weight: 750; display: flex; align-items: center; gap: 8px; }
+.posibles-txt p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); max-width: 78ch; }
+.posibles-n { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--resuelta); color: var(--resuelta-ink); font-size: 12.5px; font-weight: 800; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+.avisos-esc { display: flex; align-items: center; gap: 8px; margin: 0; }
+.avisos-esc.bloqueados { font-size: 12.5px; color: var(--ink-3); max-width: 46ch; gap: 6px; }
+.avisos-esc.bloqueados svg { flex: none; }
+.avisos-on { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.pf-tarjeta {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center;
   padding: 14px 16px; border-radius: 14px; background: var(--resuelta-soft); border: 1px solid color-mix(in srgb, var(--resuelta) 45%, transparent);
 }
-.alerta .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--resuelta); color: var(--resuelta-ink); display: grid; place-items: center; }
-.alerta b { font-weight: 750; }
-.alerta p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
-.alerta .acc { display: flex; gap: 8px; }
+.pf-tarjeta .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--resuelta); color: var(--resuelta-ink); display: grid; place-items: center; }
+.pf-tarjeta-tit { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pf-tarjeta b { font-weight: 750; }
+.pf-tarjeta p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.pf-tarjeta .acc { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pf-tarjeta[data-reportada="true"] { background: var(--surface); border-color: var(--line); }
+.pf-tarjeta[data-reportada="true"] .ico { background: var(--surface-3); color: var(--ink-2); }
+.pf-reportada { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink) !important; }
+.observacion { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 2px 0; }
+.observacion-t { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); margin-right: 4px; }
+.observacion-t small { font-weight: 500; color: var(--ink-3); font-size: 12.5px; }
+.obs-chip { display: inline-flex; align-items: baseline; gap: 7px; height: 30px; padding: 0 11px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13.5px; transition: border-color 150ms ease, background-color 150ms ease; }
+.obs-chip:hover { border-color: var(--ink-3); background: var(--surface-2); }
+.obs-chip span { font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* Detalle de una posible falla y el correo listo */
+.pf-cargando { display: flex; align-items: center; gap: 10px; padding: 28px 4px; color: var(--ink-2); font-weight: 600; }
+.pf-marca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
+.pf-marca svg { color: var(--ok); flex: none; }
+.pf-datos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; }
+.pf-datos > div { padding: 12px 16px; }
+.pf-datos > div + div { border-left: 1px solid var(--line); }
+.pf-datos b { display: block; font-size: 22px; font-weight: 800; font-stretch: 115%; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.pf-datos span { font-size: 12.5px; color: var(--ink-2); }
+.pf-correo { display: flex; flex-direction: column; gap: 10px; }
+.pf-correo-cab { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.pf-correo-cab h3 { margin: 0; font-size: 15px; font-weight: 750; }
+.pf-correo-cab p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
+.pf-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.pf-asunto { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; }
+.pf-asunto > span { font-size: 12px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; flex: none; }
+.pf-asunto b { flex: 1; min-width: 0; font-weight: 600; }
+.pf-asunto .btn { flex: none; }
+/* La vista previa se ve como el correo (blanco) en los dos temas */
+.pf-vista { background: #ffffff; color: #000000; border: 1px solid var(--line-2); border-radius: 10px; padding: 16px 18px; max-height: min(46vh, 420px); overflow: auto; }
+.pf-vista p { color: #000000; }
+.enlace { border: 0; background: none; padding: 0; color: var(--ink); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.enlace:disabled { opacity: 0.5; cursor: default; }
+.modal-pie .pie-espacio { flex: 1; }
+/* Los avisos de arriba se apilan (actualización de Workforce y posible falla) y quedan a la vista al bajar */
+.avisos-arriba { position: sticky; top: 60px; z-index: 25; }
+.avisos-arriba .aviso { position: static; }
+.aviso-pf { background: var(--resuelta); color: var(--resuelta-ink); }
+.aviso-pf .aviso-icono { background: color-mix(in srgb, var(--resuelta-ink) 14%, transparent); }
+.aviso .aviso-x { margin-left: 0; background: transparent; color: inherit; }
+.aviso .aviso-x:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
 
 .form-falla { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
 .paso { padding: 20px 22px; }
@@ -851,8 +902,12 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .veredicto { padding: 20px; }
   .veredicto .sello { position: static; display: block; margin-top: 10px; }
   .ayuda-busqueda > span:last-child { display: none; }
-  .alerta { grid-template-columns: auto minmax(0, 1fr); }
-  .alerta .acc { grid-column: 1 / -1; }
+  .pf-tarjeta { grid-template-columns: auto minmax(0, 1fr); }
+  .pf-tarjeta .acc { grid-column: 1 / -1; justify-content: flex-start; }
+  .pf-datos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-datos > div:nth-child(3) { border-left: 0; }
+  .pf-datos > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .pf-asunto { flex-wrap: wrap; }
   .titulo-vista .der { margin-left: 0; }
   .comp-fila { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .entrada-nodos .textarea { padding-right: 12px; padding-bottom: 52px; }

@@ -42,7 +42,9 @@ const ALERTAS = {
   DIAS_HISTORIAL: 400,           // fallas que entran al historial de cada cliente (la tarjeta muestra hasta 1 año)
   FILAS_POR_LOTE: 5000,
   MAX_CAMBIOS: 20000,            // filas nuevas o cambiadas que se suben en una carga por cambios; si son más, va completa
-  ALERTA_MIN: 60, ALERTA_CLIENTES: 3, ALERTA_REPORTES: 2,
+  // Posible falla: 5 clientes distintos de un nodo sin falla publicada en 60 min (o 2 reportes de asesores).
+  // Con 3 o 4 el nodo queda en observación. La marca de "reportada" dura 6 horas.
+  ALERTA_MIN: 60, ALERTA_CLIENTES: 5, ALERTA_OBSERVAR: 3, ALERTA_REPORTES: 2, ALERTA_MARCA_HORAS: 6, ALERTA_MAX_CLIENTES: 60,
   ITERACIONES_CLAVE: 1500,
   HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', tiendas: 'Tiendas' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura' },
@@ -90,10 +92,10 @@ const TIENDAS_INICIALES = [
 const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
-  telefonos: accionTelefonos_, contactos: accionContactos_
+  telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_
 };
 const PUBLICAS = { config: true, login: true };
-const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, estadisticas: true, telefonos: true };
+const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, alerta: true, estadisticas: true, telefonos: true };
 
 /* ============================================================================
  *  Entrada de la aplicación web
@@ -1377,33 +1379,150 @@ function registrarConsulta_(ses, x) {
   } catch (e) { console.error('No se pudo registrar la consulta: ' + (e && e.message)); }
 }
 
-/* ----- Alertas tempranas: la última hora del detalle ----- */
+/* ----- Posibles fallas: la última hora del detalle -----
+   Cuenta los clientes distintos de cada nodo que consultaron Concentrix y Tiendas en los últimos
+   60 minutos. Las búsquedas de Workforce y Jefatura no cuentan: son ellos revisando el nodo.
+   5 clientes (o 2 reportes de asesores) es una posible falla; 3 o 4, un nodo en observación. */
+const ACCESOS_INTERNOS_ = { 'Workforce HN': true, 'Jefatura': true };
+function consultasPosibleFalla_(filas, enFalla) {
+  return filas.filter((f) => {
+    const nodo = String(f[7] || ''), res = String(f[8] || '');
+    return nodo && !esVirtual_(nodo) && !(enFalla && enFalla[nodo]) && res !== 'FALLA' && res !== 'NO_ENCONTRADO' && !ACCESOS_INTERNOS_[String(f[3] || '')];
+  });
+}
+function nodosEnFalla_() {
+  const enFalla = {};
+  fallasVisibles_().forEach((f) => { if (f.estado === 'ACTIVA') f.nodos.forEach((n) => { enFalla[n] = true; }); });
+  return enFalla;
+}
 function accionAlertas_() {
   const hit = cache_().get('alertas');
   if (hit) return JSON.parse(hit);
   const ahora = Date.now();
-  const filas = leerConsultas_(ahora - ALERTAS.ALERTA_MIN * 60000, null);
-  const enFalla = {};
-  fallasVisibles_().forEach((f) => { if (f.estado === 'ACTIVA') f.nodos.forEach((n) => { enFalla[n] = true; }); });
+  const filas = consultasPosibleFalla_(leerConsultas_(ahora - ALERTAS.ALERTA_MIN * 60000, null), nodosEnFalla_());
   const por = {};
   filas.forEach((f) => {
-    const nodo = String(f[7] || ''), res = String(f[8] || ''), tipo = String(f[5] || '');
-    if (!nodo || esVirtual_(nodo) || enFalla[nodo] || res === 'FALLA' || res === 'NO_ENCONTRADO') return;
-    const t = fechaMs_(f[0]);
+    const nodo = String(f[7]), t = fechaMs_(f[0]);
     const e = por[nodo] || (por[nodo] = { nodo: nodo, clientes: {}, reportes: 0, consultas: 0, primero: t, ultimo: t });
     e.consultas++;
     if (f[6]) e.clientes[String(f[6])] = true;
-    if (tipo === 'reporte') e.reportes++;
+    if (String(f[5]) === 'reporte') e.reportes++;
     e.primero = Math.min(e.primero, t); e.ultimo = Math.max(e.ultimo, t);
   });
+  const marcas = alertasReportadas_();
   const alertas = Object.keys(por).map((k) => {
-    const e = por[k];
-    return { nodo: e.nodo, nClientes: Object.keys(e.clientes).length, reportes: e.reportes, consultas: e.consultas, primero: e.primero, ultimo: e.ultimo };
-  }).filter((e) => e.nClientes >= ALERTAS.ALERTA_CLIENTES || e.reportes >= ALERTAS.ALERTA_REPORTES)
-    .sort((a, b) => b.nClientes - a.nClientes || b.ultimo - a.ultimo);
-  const res = { alertas: alertas, ahora: ahora };
+    const e = por[k], n = Object.keys(e.clientes).length;
+    const nivel = n >= ALERTAS.ALERTA_CLIENTES || e.reportes >= ALERTAS.ALERTA_REPORTES ? 'alerta' : n >= ALERTAS.ALERTA_OBSERVAR ? 'observacion' : '';
+    const x = { nodo: e.nodo, nivel: nivel, nClientes: n, reportes: e.reportes, consultas: e.consultas, primero: e.primero, ultimo: e.ultimo };
+    if (marcas[e.nodo]) x.reportada = marcas[e.nodo];
+    return x;
+  }).filter((e) => e.nivel)
+    .sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alerta' ? -1 : 1) || b.nClientes - a.nClientes || b.ultimo - a.ultimo);
+  const res = {
+    alertas: alertas, ahora: ahora,
+    umbral: { minutos: ALERTAS.ALERTA_MIN, clientes: ALERTAS.ALERTA_CLIENTES, observar: ALERTAS.ALERTA_OBSERVAR, reportes: ALERTAS.ALERTA_REPORTES }
+  };
   cache_().put('alertas', JSON.stringify(res), 30);
   return res;
+}
+
+/* Posibles fallas que Workforce ya reportó (al VOC o al personal interno). Las ve todo el equipo,
+   para que nadie mande el mismo correo dos veces, y duran 6 horas. */
+function alertasReportadas_() {
+  let m = {};
+  try { m = JSON.parse(props_().getProperty('ALERTAS_REPORTADAS') || '{}') || {}; } catch (e) { m = {}; }
+  const corte = Date.now() - ALERTAS.ALERTA_MARCA_HORAS * 3600000;
+  Object.keys(m).forEach((k) => { if (!m[k] || !(m[k].en > corte)) delete m[k]; });
+  return m;
+}
+
+/* Una posible falla: los clientes con sus datos de la base (para el correo) o la marca de reportada */
+function accionAlerta_(d, ses) {
+  const nodo = String(d.nodo || '').toUpperCase().replace(/[^A-Z0-9_\- ]/g, '').slice(0, 40);
+  if (!nodo) throw fallo_('DATOS', 'Falta el nodo.');
+  const op = d.op || 'detalle';
+  if (op === 'reportada' || op === 'quitar') {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    let marca = null;
+    try {
+      const m = alertasReportadas_();
+      if (op === 'reportada') m[nodo] = marca = { por: ses.n, en: Date.now() };
+      else delete m[nodo];
+      props_().setProperty('ALERTAS_REPORTADAS', JSON.stringify(m));
+    } finally { lock.releaseLock(); }
+    cache_().remove('alertas');
+    return { nodo: nodo, reportada: marca };
+  }
+  if (op !== 'detalle') throw fallo_('DATOS', 'Operación no válida.');
+  return detallePosibleFalla_(nodo);
+}
+function detallePosibleFalla_(nodo) {
+  const ahora = Date.now();
+  const filas = consultasPosibleFalla_(leerConsultas_(ahora - ALERTAS.ALERTA_MIN * 60000, null), null).filter((f) => String(f[7]) === nodo);
+  const por = {};
+  let reportes = 0, desde = null, hasta = null;
+  filas.forEach((f) => {
+    const t = fechaMs_(f[0]), tipo = String(f[5]);
+    if (tipo === 'reporte') reportes++;
+    desde = desde == null ? t : Math.min(desde, t); hasta = hasta == null ? t : Math.max(hasta, t);
+    const c = String(f[6] || '').replace(/\D+/g, '');
+    if (!c) return;
+    const x = por[c] || (por[c] = { contrato: c, primera: t, ultima: t, veces: 0, canales: [], reporte: false });
+    x.veces++;
+    x.primera = Math.min(x.primera, t); x.ultima = Math.max(x.ultima, t);
+    const canal = String(f[3] || '') === 'Tiendas' ? 'Tiendas' + (f[4] ? ': ' + String(f[4]) : '') : String(f[3] || '');
+    if (x.canales.indexOf(canal) < 0) x.canales.push(canal);
+    if (tipo === 'reporte') x.reporte = true;
+  });
+  const lista = Object.keys(por).map((k) => por[k]).sort((a, b) => a.primera - b.primera).slice(0, ALERTAS.ALERTA_MAX_CLIENTES);
+  const datos = datosDeContratos_(lista.map((x) => x.contrato), nodo);
+  const clientes = lista.map((x) => {
+    const b = datos[x.contrato];
+    return {
+      contrato: x.contrato, primera: x.primera, ultima: x.ultima, veces: x.veces, canales: x.canales, reporte: x.reporte, enBase: !!b,
+      nombre: b ? b.nombre : '', nodo: b ? b.nodo : nodo, tecnologia: b ? b.tecnologia : '', olt: b ? b.olt : '', nap: b ? b.nap : '',
+      colonia: b ? b.colonia : '', municipio: b ? b.municipio : '', departamento: b ? b.departamento : '', categoria: b ? b.categoria : ''
+    };
+  });
+  return {
+    nodo: nodo, ahora: ahora, minutos: ALERTAS.ALERTA_MIN, nClientes: Object.keys(por).length, reportes: reportes, consultas: filas.length,
+    desde: desde, hasta: hasta, clientes: clientes, reportada: alertasReportadas_()[nodo] || null, enFalla: !!nodosEnFalla_()[nodo]
+  };
+}
+/* Datos de varios contratos con una sola búsqueda en la base. Si un contrato tiene varios
+   servicios, se queda con el del nodo de la posible falla. */
+function datosDeContratos_(contratos, nodo) {
+  const out = {};
+  const lista = contratos.filter((c) => /^\d{1,12}$/.test(c));
+  if (!lista.length) return out;
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.base);
+  if (!h || h.getLastRow() < 2) return out;
+  const ult = h.getLastRow(), ncol = h.getLastColumn();
+  const cols = h.getRange(1, 1, 1, ncol).getValues()[0].map(String);
+  const ci = cols.indexOf('CONTRATO') + 1;
+  if (ci < 1) return out;
+  const rango = h.getRange(2, ci, ult - 1, 1);
+  let celdas;
+  try {
+    celdas = rango.createTextFinder('^(' + lista.join('|') + ')$').useRegularExpression(true).matchEntireCell(true).findAll();
+  } catch (e) {
+    celdas = [];
+    lista.forEach((c) => { celdas = celdas.concat(rango.createTextFinder(c).matchEntireCell(true).findAll()); });
+  }
+  // Las filas cercanas se leen de una vez (los servicios de un mismo contrato suelen venir seguidos)
+  const filas = celdas.map((r) => r.getRow()).sort((a, b) => a - b).slice(0, 300);
+  const tramos = [];
+  filas.forEach((f) => { const t = tramos[tramos.length - 1]; if (t && f - t[1] <= 3) t[1] = f; else tramos.push([f, f]); });
+  tramos.forEach((t) => {
+    h.getRange(t[0], 1, t[1] - t[0] + 1, ncol).getValues().forEach((v) => {
+      const reg = registro_(cols, v), c = String(reg.contrato).replace(/\D+/g, '');
+      if (lista.indexOf(c) < 0) return;
+      const prev = out[c];
+      if (!prev || (prev.nodo !== nodo && reg.nodo === nodo)) out[c] = reg;
+    });
+  });
+  return out;
 }
 
 /* ----- Estadísticas: días anteriores del resumen y hoy del detalle ----- */

@@ -22,6 +22,7 @@ with sync_playwright() as p:
     # Sin animaciones: la portada animada en varias pestañas a la vez cargaba de más al navegador de prueba
     # y a veces Playwright no alcanzaba a ver el botón de entrar (la página sí estaba lista).
     ctx = b.new_context(viewport={'width': 1440, 'height': 900}, locale='es-HN', timezone_id='America/Tegucigalpa', reduced_motion='reduce')
+    ctx.grant_permissions(['clipboard-read', 'clipboard-write'])   # para revisar el correo que se copia
     errores = []
     def pagina():
         pg = ctx.new_page()
@@ -142,16 +143,44 @@ with sync_playwright() as p:
     a.keyboard.press('Escape'); a.fill('.buscador-caja input', ''); a.wait_for_timeout(300)
     ok(a.locator('.recientes li').count() >= 2, 'sus últimas consultas de la sesión aparecen en el inicio')
 
-    print('5. Alertas tempranas para Workforce')
-    for k in range(3):
-        c = http(f'/test/contrato?nodo={ejemplos[2]}&n={k}')['contrato']
-        a.fill('.buscador-caja input', c); a.keyboard.press('Enter'); a.wait_for_timeout(700)
-    w.goto(APP + '#fallas')
-    for k in range(20):   # el servidor guarda las alertas 30 s en caché
-        w.evaluate('() => A.revisarAlertas()'); w.wait_for_timeout(2000)
-        if w.locator('.alertas .alerta').count(): break
-    ok(w.locator('.alertas .alerta').count() >= 1 and ejemplos[2] in w.locator('.alertas .alerta').first.inner_text(), 'Workforce ve la posible falla sin publicar en ' + ejemplos[2])
-    w.screenshot(path=OUT + 'e06_alerta.png')
+    print('5. Posibles fallas para Workforce')
+    # Un nodo que nadie ha consultado en la prueba
+    nodoPF = w.evaluate("(ej) => [...G.s.cat.nodos.values()].filter((n) => !U.esVirtual(n.code) && n.total >= 12 && !ej.includes(n.code)).map((n) => n.code).sort()[0]", ejemplos)
+    contratosPF = [http(f'/test/contrato?nodo={nodoPF}&n={k}')['contrato'] for k in range(5)]
+    # El aviso de escritorio, simulado: se anota lo que se avisa, como si Alertas estuviera minimizado
+    w.evaluate("""() => { window.__avisos = []; document.hasFocus = () => false;
+      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
+      window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted', avisosEscritorio: true }); }""")
+    w.evaluate("() => ir('fallas')")
+    def buscar_en(contratos):
+        for c in contratos:
+            a.fill('.buscador-caja input', c); a.keyboard.press('Enter'); a.wait_for_selector(f'.cliente-ids:has-text("{c}")', timeout=20000)
+    def revisar(cond):
+        for k in range(25):   # el servidor guarda la lista 30 s en caché
+            w.evaluate('() => A.revisarAlertas()'); w.wait_for_timeout(1500)
+            if cond(): return True
+        return False
+    buscar_en(contratosPF[:3])
+    ok(revisar(lambda: w.locator('.obs-chip', has_text=nodoPF).count() > 0), f'con 3 clientes de {nodoPF}, Workforce lo ve en observación')
+    ok(not w.evaluate('() => window.__avisos.length'), 'en observación todavía no hay aviso de escritorio')
+    buscar_en(contratosPF[3:5])
+    ok(revisar(lambda: w.locator('.pf-tarjeta', has_text=nodoPF).count() > 0), f'con 5 clientes distintos es posible falla en {nodoPF}')
+    avisos = w.evaluate('() => window.__avisos')
+    ok(any(x['t'] == 'Posible falla en ' + nodoPF and '5 clientes distintos' in x['b'] for x in avisos), 'llega el aviso de escritorio', avisos)
+    w.screenshot(path=OUT + 'e06_posible_falla.png')
+    w.evaluate("() => ir('consulta')"); w.wait_for_selector('.aviso-pf', timeout=5000)
+    ok(nodoPF in w.locator('.aviso-pf').inner_text(), 'en las otras vistas aparece la barra de la posible falla')
+    w.click('.aviso-pf .btn:has-text("Ver clientes")'); w.wait_for_selector('.pf-vista table', timeout=30000)
+    ok(w.locator('.pf-vista table tr').count() - 1 == 5, 'el detalle trae los 5 clientes', w.locator('.pf-vista table tr').count() - 1)
+    w.click('.pf-botones .btn-primario'); w.wait_for_timeout(500)
+    clip = w.evaluate("""async () => { const out = {}; for (const it of await navigator.clipboard.read()) for (const t of it.types) out[t] = await (await it.getType(t)).text(); return out; }""")
+    ok('<table' in clip.get('text/html', '') and all(c in clip.get('text/html', '') for c in contratosPF) and 'Saludos' in clip.get('text/plain', '') and nodoPF in clip.get('text/plain', ''),
+       'Copiar correo deja el correo con la tabla de los clientes, con formato y en texto', list(clip.keys()))
+    ok(nodoPF in w.locator('.pf-asunto b').inner_text() and '5 clientes' in w.locator('.pf-asunto b').inner_text(), 'con el asunto listo', w.locator('.pf-asunto b').inner_text())
+    w.screenshot(path=OUT + 'e06b_correo.png')
+    w.click('.modal-pie button:has-text("Marcar como reportada")'); w.wait_for_selector('.pf-marca', timeout=15000)
+    ok('Ana López' in w.locator('.pf-marca').inner_text(), 'se marca como reportada')
+    w.click('.modal-pie button:has-text("Cerrar")')
 
     print('6. Sesión vencida')
     t.evaluate("() => { const s = JSON.parse(sessionStorage.getItem('alertas-sesion')); s.token = s.token.slice(0, -4) + 'AAAA'; sessionStorage.setItem('alertas-sesion', JSON.stringify(s)); }")
@@ -168,6 +197,11 @@ with sync_playwright() as p:
     x.fill('input[autocomplete=username]', 'workforce.temporal'); x.fill('input[type=password]', 'Workforce2026!'); x.fill('input[autocomplete=name]', 'Mario Rivera')
     x.click('form button[type=submit]'); x.wait_for_selector('.nav', timeout=15000)
     ok('Workforce' in x.locator('.usuario-txt').inner_text(), 'entra como Workforce con la clave temporal')
+    x.evaluate("() => ir('fallas')"); x.wait_for_selector(f'.pf-tarjeta:has-text("{nodoPF}")', timeout=20000)
+    ok('Reportada por Ana López' in x.locator('.pf-tarjeta', has_text=nodoPF).inner_text(), 'el resto de Workforce ve que Ana López ya reportó la posible falla')
+    x.locator('.pf-tarjeta', has_text=nodoPF).locator('button:has-text("Crear falla")').click()
+    x.wait_for_selector(f'.lista-nodos .nodo-chip:has-text("{nodoPF}")', timeout=5000)
+    ok(x.locator('.lista-nodos .nodo-chip').count() == 1, 'Crear falla deja el nodo listo en Publicar falla')
 
     if EXCEL:
         print('8. Subir la base real desde la página')

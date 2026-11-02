@@ -8,11 +8,15 @@ const deLocal = (s) => (s ? new Date(s).getTime() : null);
 function VistaFallas() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
-  const alertas = useMemo(() => s.alertas.filter((a) => !(s.descartadas[a.nodo] >= a.ultimo) && !mf.porNodo.has(a.nodo)), [s.alertas, s.descartadas, mf]);
   const [tab, setTab] = useState('publicar');
   const [edicion, setEdicion] = useState(null);
   const [semilla, setSemilla] = useState(null);
   const [cerrando, setCerrando] = useState(null);
+  // "Crear falla con este nodo" desde una posible falla (en esta vista, en el aviso o en el detalle)
+  useEffect(() => {
+    if (!s.semillaFalla) return;
+    setEdicion(null); setSemilla(s.semillaFalla); setTab('publicar'); G.set({ semillaFalla: null });
+  }, [s.semillaFalla]);
 
   if (s.cargando) return html`<div class="panel vacio" style="margin-top:20px"><b>Cargando…</b></div>`;
   if (!s.cat) return html`<${SinBase} />`;
@@ -27,7 +31,7 @@ function VistaFallas() {
     <div class="titulo-vista">
       <div><h1>Fallas</h1><p>Lo que publiques aquí lo ven los asesores al instante al consultar un cliente.</p></div>
     </div>
-    ${alertas.length > 0 && html`<${Alertas} alertas=${alertas} onCrear=${(n) => { setEdicion(null); setSemilla({ nodos: [n], k: Date.now() }); setTab('publicar'); }} />`}
+    <${PosiblesFallas} mf=${mf} />
     <div class="pestanas" role="tablist">
       ${pestanas.map(([id, txt, n]) => html`<button role="tab" aria-selected=${tab === id} onClick=${() => setTab(id)} key=${id}>
         ${txt}${n != null && html`<span class="n">${n}</span>`}</button>`)}
@@ -43,26 +47,143 @@ function VistaFallas() {
   </div>`;
 }
 
-/* ---------- Alertas tempranas ---------- */
-function Alertas({ alertas, onCrear }) {
-  const s = G.s;
-  return html`<div class="alertas" role="region" aria-label="Posibles fallas sin publicar">
-    ${alertas.slice(0, 4).map((a) => {
-      const info = Model.infoNodo(s.cat, a.nodo);
-      return html`<div class="alerta" key=${a.nodo}>
-        <div class="ico"><${Ico} n="alerta" s=${20} /></div>
-        <div>
-          <b>Posible falla sin publicar en ${a.nodo}</b>
-          <p>${a.nClientes} ${U.plural(a.nClientes, 'cliente distinto consultó', 'clientes distintos consultaron')} en los últimos ${CONFIG.alerta.minutos} min${a.reportes ? ' y ' + U.plural(a.reportes, 'un asesor la reportó', a.reportes + ' asesores la reportaron') : ''}.
-            ${info ? ' ' + U.lugar(info.muni) + ', ' + U.n(info.total) + ' clientes en el nodo.' : ''} Última consulta ${U.hace(a.ultimo, s.now)}.</p>
-        </div>
-        <div class="acc">
-          <button class="btn btn-primario btn-chico" onClick=${() => onCrear(a.nodo)}>Crear falla con este nodo</button>
-          <button class="btn btn-fantasma btn-chico" onClick=${() => A.descartarAlerta(a.nodo)}>Descartar</button>
-        </div>
-      </div>`;
-    })}
+/* ---------- Posibles fallas: aviso temprano para Workforce ----------
+   Nodos sin falla publicada con 5 clientes distintos en 60 min (o 2 reportes de asesores).
+   Con 3 o 4 clientes quedan en observación. Cada una trae el correo listo para reportarla. */
+function PosiblesFallas({ mf }) {
+  const s = useG();
+  const { alertas, observacion } = posiblesFallas(s, mf);
+  const um = umbralAlertas();
+  const regla = um.clientes + ' o más clientes distintos en ' + um.minutos + ' min (Concentrix y Tiendas) o ' + um.reportes + ' reportes de asesores';
+  return html`<section class="posibles" aria-label="Posibles fallas sin publicar">
+    <div class="posibles-cab">
+      <div class="posibles-txt">
+        <h2>Posibles fallas${alertas.length > 0 && html` <span class="posibles-n">${alertas.length}</span>`}</h2>
+        <p>${alertas.length ? 'Nodos sin falla publicada con ' + regla + '.' : 'Ninguna en este momento. Se avisa cuando un nodo sin falla publicada llega a ' + regla + '.'}</p>
+      </div>
+      <${AvisosEscritorio} />
+    </div>
+    ${alertas.map((a) => html`<${TarjetaPosibleFalla} a=${a} key=${a.nodo} />`)}
+    ${observacion.length > 0 && html`<div class="observacion">
+      <span class="observacion-t"><${Ico} n="ojo" s=${16} />En observación <small>${um.observar} o ${um.clientes - 1} clientes en ${um.minutos} min</small></span>
+      ${observacion.map((a) => html`<button class="obs-chip" key=${a.nodo} onClick=${() => A.abrirPosibleFalla(a.nodo)}
+          title=${'Ver los ' + a.nClientes + ' clientes de ' + a.nodo}><b class="codigo">${a.nodo}</b><span>${a.nClientes} clientes</span></button>`)}
+    </div>`}
+  </section>`;
+}
+
+function TarjetaPosibleFalla({ a }) {
+  const s = useG();
+  const info = Model.infoNodo(s.cat, a.nodo);
+  const datos = [
+    U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos') + ' en ' + lapsoAlerta(a),
+    a.reportes ? U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : '',
+    info && info.muni ? U.lugar(info.muni) : '',
+    info ? U.n(info.total) + ' clientes en el nodo' : ''
+  ].filter(Boolean);
+  return html`<div class="pf-tarjeta" data-reportada=${!!a.reportada}>
+    <div class="ico"><${Ico} n=${a.reportada ? 'check' : 'alerta'} s=${20} /></div>
+    <div>
+      <div class="pf-tarjeta-tit"><b>Posible falla en <span class="codigo">${a.nodo}</span></b>${info && !info.virtual && html`<${Tec} t=${info.tecnologia} />`}</div>
+      <p>${datos.join(' · ')}. Última consulta ${U.hace(a.ultimo, s.now)}.</p>
+      ${a.reportada && html`<p class="pf-reportada"><${Ico} n="check" s=${15} />${U.conPunto('Reportada por ' + a.reportada.por + ' ' + U.cuando(a.reportada.en, s.now))}</p>`}
+    </div>
+    <div class="acc">
+      <button class=${'btn btn-chico ' + (a.reportada ? 'btn-borde' : 'btn-primario')} onClick=${() => A.abrirPosibleFalla(a.nodo)}><${Ico} n="correo" s=${15} />Ver clientes y correo</button>
+      <button class="btn btn-borde btn-chico" onClick=${() => A.crearFallaCon(a.nodo)}>Crear falla</button>
+      <button class="btn btn-fantasma btn-chico" title="Ocultarla en esta PC hasta que vuelvan a consultar clientes de este nodo" onClick=${() => A.descartarAlerta(a.nodo)}>Descartar</button>
+    </div>
   </div>`;
+}
+
+/* Activar o desactivar los avisos de escritorio (el navegador pide permiso la primera vez) */
+function AvisosEscritorio() {
+  const s = useG();
+  if (!Avisos.soportado()) return null;
+  const p = s.permisoAvisos;
+  if (p === 'denied') return html`<p class="avisos-esc bloqueados"><${Ico} n="info" s=${16} />El navegador bloqueó los avisos de escritorio de esta página. Permítelos en el candado junto a la dirección.</p>`;
+  if (p === 'granted' && s.avisosEscritorio) return html`<div class="avisos-esc">
+    <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
+    <button class="btn btn-fantasma btn-chico" onClick=${Avisos.desactivar}>Desactivar</button>
+  </div>`;
+  return html`<div class="avisos-esc">
+    <button class="btn btn-borde btn-chico" title="Recibe un aviso aunque Alertas esté minimizado o en otra pestaña"
+      onClick=${async () => { if ((await Avisos.activar()) === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); } }}>
+      <${Ico} n="campana" s=${16} />Avisarme en el escritorio</button>
+  </div>`;
+}
+
+/* Detalle de una posible falla: los clientes y el correo listo para copiar y pegar en Outlook */
+function ModalPosibleFalla({ nodo }) {
+  const s = useG();
+  const [d, setD] = useState(null);
+  const [error, setError] = useState('');
+  const [copiado, setCopiado] = useState('');
+  const [marcando, setMarcando] = useState(false);
+  const cerrar = () => G.set({ alertaAbierta: null });
+  async function traer() {
+    setError(''); setD(null);
+    try { setD(await Backend.alertaDetalle(nodo)); } catch (e) {
+      setError(/desconocida/i.test(e.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : e.message);
+    }
+  }
+  useEffect(() => { traer(); }, [nodo]);
+  const info = Model.infoNodo(s.cat, nodo);
+  const enLista = s.alertas.find((x) => x.nodo === nodo);
+  const marca = enLista ? enLista.reportada : d && d.reportada;
+  const correo = useMemo(() => (d && d.clientes.length ? Model.correoPosibleFalla(d, info, s.user.nombre, Date.now()) : null), [d]);
+  const sub = [info && !info.virtual ? info.tecnologia : '', info && info.muni ? [info.muni, info.depto].filter(Boolean).map(U.lugar).filter((x, i, arr) => arr.indexOf(x) === i).join(', ') : '',
+    info ? U.n(info.total) + ' clientes en el nodo' : ''].filter(Boolean).join(' · ');
+
+  async function copiar(que) {
+    const ok = que === 'asunto' ? await U.copiar(correo.asunto)
+      : que === 'tabla' ? await U.copiarHtml(correo.tablaHtml, correo.tablaTexto) : await U.copiarHtml(correo.html, correo.texto);
+    if (!ok) { tostada('No se pudo copiar. Selecciona el texto y usa Ctrl+C.'); return; }
+    setCopiado(que); setTimeout(() => setCopiado((x) => (x === que ? '' : x)), 2500);
+    tostada(que === 'asunto' ? 'Asunto copiado' : que === 'tabla' ? 'Tabla copiada: pégala en el correo con Ctrl+V' : 'Correo copiado: pégalo en Outlook con Ctrl+V');
+  }
+  async function marcar(si) {
+    setMarcando(true);
+    try { await A.marcarReportada(nodo, si); tostada(si ? 'Marcada como reportada para todo Workforce' : 'Se quitó la marca'); } catch (e) { tostada(e.message); }
+    setMarcando(false);
+  }
+
+  let porCC = 0, porTienda = 0;
+  if (d) d.clientes.forEach((c) => { if ((c.canales || []).some((x) => /^Tiendas/.test(x))) porTienda++; else porCC++; });
+  const pie = html`
+    <button class="btn btn-borde" onClick=${() => A.crearFallaCon(nodo)}>Crear falla con este nodo</button>
+    <span class="pie-espacio"></span>
+    ${!marca && d && html`<button class=${'btn ' + (copiado && copiado !== 'asunto' ? 'btn-primario' : 'btn-borde')} disabled=${marcando} onClick=${() => marcar(true)}
+        title="El resto de Workforce verá que ya se reportó"><${Ico} n="check" s=${16} />Marcar como reportada</button>`}
+    <button class="btn btn-fantasma" onClick=${cerrar}>Cerrar</button>`;
+  return html`<${Modal} titulo=${'Posible falla en ' + nodo} sub=${sub} onCerrar=${cerrar} pie=${pie} ancho=${1120}>
+    ${!d && !error && html`<div class="pf-cargando"><span class="punto"></span>Buscando los datos de los clientes…</div>`}
+    ${error && html`<div class="nota error-acceso" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>
+      <div><button class="btn btn-borde btn-chico" onClick=${traer}>Intentar de nuevo</button></div>`}
+    ${d && html`
+      ${d.enFalla && html`<div class="nota-linea" data-tipo="info"><${Ico} n="info" s=${16} /><span>Ya hay una falla publicada para este nodo.</span></div>`}
+      ${marca && html`<div class="pf-marca"><${Ico} n="check" s=${16} /><span>Reportada por <b>${marca.por}</b> ${U.conPunto(U.cuando(marca.en, s.now))}</span>
+        <button class="enlace" disabled=${marcando} onClick=${() => marcar(false)}>Quitar marca</button></div>`}
+      ${!d.clientes.length ? html`<p class="sub">Ya no hay consultas de clientes de ${nodo} en los últimos ${d.minutos} minutos.</p>` : html`
+        <div class="pf-datos">
+          <div><b>${d.nClientes}</b><span>${U.plural(d.nClientes, 'cliente', 'clientes distintos')}</span></div>
+          <div><b>${U.dur(d.hasta - d.desde)}</b><span>${U.hora(d.desde) === U.hora(d.hasta) ? 'a las ' + U.hora(d.desde) : 'de ' + U.hora(d.desde) + ' a ' + U.hora(d.hasta)}</span></div>
+          <div><b>${d.reportes}</b><span>${U.plural(d.reportes, 'reporte de asesor', 'reportes de asesores')}</span></div>
+          <div><b>${porCC} · ${porTienda}</b><span>Call Center · Tiendas</span></div>
+        </div>
+        <div class="pf-correo">
+          <div class="pf-correo-cab">
+            <div><h3>Correo para reportar</h3><p>Cópialo y pégalo en Outlook con Ctrl+V: la tabla conserva su formato.</p></div>
+            <div class="pf-botones">
+              <button class="btn btn-primario btn-chico" onClick=${() => copiar('correo')}><${Ico} n=${copiado === 'correo' ? 'check' : 'copiar'} s=${15} />${copiado === 'correo' ? 'Correo copiado' : 'Copiar correo'}</button>
+              <button class="btn btn-borde btn-chico" onClick=${() => copiar('tabla')}><${Ico} n=${copiado === 'tabla' ? 'check' : 'copiar'} s=${15} />${copiado === 'tabla' ? 'Tabla copiada' : 'Copiar solo la tabla'}</button>
+            </div>
+          </div>
+          <div class="pf-asunto"><span>Asunto</span><b>${correo.asunto}</b>
+            <button class="btn btn-fantasma btn-chico" onClick=${() => copiar('asunto')}><${Ico} n=${copiado === 'asunto' ? 'check' : 'copiar'} s=${15} />${copiado === 'asunto' ? 'Copiado' : 'Copiar asunto'}</button></div>
+          <div class="pf-vista" aria-label="Vista previa del correo" dangerouslySetInnerHTML=${{ __html: correo.html }}></div>
+        </div>`}`}
+  <//>`;
 }
 
 /* ---------- Formulario de publicación / edición ---------- */

@@ -105,8 +105,9 @@ const servidor = http.createServer((req, res) => {
   if (url.pathname === '/test/contrato') {
     const h = g.E.activo.getSheetByName('Base');
     const nodo = url.searchParams.get('nodo'), k = Number(url.searchParams.get('n') || 0);
-    const filas = h.getRange(2, 1, h.getLastRow() - 1, 3).getValues().filter((f) => f[2] === nodo);
-    json({ contrato: filas.length ? String(filas[Math.min(k, filas.length - 1)][0]) : null }); return;
+    // Contratos distintos del nodo (un contrato puede tener varios servicios)
+    const unicos = [...new Set(h.getRange(2, 1, h.getLastRow() - 1, 3).getValues().filter((f) => f[2] === nodo).map((f) => String(f[0])))];
+    json({ contrato: unicos.length ? unicos[Math.min(k, unicos.length - 1)] : null }); return;
   }
   if (url.pathname === '/test/estado') {
     const hb = g.E.activo.getSheetByName('Base');

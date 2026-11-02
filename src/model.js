@@ -373,26 +373,100 @@ const Model = (() => {
     return pref + String((usados.length ? Math.max(...usados) : 0) + 1).padStart(2, '0');
   }
 
-  /* ---------- Alertas tempranas ---------- */
+  /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
+  const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal]);
+  const esInterno = (canal) => INTERNOS.has(canal);
   function alertas(logs, mf, now, descartadas) {
     const desde = now - CONFIG.alerta.minutos * U.MIN;
     const por = new Map();
     for (const l of logs) {
       if (l.t < desde || !l.n || U.esVirtual(l.n)) continue;
-      if (l.r === 'FALLA' || l.r === 'NO_ENCONTRADO') continue;
+      if (l.r === 'FALLA' || l.r === 'NO_ENCONTRADO' || esInterno(l.canal)) continue;
       const lst = mf.porNodo.get(l.n);
       if (lst && lst.some((f) => f.estado === 'ACTIVA')) continue;
       const desc = descartadas && descartadas[l.n];
       if (desc && l.t <= desc) continue;
       let e = por.get(l.n);
       if (!e) { e = { nodo: l.n, clientes: new Set(), reportes: 0, consultas: 0, primero: l.t, ultimo: l.t, tec: l.tec, dep: l.dep }; por.set(l.n, e); }
-      e.consultas++; if (l.c) e.clientes.add(l.c); if (l.tipo === 'reporte') e.reportes++;
+      e.consultas++; if (l.c) e.clientes.add(String(l.c)); if (l.tipo === 'reporte') e.reportes++;
       e.primero = Math.min(e.primero, l.t); e.ultimo = Math.max(e.ultimo, l.t);
     }
+    const um = CONFIG.alerta;
     return [...por.values()]
-      .filter((e) => e.clientes.size >= CONFIG.alerta.clientesDistintos || e.reportes >= 2)
-      .map((e) => Object.assign(e, { nClientes: e.clientes.size }))
-      .sort((a, b) => b.nClientes - a.nClientes || b.ultimo - a.ultimo);
+      .map((e) => {
+        const n = e.clientes.size;
+        const nivel = n >= um.clientesDistintos || e.reportes >= um.reportes ? 'alerta' : n >= um.observar ? 'observacion' : '';
+        return Object.assign(e, { nClientes: n, nivel });
+      })
+      .filter((e) => e.nivel)
+      .sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alerta' ? -1 : 1) || b.nClientes - a.nClientes || b.ultimo - a.ultimo);
+  }
+
+  /* ---------- Correo para reportar una posible falla (al VOC o al personal interno) ----------
+     d: el detalle (servidor: detallePosibleFalla_). Devuelve el asunto y el cuerpo en HTML (con la
+     tabla de clientes, para pegar en Outlook) y en texto, más la tabla sola. */
+  const CAMPOS_CORREO = ['Hora', 'Contrato', 'Cliente', 'Nodo', 'Tecnología', 'OLT', 'NAP / TAP', 'Colonia', 'Municipio', 'Categoría', 'Canal'];
+  function canalCliente(c) {
+    const partes = (c.canales || []).map((x) => (x === CONFIG.roles.concentrix.canal ? 'Call Center' : /^Tiendas/.test(x) ? x.replace(/^Tiendas:\s*/, 'Tienda ').replace(/^Tiendas$/, 'Tiendas') : x));
+    let t = partes.join(' y ') || '';
+    if (c.veces > 1) t += (t ? ', ' : '') + c.veces + ' consultas';
+    if (c.reporte) t += (t ? ', ' : '') + 'reportó posible falla';
+    return t;
+  }
+  function correoPosibleFalla(d, info, firma, ahora) {
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+    const hora = (t) => U.hora(t).replace(/ /g, ' ');
+    const h = new Date(ahora).getHours();
+    const saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+    const c0 = d.clientes.find((c) => c.enBase) || {};
+    const tec = (info && !info.virtual && info.tecnologia) || c0.tecnologia || '';
+    const muni = (info && info.muni) || c0.municipio || '', depto = (info && info.depto) || c0.departamento || '';
+    const lugar = [muni, depto].filter(Boolean).map(U.lugar).filter((x, i, a) => a.indexOf(x) === i).join(', ');
+    const n = d.nClientes;
+    const desde = d.desde || ahora, hasta = d.hasta || ahora;
+    const lapso = U.dur(hasta - desde);
+    // Por dónde llegaron (Call Center o Tiendas), contando cada cliente una vez
+    let porCC = 0, porTienda = 0;
+    d.clientes.forEach((c) => { if ((c.canales || []).some((x) => /^Tiendas/.test(x))) porTienda++; else porCC++; });
+    const canales = porTienda && porCC ? ' (' + porCC + ' por el Call Center y ' + porTienda + ' en Tiendas)'
+      : porTienda ? ' (en Tiendas)' : ' (por el Call Center)';
+    const reportes = d.reportes ? ', y ' + (d.reportes === 1 ? 'un asesor lo reportó' : d.reportes + ' asesores lo reportaron') + ' como posible falla' : '';
+    const nodoTxt = d.nodo + (tec ? ' (' + tec + ')' : '');
+
+    const asunto = 'Posible falla en nodo ' + d.nodo + (tec || muni ? ' (' + [tec, muni && U.lugar(muni)].filter(Boolean).join(', ') + ')' : '') + ' – ' + n + ' clientes en ' + lapso;
+    const cuando = hora(desde) === hora(hasta) ? 'A las ' + hora(desde) : 'De ' + hora(desde) + ' a ' + hora(hasta);
+    const p1 = ['Les reportamos una posible falla en el nodo ', { b: nodoTxt }, (lugar ? ', ' + lugar : '') + '. ' + cuando + ' se comunicaron con nosotros ',
+      { b: n + ' clientes distintos' }, ' de este nodo' + canales + reportes + '.'];
+    const p2 = [(info && info.total ? 'El nodo tiene ' + U.n(info.total) + ' clientes. ' : '') + 'Por ahora no tenemos una falla registrada en este nodo.'];
+    const p3 = ['Les agradecemos validar el nodo y confirmarnos si hay alguna afectación.'];
+    const enHtml = (p) => p.map((x) => (typeof x === 'string' ? esc(x) : '<b>' + esc(x.b) + '</b>')).join('');
+    const enTexto = (p) => p.map((x) => (typeof x === 'string' ? x : x.b)).join('');
+
+    // En HFC la columna OLT de la base repite el nodo: ahí no dice nada y queda en blanco
+    const filas = d.clientes.map((c) => [hora(c.primera), c.contrato, c.enBase ? c.nombre : 'No está en la base actual', c.nodo || d.nodo, c.tecnologia,
+      c.olt && c.olt !== (c.nodo || d.nodo) ? c.olt : '', c.nap, U.lugar(c.colonia || ''), U.lugar(c.municipio || ''), U.titulo(c.categoria || ''), canalCliente(c)]);
+    // Una columna que no trae nada en ningún cliente (por ejemplo OLT en un nodo HFC) no va
+    const siempre = [0, 1, 2, 3];
+    const usadas = CAMPOS_CORREO.map((c, i) => siempre.includes(i) || filas.some((f) => f[i]));
+    const cols = CAMPOS_CORREO.map((c, i) => i).filter((i) => usadas[i]);
+    const borde = 'border:1px solid #aab2bd;padding:4px 8px;text-align:left;vertical-align:top;';
+    // Códigos, horas y textos cortos no se parten en dos líneas (Outlook entiende mejor el atributo nowrap)
+    const fijo = [0, 1, 3, 4, 5, 6];
+    const celda = (v, i) => {
+      const t = v || '—', entero = fijo.includes(i) || String(t).length <= 16;
+      return '<td' + (entero ? ' nowrap' : '') + ' style="' + borde + (entero ? 'white-space:nowrap;' : '') + '">' + esc(t) + '</td>';
+    };
+    const tablaHtml = '<table cellspacing="0" cellpadding="0" border="1" style="border-collapse:collapse;border:1px solid #aab2bd;font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000000">'
+      + '<tr>' + cols.map((i) => '<th nowrap style="' + borde + 'background:#e8ebef;font-weight:bold;white-space:nowrap">' + esc(CAMPOS_CORREO[i]) + '</th>').join('') + '</tr>'
+      + filas.map((f) => '<tr>' + cols.map((i) => celda(f[i], i)).join('') + '</tr>').join('')
+      + '</table>';
+    const tablaTexto = [CAMPOS_CORREO].concat(filas).map((f) => cols.map((i) => String(f[i] || '—').replace(/\s+/g, ' ')).join('\t')).join('\r\n');
+    const parrafo = (t) => '<p style="margin:0 0 10px">' + t + '</p>';
+    const html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000000">'
+      + parrafo(esc(saludo) + ':') + parrafo(enHtml(p1)) + parrafo(enHtml(p2)) + parrafo(enHtml(p3)) + tablaHtml
+      + '<p style="margin:14px 0 0">Saludos,<br>' + esc(firma) + '<br>' + esc(CONFIG.equipo) + '</p></div>';
+    const texto = [saludo + ':', enTexto(p1), enTexto(p2), enTexto(p3), tablaTexto, 'Saludos,\r\n' + firma + '\r\n' + CONFIG.equipo].join('\r\n\r\n');
+    return { asunto, html, texto, tablaHtml, tablaTexto };
   }
 
   /* ---------- Comparación entre la base actual y una nueva ---------- */
@@ -423,6 +497,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, esInterno, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

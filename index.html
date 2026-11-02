@@ -419,15 +419,66 @@ button { cursor: pointer; }
 .pestanas button[aria-selected="true"]::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--ink); }
 .pestanas .n { font-size: 12px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-.alertas { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
-.alerta {
+/* Posibles fallas (Workforce): nodos con muchos clientes consultando y sin falla publicada */
+.posibles { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.posibles-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.posibles-txt h2 { margin: 0; font-size: 16px; font-weight: 750; display: flex; align-items: center; gap: 8px; }
+.posibles-txt p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); max-width: 78ch; }
+.posibles-n { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--resuelta); color: var(--resuelta-ink); font-size: 12.5px; font-weight: 800; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+.avisos-esc { display: flex; align-items: center; gap: 8px; margin: 0; }
+.avisos-esc.bloqueados { font-size: 12.5px; color: var(--ink-3); max-width: 46ch; gap: 6px; }
+.avisos-esc.bloqueados svg { flex: none; }
+.avisos-on { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.pf-tarjeta {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center;
   padding: 14px 16px; border-radius: 14px; background: var(--resuelta-soft); border: 1px solid color-mix(in srgb, var(--resuelta) 45%, transparent);
 }
-.alerta .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--resuelta); color: var(--resuelta-ink); display: grid; place-items: center; }
-.alerta b { font-weight: 750; }
-.alerta p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
-.alerta .acc { display: flex; gap: 8px; }
+.pf-tarjeta .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--resuelta); color: var(--resuelta-ink); display: grid; place-items: center; }
+.pf-tarjeta-tit { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pf-tarjeta b { font-weight: 750; }
+.pf-tarjeta p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.pf-tarjeta .acc { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pf-tarjeta[data-reportada="true"] { background: var(--surface); border-color: var(--line); }
+.pf-tarjeta[data-reportada="true"] .ico { background: var(--surface-3); color: var(--ink-2); }
+.pf-reportada { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink) !important; }
+.observacion { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 2px 0; }
+.observacion-t { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); margin-right: 4px; }
+.observacion-t small { font-weight: 500; color: var(--ink-3); font-size: 12.5px; }
+.obs-chip { display: inline-flex; align-items: baseline; gap: 7px; height: 30px; padding: 0 11px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13.5px; transition: border-color 150ms ease, background-color 150ms ease; }
+.obs-chip:hover { border-color: var(--ink-3); background: var(--surface-2); }
+.obs-chip span { font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* Detalle de una posible falla y el correo listo */
+.pf-cargando { display: flex; align-items: center; gap: 10px; padding: 28px 4px; color: var(--ink-2); font-weight: 600; }
+.pf-marca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
+.pf-marca svg { color: var(--ok); flex: none; }
+.pf-datos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; }
+.pf-datos > div { padding: 12px 16px; }
+.pf-datos > div + div { border-left: 1px solid var(--line); }
+.pf-datos b { display: block; font-size: 22px; font-weight: 800; font-stretch: 115%; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.pf-datos span { font-size: 12.5px; color: var(--ink-2); }
+.pf-correo { display: flex; flex-direction: column; gap: 10px; }
+.pf-correo-cab { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.pf-correo-cab h3 { margin: 0; font-size: 15px; font-weight: 750; }
+.pf-correo-cab p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
+.pf-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.pf-asunto { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; }
+.pf-asunto > span { font-size: 12px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; flex: none; }
+.pf-asunto b { flex: 1; min-width: 0; font-weight: 600; }
+.pf-asunto .btn { flex: none; }
+/* La vista previa se ve como el correo (blanco) en los dos temas */
+.pf-vista { background: #ffffff; color: #000000; border: 1px solid var(--line-2); border-radius: 10px; padding: 16px 18px; max-height: min(46vh, 420px); overflow: auto; }
+.pf-vista p { color: #000000; }
+.enlace { border: 0; background: none; padding: 0; color: var(--ink); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.enlace:disabled { opacity: 0.5; cursor: default; }
+.modal-pie .pie-espacio { flex: 1; }
+/* Los avisos de arriba se apilan (actualización de Workforce y posible falla) y quedan a la vista al bajar */
+.avisos-arriba { position: sticky; top: 60px; z-index: 25; }
+.avisos-arriba .aviso { position: static; }
+.aviso-pf { background: var(--resuelta); color: var(--resuelta-ink); }
+.aviso-pf .aviso-icono { background: color-mix(in srgb, var(--resuelta-ink) 14%, transparent); }
+.aviso .aviso-x { margin-left: 0; background: transparent; color: inherit; }
+.aviso .aviso-x:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
 
 .form-falla { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
 .paso { padding: 20px 22px; }
@@ -863,8 +914,12 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .veredicto { padding: 20px; }
   .veredicto .sello { position: static; display: block; margin-top: 10px; }
   .ayuda-busqueda > span:last-child { display: none; }
-  .alerta { grid-template-columns: auto minmax(0, 1fr); }
-  .alerta .acc { grid-column: 1 / -1; }
+  .pf-tarjeta { grid-template-columns: auto minmax(0, 1fr); }
+  .pf-tarjeta .acc { grid-column: 1 / -1; justify-content: flex-start; }
+  .pf-datos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-datos > div:nth-child(3) { border-left: 0; }
+  .pf-datos > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .pf-asunto { flex-wrap: wrap; }
   .titulo-vista .der { margin-left: 0; }
   .comp-fila { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .entrada-nodos .textarea { padding-right: 12px; padding-bottom: 52px; }
@@ -1349,9 +1404,11 @@ const CONFIG = {
   // Cliente reincidente: tantas fallas en su nodo en estos días (desde que es cliente).
   reincidente: { fallas: 3, dias: 90 },
 
-  // Alerta temprana: un nodo sin falla publicada que recibe consultas de
-  // varios clientes distintos en poco tiempo.
-  alerta: { minutos: 60, clientesDistintos: 3 },
+  // Posible falla: un nodo sin falla publicada al que en los últimos 60 minutos le consultaron
+  // 5 o más clientes distintos (Concentrix y Tiendas; las búsquedas de Workforce no cuentan),
+  // o que 2 asesores reportaron. Con 3 o 4 clientes el nodo queda en observación.
+  // El aviso de escritorio no se repite para el mismo nodo antes de 2 horas.
+  alerta: { minutos: 60, clientesDistintos: 5, observar: 3, reportes: 2, horasReaviso: 2 },
 
   // Tiendas que se eligen al entrar con la cuenta de Tiendas. La lista que vale es la hoja Tiendas
   // de la base interna (el servidor la manda al abrir la página); esta solo se usa si el servidor
@@ -1547,6 +1604,29 @@ const U = (() => {
       ta.remove(); return ok;
     }
   }
+  /* Copia con formato (para pegar en Outlook con la tabla) y en texto (para donde no acepta formato) */
+  async function copiarHtml(html, texto) {
+    try {
+      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([texto], { type: 'text/plain' })
+        })]);
+        return true;
+      }
+    } catch (e) { /* sigue con el respaldo */ }
+    try {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      Object.assign(div.style, { position: 'fixed', left: '-10000px', top: '0' });
+      document.body.appendChild(div);
+      const sel = window.getSelection(), r = document.createRange();
+      r.selectNodeContents(div); sel.removeAllRanges(); sel.addRange(r);
+      const ok = document.execCommand('copy');
+      sel.removeAllRanges(); div.remove();
+      if (ok) return true;
+    } catch (e) { /* último recurso: solo texto */ }
+    return copiar(texto);
+  }
   function descargarCsv(nombre, filas) {
     const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const txt = '﻿' + filas.map((f) => f.map(esc).join(',')).join('\r\n');
@@ -1570,7 +1650,7 @@ const U = (() => {
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, oltBase, oltNombre,
-    oltPuerto, uid, copiar, descargarCsv, descargarTexto, plural, listaNatural };
+    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
 })();
 
 
@@ -2106,26 +2186,100 @@ const Model = (() => {
     return pref + String((usados.length ? Math.max(...usados) : 0) + 1).padStart(2, '0');
   }
 
-  /* ---------- Alertas tempranas ---------- */
+  /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
+  const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal]);
+  const esInterno = (canal) => INTERNOS.has(canal);
   function alertas(logs, mf, now, descartadas) {
     const desde = now - CONFIG.alerta.minutos * U.MIN;
     const por = new Map();
     for (const l of logs) {
       if (l.t < desde || !l.n || U.esVirtual(l.n)) continue;
-      if (l.r === 'FALLA' || l.r === 'NO_ENCONTRADO') continue;
+      if (l.r === 'FALLA' || l.r === 'NO_ENCONTRADO' || esInterno(l.canal)) continue;
       const lst = mf.porNodo.get(l.n);
       if (lst && lst.some((f) => f.estado === 'ACTIVA')) continue;
       const desc = descartadas && descartadas[l.n];
       if (desc && l.t <= desc) continue;
       let e = por.get(l.n);
       if (!e) { e = { nodo: l.n, clientes: new Set(), reportes: 0, consultas: 0, primero: l.t, ultimo: l.t, tec: l.tec, dep: l.dep }; por.set(l.n, e); }
-      e.consultas++; if (l.c) e.clientes.add(l.c); if (l.tipo === 'reporte') e.reportes++;
+      e.consultas++; if (l.c) e.clientes.add(String(l.c)); if (l.tipo === 'reporte') e.reportes++;
       e.primero = Math.min(e.primero, l.t); e.ultimo = Math.max(e.ultimo, l.t);
     }
+    const um = CONFIG.alerta;
     return [...por.values()]
-      .filter((e) => e.clientes.size >= CONFIG.alerta.clientesDistintos || e.reportes >= 2)
-      .map((e) => Object.assign(e, { nClientes: e.clientes.size }))
-      .sort((a, b) => b.nClientes - a.nClientes || b.ultimo - a.ultimo);
+      .map((e) => {
+        const n = e.clientes.size;
+        const nivel = n >= um.clientesDistintos || e.reportes >= um.reportes ? 'alerta' : n >= um.observar ? 'observacion' : '';
+        return Object.assign(e, { nClientes: n, nivel });
+      })
+      .filter((e) => e.nivel)
+      .sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alerta' ? -1 : 1) || b.nClientes - a.nClientes || b.ultimo - a.ultimo);
+  }
+
+  /* ---------- Correo para reportar una posible falla (al VOC o al personal interno) ----------
+     d: el detalle (servidor: detallePosibleFalla_). Devuelve el asunto y el cuerpo en HTML (con la
+     tabla de clientes, para pegar en Outlook) y en texto, más la tabla sola. */
+  const CAMPOS_CORREO = ['Hora', 'Contrato', 'Cliente', 'Nodo', 'Tecnología', 'OLT', 'NAP / TAP', 'Colonia', 'Municipio', 'Categoría', 'Canal'];
+  function canalCliente(c) {
+    const partes = (c.canales || []).map((x) => (x === CONFIG.roles.concentrix.canal ? 'Call Center' : /^Tiendas/.test(x) ? x.replace(/^Tiendas:\s*/, 'Tienda ').replace(/^Tiendas$/, 'Tiendas') : x));
+    let t = partes.join(' y ') || '';
+    if (c.veces > 1) t += (t ? ', ' : '') + c.veces + ' consultas';
+    if (c.reporte) t += (t ? ', ' : '') + 'reportó posible falla';
+    return t;
+  }
+  function correoPosibleFalla(d, info, firma, ahora) {
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+    const hora = (t) => U.hora(t).replace(/ /g, ' ');
+    const h = new Date(ahora).getHours();
+    const saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+    const c0 = d.clientes.find((c) => c.enBase) || {};
+    const tec = (info && !info.virtual && info.tecnologia) || c0.tecnologia || '';
+    const muni = (info && info.muni) || c0.municipio || '', depto = (info && info.depto) || c0.departamento || '';
+    const lugar = [muni, depto].filter(Boolean).map(U.lugar).filter((x, i, a) => a.indexOf(x) === i).join(', ');
+    const n = d.nClientes;
+    const desde = d.desde || ahora, hasta = d.hasta || ahora;
+    const lapso = U.dur(hasta - desde);
+    // Por dónde llegaron (Call Center o Tiendas), contando cada cliente una vez
+    let porCC = 0, porTienda = 0;
+    d.clientes.forEach((c) => { if ((c.canales || []).some((x) => /^Tiendas/.test(x))) porTienda++; else porCC++; });
+    const canales = porTienda && porCC ? ' (' + porCC + ' por el Call Center y ' + porTienda + ' en Tiendas)'
+      : porTienda ? ' (en Tiendas)' : ' (por el Call Center)';
+    const reportes = d.reportes ? ', y ' + (d.reportes === 1 ? 'un asesor lo reportó' : d.reportes + ' asesores lo reportaron') + ' como posible falla' : '';
+    const nodoTxt = d.nodo + (tec ? ' (' + tec + ')' : '');
+
+    const asunto = 'Posible falla en nodo ' + d.nodo + (tec || muni ? ' (' + [tec, muni && U.lugar(muni)].filter(Boolean).join(', ') + ')' : '') + ' – ' + n + ' clientes en ' + lapso;
+    const cuando = hora(desde) === hora(hasta) ? 'A las ' + hora(desde) : 'De ' + hora(desde) + ' a ' + hora(hasta);
+    const p1 = ['Les reportamos una posible falla en el nodo ', { b: nodoTxt }, (lugar ? ', ' + lugar : '') + '. ' + cuando + ' se comunicaron con nosotros ',
+      { b: n + ' clientes distintos' }, ' de este nodo' + canales + reportes + '.'];
+    const p2 = [(info && info.total ? 'El nodo tiene ' + U.n(info.total) + ' clientes. ' : '') + 'Por ahora no tenemos una falla registrada en este nodo.'];
+    const p3 = ['Les agradecemos validar el nodo y confirmarnos si hay alguna afectación.'];
+    const enHtml = (p) => p.map((x) => (typeof x === 'string' ? esc(x) : '<b>' + esc(x.b) + '</b>')).join('');
+    const enTexto = (p) => p.map((x) => (typeof x === 'string' ? x : x.b)).join('');
+
+    // En HFC la columna OLT de la base repite el nodo: ahí no dice nada y queda en blanco
+    const filas = d.clientes.map((c) => [hora(c.primera), c.contrato, c.enBase ? c.nombre : 'No está en la base actual', c.nodo || d.nodo, c.tecnologia,
+      c.olt && c.olt !== (c.nodo || d.nodo) ? c.olt : '', c.nap, U.lugar(c.colonia || ''), U.lugar(c.municipio || ''), U.titulo(c.categoria || ''), canalCliente(c)]);
+    // Una columna que no trae nada en ningún cliente (por ejemplo OLT en un nodo HFC) no va
+    const siempre = [0, 1, 2, 3];
+    const usadas = CAMPOS_CORREO.map((c, i) => siempre.includes(i) || filas.some((f) => f[i]));
+    const cols = CAMPOS_CORREO.map((c, i) => i).filter((i) => usadas[i]);
+    const borde = 'border:1px solid #aab2bd;padding:4px 8px;text-align:left;vertical-align:top;';
+    // Códigos, horas y textos cortos no se parten en dos líneas (Outlook entiende mejor el atributo nowrap)
+    const fijo = [0, 1, 3, 4, 5, 6];
+    const celda = (v, i) => {
+      const t = v || '—', entero = fijo.includes(i) || String(t).length <= 16;
+      return '<td' + (entero ? ' nowrap' : '') + ' style="' + borde + (entero ? 'white-space:nowrap;' : '') + '">' + esc(t) + '</td>';
+    };
+    const tablaHtml = '<table cellspacing="0" cellpadding="0" border="1" style="border-collapse:collapse;border:1px solid #aab2bd;font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000000">'
+      + '<tr>' + cols.map((i) => '<th nowrap style="' + borde + 'background:#e8ebef;font-weight:bold;white-space:nowrap">' + esc(CAMPOS_CORREO[i]) + '</th>').join('') + '</tr>'
+      + filas.map((f) => '<tr>' + cols.map((i) => celda(f[i], i)).join('') + '</tr>').join('')
+      + '</table>';
+    const tablaTexto = [CAMPOS_CORREO].concat(filas).map((f) => cols.map((i) => String(f[i] || '—').replace(/\s+/g, ' ')).join('\t')).join('\r\n');
+    const parrafo = (t) => '<p style="margin:0 0 10px">' + t + '</p>';
+    const html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000000">'
+      + parrafo(esc(saludo) + ':') + parrafo(enHtml(p1)) + parrafo(enHtml(p2)) + parrafo(enHtml(p3)) + tablaHtml
+      + '<p style="margin:14px 0 0">Saludos,<br>' + esc(firma) + '<br>' + esc(CONFIG.equipo) + '</p></div>';
+    const texto = [saludo + ':', enTexto(p1), enTexto(p2), enTexto(p3), tablaTexto, 'Saludos,\r\n' + firma + '\r\n' + CONFIG.equipo].join('\r\n\r\n');
+    return { asunto, html, texto, tablaHtml, tablaTexto };
   }
 
   /* ---------- Comparación entre la base actual y una nueva ---------- */
@@ -2156,7 +2310,7 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, esInterno, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();
 
@@ -2400,11 +2554,18 @@ const Demo = (() => {
         logs.push({ t, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: r() < 0.82 ? 'contrato' : 'dni', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: U.esVirtual(x.nodo) ? 'SIN_NODO' : 'SIN_FALLA', f: null, tipo: 'consulta' });
       }
     }
-    // Alerta temprana: varios clientes de SCA05 sin falla publicada en los últimos minutos
+    // Posible falla: 6 clientes de SCA05 sin falla publicada en los últimos minutos (uno en una tienda
+    // y otro reportado por el asesor), y DNLGC04 en observación con 3 clientes
     const sca = filasDe(['SCA05']);
-    [38, 27, 19, 11, 6].forEach((mins, k) => {
-      const x = reg(sca[k * 7 % sca.length]); const a = ASESORES[k % ASESORES.length];
-      logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: k === 4 ? 'reporte' : 'consulta' });
+    const tienda = ASESORES.find((a) => a[2] === 'Tiendas');
+    [41, 33, 27, 19, 11, 6].forEach((mins, k) => {
+      const x = reg(sca[k * 7 % sca.length]); const a = k === 3 ? tienda : ASESORES[k % ASESORES.length];
+      logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: k === 5 ? 'reporte' : 'consulta' });
+    });
+    const obs = filasDe(['DNLGC04']);
+    [35, 22, 9].forEach((mins, k) => {
+      const x = reg(obs[k * 5 % obs.length]); const a = ASESORES[(k + 4) % ASESORES.length];
+      logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: 'consulta' });
     });
     logs.sort((a, b) => a.t - b.t);
 
@@ -2451,7 +2612,7 @@ function BackendRemoto() {
 
   /* Las consultas de solo lectura se reintentan solas si el servidor estuvo ocupado un momento
      (con cientos de personas a la vez, Apps Script a veces rechaza una solicitud suelta). */
-  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, estadisticas: 1, contactos: 1 };
+  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1 };
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
@@ -2551,6 +2712,8 @@ function BackendRemoto() {
     reportar: (rec) => llamar('reportar', { contrato: rec.contrato, nodo: rec.nodo }),
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
     alertas: () => llamar('alertas', {}),
+    alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
+    marcarAlerta: (nodo, reportada) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo }),
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
@@ -2634,6 +2797,12 @@ function BackendLocal() {
     return cache;
   }
   const quien = () => ({ u: ses.usuario.u, nombre: ses.usuario.nombre });
+  /* Posibles fallas marcadas como reportadas (en la demostración, solo en esta PC); duran 6 horas */
+  const marcasDemo = () => {
+    const m = leerLS('alertas-demo-reportadas', {}), corte = Date.now() - 6 * U.HORA;
+    Object.keys(m).forEach((k) => { if (!(m[k] && m[k].en > corte)) delete m[k]; });
+    return m;
+  };
   async function confirmar(tipo, texto, cambios) {
     const m = await Store.confirmar({ tipo, texto, por: quien() }, cambios);
     return m.version;
@@ -2739,9 +2908,55 @@ function BackendLocal() {
     async alertas() {
       const fallas = await Store.leerFallas();
       const logs = await Store.leerLogs(Date.now() - CONFIG.alerta.minutos * U.MIN);
+      const marcas = marcasDemo();
       const lista = Model.alertas(logs, Model.mapaFallas(fallas, Date.now()), Date.now(), {})
-        .map((a) => ({ nodo: a.nodo, nClientes: a.nClientes, reportes: a.reportes, consultas: a.consultas, primero: a.primero, ultimo: a.ultimo }));
-      return { alertas: lista, ahora: Date.now() };
+        .map((a) => Object.assign({ nodo: a.nodo, nivel: a.nivel, nClientes: a.nClientes, reportes: a.reportes, consultas: a.consultas, primero: a.primero, ultimo: a.ultimo },
+          marcas[a.nodo] ? { reportada: marcas[a.nodo] } : {}));
+      const um = CONFIG.alerta;
+      return { alertas: lista, ahora: Date.now(), umbral: { minutos: um.minutos, clientes: um.clientesDistintos, observar: um.observar, reportes: um.reportes } };
+    },
+    /* Los clientes de una posible falla con sus datos de la base, igual que el servidor */
+    async alertaDetalle(nodo) {
+      const c = await indice();
+      const ahora = Date.now();
+      const fallas = await Store.leerFallas();
+      const logs = (await Store.leerLogs(ahora - CONFIG.alerta.minutos * U.MIN))
+        .filter((l) => l.n === nodo && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
+        .sort((a, b) => a.t - b.t);
+      const por = new Map();
+      let reportes = 0;
+      for (const l of logs) {
+        if (l.tipo === 'reporte') reportes++;
+        if (!l.c) continue;
+        const k = String(l.c);
+        const x = por.get(k) || { contrato: k, primera: l.t, ultima: l.t, veces: 0, canales: [], reporte: false };
+        x.veces++; x.ultima = Math.max(x.ultima, l.t);
+        const canal = l.canal === 'Tiendas' ? 'Tiendas' + (l.tienda ? ': ' + l.tienda : '') : l.canal;
+        if (!x.canales.includes(canal)) x.canales.push(canal);
+        if (l.tipo === 'reporte') x.reporte = true;
+        por.set(k, x);
+      }
+      const clientes = [...por.values()].slice(0, 60).map((x) => {
+        const r = c.ix ? Model.buscar(c.ix, x.contrato) : null;
+        const regs = r && r.filas ? r.filas.map((i) => Model.registro(c.ix, i)) : [];
+        const b = regs.find((y) => y.nodo === nodo) || regs[0];
+        return Object.assign({}, x, {
+          enBase: !!b, nombre: b ? b.nombre : '', nodo: b ? b.nodo : nodo, tecnologia: b ? b.tecnologia : '', olt: b ? b.olt : '', nap: b ? b.nap : '',
+          colonia: b ? b.colonia : '', municipio: b ? b.municipio : '', departamento: b ? b.departamento : '', categoria: b ? b.categoria : ''
+        });
+      });
+      const mf = Model.mapaFallas(fallas, ahora);
+      return {
+        nodo, ahora, minutos: CONFIG.alerta.minutos, nClientes: por.size, reportes, consultas: logs.length,
+        desde: logs.length ? logs[0].t : null, hasta: logs.length ? logs[logs.length - 1].t : null, clientes,
+        reportada: marcasDemo()[nodo] || null, enFalla: (mf.porNodo.get(nodo) || []).some((f) => f.estado === 'ACTIVA')
+      };
+    },
+    async marcarAlerta(nodo, reportada) {
+      const m = marcasDemo();
+      if (reportada) m[nodo] = { por: ses.usuario.nombre, en: Date.now() }; else delete m[nodo];
+      guardarLS('alertas-demo-reportadas', m);
+      return { nodo, reportada: m[nodo] || null };
     },
 
     async telefonos() {
@@ -2834,7 +3049,10 @@ const G = {
     arranque: 'cargando', mensaje: 'Conectando con Alertas…', config: null, user: null, avisoAcceso: '',
     meta: { version: 0, baseVersion: -1, demo: false }, resumen: null, cat: null, fallas: [], cargas: [], alertas: [],
     now: Date.now(), remoto: null, ruta: 'consulta', tema: 'auto', tostadas: [], descartadas: {}, misConsultas: [],
-    sinConexion: false, cargando: false
+    sinConexion: false, cargando: false,
+    // Posibles fallas (Workforce): umbral del servidor, la que está abierta, las que llegaron y no se han visto,
+    // y si los avisos de escritorio están permitidos y activados
+    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', avisosEscritorio: false, semillaFalla: null
   },
   subs: new Set(),
   set(p) { Object.assign(this.s, typeof p === 'function' ? p(this.s) : p); this.subs.forEach((f) => f()); }
@@ -2863,7 +3081,8 @@ function tostada(texto) {
 /* ---------- Acciones ---------- */
 const A = {
   async arrancar() {
-    G.set({ tema: leerLS('alertas-tema', 'auto'), descartadas: leerLS('alertas-descartadas', {}), misConsultas: leerSS('alertas-mis-consultas', []), ruta: rutaActual() });
+    G.set({ tema: leerLS('alertas-tema', 'auto'), descartadas: leerLS('alertas-descartadas', {}), misConsultas: leerSS('alertas-mis-consultas', []), ruta: rutaActual(),
+      permisoAvisos: Avisos.permiso(), avisosEscritorio: Avisos.activos() });
     aplicarTema(G.s.tema);
     Backend.alExpirar((msg) => { A.limpiar(); G.set({ avisoAcceso: msg || 'Tu sesión venció. Entra de nuevo.' }); });
     window.addEventListener('hashchange', () => G.set({ ruta: rutaActual() }));
@@ -2890,7 +3109,8 @@ const A = {
     G.set({ cargando: false });
   },
   limpiar() {
-    G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false } });
+    G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
+      alertaAbierta: null, alertasNuevas: [], semillaFalla: null });
     guardarSS('alertas-mis-consultas', []);
   },
   salir() { Backend.salir(); A.limpiar(); },
@@ -2930,11 +3150,47 @@ const A = {
     programar();
     // Al volver a la pestaña, revisa solo si ya pasó el intervalo
     document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - ultimo > cada) paso(); });
-    setInterval(() => { if (G.s.user && esWorkforce() && !document.hidden) A.revisarAlertas(); }, 60000);
+    // Workforce revisa las posibles fallas cada minuto aunque la pestaña esté escondida o minimizada:
+    // así llega el aviso de escritorio. Son pocas personas, no cargan al servidor.
+    setInterval(() => { if (G.s.user && esWorkforce()) A.revisarAlertas(); }, 60000);
   },
   async revisarAlertas() {
-    try { const r = await Backend.alertas(); G.set({ alertas: r.alertas || [] }); } catch (e) { /* se intenta de nuevo luego */ }
+    let r;
+    try { r = await Backend.alertas(); } catch (e) { return; /* se intenta de nuevo luego */ }
+    G.set({ alertas: r.alertas || [], umbral: r.umbral || null });
+    A.avisarPosiblesFallas();
   },
+  /* Cada posible falla nueva se avisa una vez en esta PC (y otra vez si sigue después de 2 horas):
+     barra en la página y, si están activados y Alertas no está a la vista, aviso de escritorio.
+     Las que alguien ya reportó no se avisan. */
+  avisarPosiblesFallas() {
+    const s = G.s, ahora = Date.now();
+    const { alertas } = posiblesFallas(s, Model.mapaFallas(s.fallas, ahora));
+    const avisadas = leerLS('alertas-avisadas', {});
+    Object.keys(avisadas).forEach((k) => { if (ahora - avisadas[k] > U.DIA) delete avisadas[k]; });
+    const reaviso = (CONFIG.alerta.horasReaviso || 2) * U.HORA;
+    const pendientes = alertas.filter((a) => !a.reportada);
+    const nuevas = pendientes.filter((a) => !(ahora - (avisadas[a.nodo] || 0) < reaviso));
+    const vigentes = new Set(pendientes.map((a) => a.nodo));
+    let barra = s.alertasNuevas.filter((n) => vigentes.has(n));
+    if (nuevas.length) {
+      nuevas.forEach((a) => { avisadas[a.nodo] = ahora; });
+      barra = [...new Set(nuevas.map((a) => a.nodo).concat(barra))];
+      if (Avisos.activos() && (document.hidden || !document.hasFocus())) nuevas.slice(0, 3).forEach((a) => Avisos.mostrar(a));
+    }
+    guardarLS('alertas-avisadas', avisadas);
+    if (barra.join() !== s.alertasNuevas.join()) G.set({ alertasNuevas: barra });
+  },
+  abrirPosibleFalla(nodo) { G.set((s) => ({ alertaAbierta: nodo, alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo) })); },
+  async marcarReportada(nodo, si) {
+    const r = await Backend.marcarAlerta(nodo, si);
+    G.set((s) => ({
+      alertas: s.alertas.map((a) => (a.nodo === nodo ? Object.assign({}, a, { reportada: r.reportada || null }) : a)),
+      alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo)
+    }));
+    return r;
+  },
+  crearFallaCon(nodo) { G.set({ alertaAbierta: null, semillaFalla: { nodos: [nodo], k: Date.now() } }); ir('fallas'); window.scrollTo({ top: 0 }); },
 
   /* Consulta del asesor (el servidor la registra en la bitácora) */
   buscar: (q) => Backend.buscar(q),
@@ -2987,7 +3243,7 @@ const A = {
 
   descartarAlerta(nodo) {
     const d = Object.assign({}, G.s.descartadas, { [nodo]: Date.now() });
-    guardarLS('alertas-descartadas', d); G.set({ descartadas: d });
+    guardarLS('alertas-descartadas', d); G.set((s) => ({ descartadas: d, alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo) }));
   },
   cambiarTema() {
     const orden = ['auto', 'light', 'dark'];
@@ -3008,6 +3264,50 @@ function cortoMotivo(f) { return f.motivo === 'OTRO' ? (f.motivoTexto || 'Otro m
 function clienteMotivo(f) { return f.motivo === 'OTRO' ? (f.clienteTexto || 'una afectación en la red de su zona') : MOTIVO[f.motivo].cliente; }
 function puede(vista) { const u = G.s.user; return !!u && CONFIG.roles[u.rol].vistas.includes(vista); }
 const esWorkforce = () => { const u = G.s.user; return !!u && (u.rol === 'workforce' || u.rol === 'jefatura'); };
+
+/* Posibles fallas que muestra la página: sin falla activa publicada y sin descartar en esta PC.
+   "alerta" (5 clientes o 2 reportes) y "observacion" (3 o 4 clientes). */
+function posiblesFallas(s, mf) {
+  const activa = (n) => (mf.porNodo.get(n) || []).some((f) => f.estado === 'ACTIVA');
+  const lista = (s.alertas || []).filter((a) => !activa(a.nodo) && !(s.descartadas[a.nodo] >= a.ultimo));
+  return { alertas: lista.filter((a) => a.nivel !== 'observacion'), observacion: lista.filter((a) => a.nivel === 'observacion') };
+}
+const umbralAlertas = () => G.s.umbral || { minutos: CONFIG.alerta.minutos, clientes: CONFIG.alerta.clientesDistintos, observar: CONFIG.alerta.observar, reportes: CONFIG.alerta.reportes };
+const lapsoAlerta = (a) => U.dur(Math.max(0, a.ultimo - a.primero));
+
+/* Avisos de escritorio (notificaciones del navegador) para Workforce */
+const Avisos = {
+  soportado: () => typeof window.Notification === 'function' && window.isSecureContext !== false,
+  permiso: () => (Avisos.soportado() ? Notification.permission : 'no'),
+  activos: () => Avisos.permiso() === 'granted' && leerLS('alertas-avisos-escritorio', true) !== false,
+  async activar() {
+    if (!Avisos.soportado()) return 'no';
+    let p = Notification.permission;
+    if (p === 'default') { try { p = await Notification.requestPermission(); } catch (e) { p = Notification.permission; } }
+    if (p === 'granted') guardarLS('alertas-avisos-escritorio', true);
+    G.set({ permisoAvisos: p, avisosEscritorio: p === 'granted' });
+    return p;
+  },
+  desactivar() { guardarLS('alertas-avisos-escritorio', false); G.set({ avisosEscritorio: false }); },
+  crear(titulo, cuerpo, tag, alTocar) {
+    try {
+      const n = new Notification(titulo, { body: cuerpo, tag, lang: 'es' });
+      n.onclick = () => { try { window.focus(); } catch (e) { /* nada */ } if (alTocar) alTocar(); n.close(); };
+      return n;
+    } catch (e) { return null; /* algunos navegadores solo permiten avisos desde un service worker */ }
+  },
+  mostrar(a) {
+    const info = Model.infoNodo(G.s.cat, a.nodo);
+    const partes = [U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos') + ' en ' + lapsoAlerta(a)];
+    if (a.reportes) partes.push(U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores'));
+    if (info && info.muni) partes.push(U.lugar(info.muni));
+    Avisos.crear('Posible falla en ' + a.nodo, partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
+  },
+  prueba() {
+    const um = umbralAlertas();
+    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos.', 'alertas-prueba');
+  }
+};
 const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 
 /* ---------- Íconos ---------- */
@@ -3044,6 +3344,8 @@ const ICONOS = {
   fallas: '<path d="M3 12h5l2-4 2.5 9L15 9l1.5 3H21"/><path d="M3 20h18"/>',
   equipo: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.3 6-5.3s5.4 1.9 6 5.3"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6-.3 4.6 1.4 5 4.4"/>',
   abajo: '<path d="m6 9 6 6 6-6"/>',
+  campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
+  correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',
   ojo: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
   papelera: '<path d="M4 7h16M10 7V4.5h4V7M6.5 7l1 13h9l1-13"/>',
@@ -3593,11 +3895,15 @@ const deLocal = (s) => (s ? new Date(s).getTime() : null);
 function VistaFallas() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
-  const alertas = useMemo(() => s.alertas.filter((a) => !(s.descartadas[a.nodo] >= a.ultimo) && !mf.porNodo.has(a.nodo)), [s.alertas, s.descartadas, mf]);
   const [tab, setTab] = useState('publicar');
   const [edicion, setEdicion] = useState(null);
   const [semilla, setSemilla] = useState(null);
   const [cerrando, setCerrando] = useState(null);
+  // "Crear falla con este nodo" desde una posible falla (en esta vista, en el aviso o en el detalle)
+  useEffect(() => {
+    if (!s.semillaFalla) return;
+    setEdicion(null); setSemilla(s.semillaFalla); setTab('publicar'); G.set({ semillaFalla: null });
+  }, [s.semillaFalla]);
 
   if (s.cargando) return html`<div class="panel vacio" style="margin-top:20px"><b>Cargando…</b></div>`;
   if (!s.cat) return html`<${SinBase} />`;
@@ -3612,7 +3918,7 @@ function VistaFallas() {
     <div class="titulo-vista">
       <div><h1>Fallas</h1><p>Lo que publiques aquí lo ven los asesores al instante al consultar un cliente.</p></div>
     </div>
-    ${alertas.length > 0 && html`<${Alertas} alertas=${alertas} onCrear=${(n) => { setEdicion(null); setSemilla({ nodos: [n], k: Date.now() }); setTab('publicar'); }} />`}
+    <${PosiblesFallas} mf=${mf} />
     <div class="pestanas" role="tablist">
       ${pestanas.map(([id, txt, n]) => html`<button role="tab" aria-selected=${tab === id} onClick=${() => setTab(id)} key=${id}>
         ${txt}${n != null && html`<span class="n">${n}</span>`}</button>`)}
@@ -3628,26 +3934,143 @@ function VistaFallas() {
   </div>`;
 }
 
-/* ---------- Alertas tempranas ---------- */
-function Alertas({ alertas, onCrear }) {
-  const s = G.s;
-  return html`<div class="alertas" role="region" aria-label="Posibles fallas sin publicar">
-    ${alertas.slice(0, 4).map((a) => {
-      const info = Model.infoNodo(s.cat, a.nodo);
-      return html`<div class="alerta" key=${a.nodo}>
-        <div class="ico"><${Ico} n="alerta" s=${20} /></div>
-        <div>
-          <b>Posible falla sin publicar en ${a.nodo}</b>
-          <p>${a.nClientes} ${U.plural(a.nClientes, 'cliente distinto consultó', 'clientes distintos consultaron')} en los últimos ${CONFIG.alerta.minutos} min${a.reportes ? ' y ' + U.plural(a.reportes, 'un asesor la reportó', a.reportes + ' asesores la reportaron') : ''}.
-            ${info ? ' ' + U.lugar(info.muni) + ', ' + U.n(info.total) + ' clientes en el nodo.' : ''} Última consulta ${U.hace(a.ultimo, s.now)}.</p>
-        </div>
-        <div class="acc">
-          <button class="btn btn-primario btn-chico" onClick=${() => onCrear(a.nodo)}>Crear falla con este nodo</button>
-          <button class="btn btn-fantasma btn-chico" onClick=${() => A.descartarAlerta(a.nodo)}>Descartar</button>
-        </div>
-      </div>`;
-    })}
+/* ---------- Posibles fallas: aviso temprano para Workforce ----------
+   Nodos sin falla publicada con 5 clientes distintos en 60 min (o 2 reportes de asesores).
+   Con 3 o 4 clientes quedan en observación. Cada una trae el correo listo para reportarla. */
+function PosiblesFallas({ mf }) {
+  const s = useG();
+  const { alertas, observacion } = posiblesFallas(s, mf);
+  const um = umbralAlertas();
+  const regla = um.clientes + ' o más clientes distintos en ' + um.minutos + ' min (Concentrix y Tiendas) o ' + um.reportes + ' reportes de asesores';
+  return html`<section class="posibles" aria-label="Posibles fallas sin publicar">
+    <div class="posibles-cab">
+      <div class="posibles-txt">
+        <h2>Posibles fallas${alertas.length > 0 && html` <span class="posibles-n">${alertas.length}</span>`}</h2>
+        <p>${alertas.length ? 'Nodos sin falla publicada con ' + regla + '.' : 'Ninguna en este momento. Se avisa cuando un nodo sin falla publicada llega a ' + regla + '.'}</p>
+      </div>
+      <${AvisosEscritorio} />
+    </div>
+    ${alertas.map((a) => html`<${TarjetaPosibleFalla} a=${a} key=${a.nodo} />`)}
+    ${observacion.length > 0 && html`<div class="observacion">
+      <span class="observacion-t"><${Ico} n="ojo" s=${16} />En observación <small>${um.observar} o ${um.clientes - 1} clientes en ${um.minutos} min</small></span>
+      ${observacion.map((a) => html`<button class="obs-chip" key=${a.nodo} onClick=${() => A.abrirPosibleFalla(a.nodo)}
+          title=${'Ver los ' + a.nClientes + ' clientes de ' + a.nodo}><b class="codigo">${a.nodo}</b><span>${a.nClientes} clientes</span></button>`)}
+    </div>`}
+  </section>`;
+}
+
+function TarjetaPosibleFalla({ a }) {
+  const s = useG();
+  const info = Model.infoNodo(s.cat, a.nodo);
+  const datos = [
+    U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos') + ' en ' + lapsoAlerta(a),
+    a.reportes ? U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : '',
+    info && info.muni ? U.lugar(info.muni) : '',
+    info ? U.n(info.total) + ' clientes en el nodo' : ''
+  ].filter(Boolean);
+  return html`<div class="pf-tarjeta" data-reportada=${!!a.reportada}>
+    <div class="ico"><${Ico} n=${a.reportada ? 'check' : 'alerta'} s=${20} /></div>
+    <div>
+      <div class="pf-tarjeta-tit"><b>Posible falla en <span class="codigo">${a.nodo}</span></b>${info && !info.virtual && html`<${Tec} t=${info.tecnologia} />`}</div>
+      <p>${datos.join(' · ')}. Última consulta ${U.hace(a.ultimo, s.now)}.</p>
+      ${a.reportada && html`<p class="pf-reportada"><${Ico} n="check" s=${15} />${U.conPunto('Reportada por ' + a.reportada.por + ' ' + U.cuando(a.reportada.en, s.now))}</p>`}
+    </div>
+    <div class="acc">
+      <button class=${'btn btn-chico ' + (a.reportada ? 'btn-borde' : 'btn-primario')} onClick=${() => A.abrirPosibleFalla(a.nodo)}><${Ico} n="correo" s=${15} />Ver clientes y correo</button>
+      <button class="btn btn-borde btn-chico" onClick=${() => A.crearFallaCon(a.nodo)}>Crear falla</button>
+      <button class="btn btn-fantasma btn-chico" title="Ocultarla en esta PC hasta que vuelvan a consultar clientes de este nodo" onClick=${() => A.descartarAlerta(a.nodo)}>Descartar</button>
+    </div>
   </div>`;
+}
+
+/* Activar o desactivar los avisos de escritorio (el navegador pide permiso la primera vez) */
+function AvisosEscritorio() {
+  const s = useG();
+  if (!Avisos.soportado()) return null;
+  const p = s.permisoAvisos;
+  if (p === 'denied') return html`<p class="avisos-esc bloqueados"><${Ico} n="info" s=${16} />El navegador bloqueó los avisos de escritorio de esta página. Permítelos en el candado junto a la dirección.</p>`;
+  if (p === 'granted' && s.avisosEscritorio) return html`<div class="avisos-esc">
+    <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
+    <button class="btn btn-fantasma btn-chico" onClick=${Avisos.desactivar}>Desactivar</button>
+  </div>`;
+  return html`<div class="avisos-esc">
+    <button class="btn btn-borde btn-chico" title="Recibe un aviso aunque Alertas esté minimizado o en otra pestaña"
+      onClick=${async () => { if ((await Avisos.activar()) === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); } }}>
+      <${Ico} n="campana" s=${16} />Avisarme en el escritorio</button>
+  </div>`;
+}
+
+/* Detalle de una posible falla: los clientes y el correo listo para copiar y pegar en Outlook */
+function ModalPosibleFalla({ nodo }) {
+  const s = useG();
+  const [d, setD] = useState(null);
+  const [error, setError] = useState('');
+  const [copiado, setCopiado] = useState('');
+  const [marcando, setMarcando] = useState(false);
+  const cerrar = () => G.set({ alertaAbierta: null });
+  async function traer() {
+    setError(''); setD(null);
+    try { setD(await Backend.alertaDetalle(nodo)); } catch (e) {
+      setError(/desconocida/i.test(e.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : e.message);
+    }
+  }
+  useEffect(() => { traer(); }, [nodo]);
+  const info = Model.infoNodo(s.cat, nodo);
+  const enLista = s.alertas.find((x) => x.nodo === nodo);
+  const marca = enLista ? enLista.reportada : d && d.reportada;
+  const correo = useMemo(() => (d && d.clientes.length ? Model.correoPosibleFalla(d, info, s.user.nombre, Date.now()) : null), [d]);
+  const sub = [info && !info.virtual ? info.tecnologia : '', info && info.muni ? [info.muni, info.depto].filter(Boolean).map(U.lugar).filter((x, i, arr) => arr.indexOf(x) === i).join(', ') : '',
+    info ? U.n(info.total) + ' clientes en el nodo' : ''].filter(Boolean).join(' · ');
+
+  async function copiar(que) {
+    const ok = que === 'asunto' ? await U.copiar(correo.asunto)
+      : que === 'tabla' ? await U.copiarHtml(correo.tablaHtml, correo.tablaTexto) : await U.copiarHtml(correo.html, correo.texto);
+    if (!ok) { tostada('No se pudo copiar. Selecciona el texto y usa Ctrl+C.'); return; }
+    setCopiado(que); setTimeout(() => setCopiado((x) => (x === que ? '' : x)), 2500);
+    tostada(que === 'asunto' ? 'Asunto copiado' : que === 'tabla' ? 'Tabla copiada: pégala en el correo con Ctrl+V' : 'Correo copiado: pégalo en Outlook con Ctrl+V');
+  }
+  async function marcar(si) {
+    setMarcando(true);
+    try { await A.marcarReportada(nodo, si); tostada(si ? 'Marcada como reportada para todo Workforce' : 'Se quitó la marca'); } catch (e) { tostada(e.message); }
+    setMarcando(false);
+  }
+
+  let porCC = 0, porTienda = 0;
+  if (d) d.clientes.forEach((c) => { if ((c.canales || []).some((x) => /^Tiendas/.test(x))) porTienda++; else porCC++; });
+  const pie = html`
+    <button class="btn btn-borde" onClick=${() => A.crearFallaCon(nodo)}>Crear falla con este nodo</button>
+    <span class="pie-espacio"></span>
+    ${!marca && d && html`<button class=${'btn ' + (copiado && copiado !== 'asunto' ? 'btn-primario' : 'btn-borde')} disabled=${marcando} onClick=${() => marcar(true)}
+        title="El resto de Workforce verá que ya se reportó"><${Ico} n="check" s=${16} />Marcar como reportada</button>`}
+    <button class="btn btn-fantasma" onClick=${cerrar}>Cerrar</button>`;
+  return html`<${Modal} titulo=${'Posible falla en ' + nodo} sub=${sub} onCerrar=${cerrar} pie=${pie} ancho=${1120}>
+    ${!d && !error && html`<div class="pf-cargando"><span class="punto"></span>Buscando los datos de los clientes…</div>`}
+    ${error && html`<div class="nota error-acceso" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>
+      <div><button class="btn btn-borde btn-chico" onClick=${traer}>Intentar de nuevo</button></div>`}
+    ${d && html`
+      ${d.enFalla && html`<div class="nota-linea" data-tipo="info"><${Ico} n="info" s=${16} /><span>Ya hay una falla publicada para este nodo.</span></div>`}
+      ${marca && html`<div class="pf-marca"><${Ico} n="check" s=${16} /><span>Reportada por <b>${marca.por}</b> ${U.conPunto(U.cuando(marca.en, s.now))}</span>
+        <button class="enlace" disabled=${marcando} onClick=${() => marcar(false)}>Quitar marca</button></div>`}
+      ${!d.clientes.length ? html`<p class="sub">Ya no hay consultas de clientes de ${nodo} en los últimos ${d.minutos} minutos.</p>` : html`
+        <div class="pf-datos">
+          <div><b>${d.nClientes}</b><span>${U.plural(d.nClientes, 'cliente', 'clientes distintos')}</span></div>
+          <div><b>${U.dur(d.hasta - d.desde)}</b><span>${U.hora(d.desde) === U.hora(d.hasta) ? 'a las ' + U.hora(d.desde) : 'de ' + U.hora(d.desde) + ' a ' + U.hora(d.hasta)}</span></div>
+          <div><b>${d.reportes}</b><span>${U.plural(d.reportes, 'reporte de asesor', 'reportes de asesores')}</span></div>
+          <div><b>${porCC} · ${porTienda}</b><span>Call Center · Tiendas</span></div>
+        </div>
+        <div class="pf-correo">
+          <div class="pf-correo-cab">
+            <div><h3>Correo para reportar</h3><p>Cópialo y pégalo en Outlook con Ctrl+V: la tabla conserva su formato.</p></div>
+            <div class="pf-botones">
+              <button class="btn btn-primario btn-chico" onClick=${() => copiar('correo')}><${Ico} n=${copiado === 'correo' ? 'check' : 'copiar'} s=${15} />${copiado === 'correo' ? 'Correo copiado' : 'Copiar correo'}</button>
+              <button class="btn btn-borde btn-chico" onClick=${() => copiar('tabla')}><${Ico} n=${copiado === 'tabla' ? 'check' : 'copiar'} s=${15} />${copiado === 'tabla' ? 'Tabla copiada' : 'Copiar solo la tabla'}</button>
+            </div>
+          </div>
+          <div class="pf-asunto"><span>Asunto</span><b>${correo.asunto}</b>
+            <button class="btn btn-fantasma btn-chico" onClick=${() => copiar('asunto')}><${Ico} n=${copiado === 'asunto' ? 'check' : 'copiar'} s=${15} />${copiado === 'asunto' ? 'Copiado' : 'Copiar asunto'}</button></div>
+          <div class="pf-vista" aria-label="Vista previa del correo" dangerouslySetInnerHTML=${{ __html: correo.html }}></div>
+        </div>`}`}
+  <//>`;
 }
 
 /* ---------- Formulario de publicación / edición ---------- */
@@ -5099,7 +5522,7 @@ function BarraSuperior({ mf }) {
     return () => { document.removeEventListener('mousedown', c); document.removeEventListener('keydown', k); };
   }, [menu]);
   const nAct = mf.activas.length;
-  const nAlertas = esWorkforce() ? s.alertas.filter((a) => !(s.descartadas[a.nodo] >= a.ultimo) && !mf.porNodo.has(a.nodo)).length : 0;
+  const nAlertas = esWorkforce() ? posiblesFallas(s, mf).alertas.length : 0;
   return html`<header class="topbar">
     <a class="marca" href="#consulta" onClick=${() => ir('consulta')}>
       <div class="marca-glifo"><${Ico} n="marca" s=${20} /></div>
@@ -5147,6 +5570,21 @@ function AvisoCambios() {
   </div>`;
 }
 
+/* Una posible falla nueva para Workforce, en cualquier vista menos Fallas (ahí está el panel) */
+function AvisoPosibleFalla({ mf }) {
+  const s = useG();
+  if (!esWorkforce() || s.ruta === 'fallas' || !s.alertasNuevas.length) return null;
+  const lista = posiblesFallas(s, mf).alertas.filter((a) => s.alertasNuevas.includes(a.nodo) && !a.reportada);
+  if (!lista.length) return null;
+  const a = lista[0], otras = lista.length - 1;
+  return html`<div class="aviso aviso-pf" role="alert">
+    <span class="aviso-icono"><${Ico} n="alerta" s=${17} /></span>
+    <p><b>Posible falla en ${a.nodo}.</b> ${U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos')} en ${lapsoAlerta(a)}${a.reportes ? ', ' + U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : ''}.${otras ? ' Hay ' + U.plural(otras, 'otra más', otras + ' más') + ' en Fallas.' : ''}</p>
+    <button class="btn btn-chico" onClick=${() => A.abrirPosibleFalla(a.nodo)}>Ver clientes y correo</button>
+    <button class="btn btn-icono btn-chico aviso-x" aria-label="Cerrar el aviso" title="Cerrar el aviso (la posible falla sigue en Fallas)" onClick=${() => G.set({ alertasNuevas: [] })}><${Ico} n="x" s=${16} /></button>
+  </div>`;
+}
+
 function Shell() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
@@ -5155,7 +5593,7 @@ function Shell() {
   useEffect(() => { document.title = (mf.activas.length ? '(' + mf.activas.length + ') ' : '') + CONFIG.app + ', fallas de red fija'; }, [mf.activas.length]);
   return html`<div class="app">
     <${BarraSuperior} mf=${mf} />
-    <${AvisoCambios} />
+    <div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>
     ${Backend.modo === 'local' && html`<div class="demo-cinta">${s.meta.demo ? 'Estás viendo datos de demostración: clientes, fallas y consultas inventados.' : 'Modo demostración: los datos se guardan solo en esta PC.'}${!RT.api ? ' Falta conectar el servidor en config.js.' : ''}</div>`}
     <main class="contenido" id="contenido">
       ${ruta === 'consulta' && html`<${VistaConsulta} />`}
@@ -5163,6 +5601,7 @@ function Shell() {
       ${ruta === 'base' && html`<${VistaBase} />`}
       ${ruta === 'stats' && html`<${VistaStats} />`}
     </main>
+    ${esWorkforce() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />
   </div>`;
 }

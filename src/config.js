@@ -14,9 +14,11 @@ const CONFIG = {
   // Cliente reincidente: tantas fallas en su nodo en estos días (desde que es cliente).
   reincidente: { fallas: 3, dias: 90 },
 
-  // Alerta temprana: un nodo sin falla publicada que recibe consultas de
-  // varios clientes distintos en poco tiempo.
-  alerta: { minutos: 60, clientesDistintos: 3 },
+  // Posible falla: un nodo sin falla publicada al que en los últimos 60 minutos le consultaron
+  // 5 o más clientes distintos (Concentrix y Tiendas; las búsquedas de Workforce no cuentan),
+  // o que 2 asesores reportaron. Con 3 o 4 clientes el nodo queda en observación.
+  // El aviso de escritorio no se repite para el mismo nodo antes de 2 horas.
+  alerta: { minutos: 60, clientesDistintos: 5, observar: 3, reportes: 2, horasReaviso: 2 },
 
   // Tiendas que se eligen al entrar con la cuenta de Tiendas. La lista que vale es la hoja Tiendas
   // de la base interna (el servidor la manda al abrir la página); esta solo se usa si el servidor

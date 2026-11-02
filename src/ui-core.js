@@ -10,7 +10,10 @@ const G = {
     arranque: 'cargando', mensaje: 'Conectando con Alertas…', config: null, user: null, avisoAcceso: '',
     meta: { version: 0, baseVersion: -1, demo: false }, resumen: null, cat: null, fallas: [], cargas: [], alertas: [],
     now: Date.now(), remoto: null, ruta: 'consulta', tema: 'auto', tostadas: [], descartadas: {}, misConsultas: [],
-    sinConexion: false, cargando: false
+    sinConexion: false, cargando: false,
+    // Posibles fallas (Workforce): umbral del servidor, la que está abierta, las que llegaron y no se han visto,
+    // y si los avisos de escritorio están permitidos y activados
+    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', avisosEscritorio: false, semillaFalla: null
   },
   subs: new Set(),
   set(p) { Object.assign(this.s, typeof p === 'function' ? p(this.s) : p); this.subs.forEach((f) => f()); }
@@ -39,7 +42,8 @@ function tostada(texto) {
 /* ---------- Acciones ---------- */
 const A = {
   async arrancar() {
-    G.set({ tema: leerLS('alertas-tema', 'auto'), descartadas: leerLS('alertas-descartadas', {}), misConsultas: leerSS('alertas-mis-consultas', []), ruta: rutaActual() });
+    G.set({ tema: leerLS('alertas-tema', 'auto'), descartadas: leerLS('alertas-descartadas', {}), misConsultas: leerSS('alertas-mis-consultas', []), ruta: rutaActual(),
+      permisoAvisos: Avisos.permiso(), avisosEscritorio: Avisos.activos() });
     aplicarTema(G.s.tema);
     Backend.alExpirar((msg) => { A.limpiar(); G.set({ avisoAcceso: msg || 'Tu sesión venció. Entra de nuevo.' }); });
     window.addEventListener('hashchange', () => G.set({ ruta: rutaActual() }));
@@ -66,7 +70,8 @@ const A = {
     G.set({ cargando: false });
   },
   limpiar() {
-    G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false } });
+    G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
+      alertaAbierta: null, alertasNuevas: [], semillaFalla: null });
     guardarSS('alertas-mis-consultas', []);
   },
   salir() { Backend.salir(); A.limpiar(); },
@@ -106,11 +111,47 @@ const A = {
     programar();
     // Al volver a la pestaña, revisa solo si ya pasó el intervalo
     document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - ultimo > cada) paso(); });
-    setInterval(() => { if (G.s.user && esWorkforce() && !document.hidden) A.revisarAlertas(); }, 60000);
+    // Workforce revisa las posibles fallas cada minuto aunque la pestaña esté escondida o minimizada:
+    // así llega el aviso de escritorio. Son pocas personas, no cargan al servidor.
+    setInterval(() => { if (G.s.user && esWorkforce()) A.revisarAlertas(); }, 60000);
   },
   async revisarAlertas() {
-    try { const r = await Backend.alertas(); G.set({ alertas: r.alertas || [] }); } catch (e) { /* se intenta de nuevo luego */ }
+    let r;
+    try { r = await Backend.alertas(); } catch (e) { return; /* se intenta de nuevo luego */ }
+    G.set({ alertas: r.alertas || [], umbral: r.umbral || null });
+    A.avisarPosiblesFallas();
   },
+  /* Cada posible falla nueva se avisa una vez en esta PC (y otra vez si sigue después de 2 horas):
+     barra en la página y, si están activados y Alertas no está a la vista, aviso de escritorio.
+     Las que alguien ya reportó no se avisan. */
+  avisarPosiblesFallas() {
+    const s = G.s, ahora = Date.now();
+    const { alertas } = posiblesFallas(s, Model.mapaFallas(s.fallas, ahora));
+    const avisadas = leerLS('alertas-avisadas', {});
+    Object.keys(avisadas).forEach((k) => { if (ahora - avisadas[k] > U.DIA) delete avisadas[k]; });
+    const reaviso = (CONFIG.alerta.horasReaviso || 2) * U.HORA;
+    const pendientes = alertas.filter((a) => !a.reportada);
+    const nuevas = pendientes.filter((a) => !(ahora - (avisadas[a.nodo] || 0) < reaviso));
+    const vigentes = new Set(pendientes.map((a) => a.nodo));
+    let barra = s.alertasNuevas.filter((n) => vigentes.has(n));
+    if (nuevas.length) {
+      nuevas.forEach((a) => { avisadas[a.nodo] = ahora; });
+      barra = [...new Set(nuevas.map((a) => a.nodo).concat(barra))];
+      if (Avisos.activos() && (document.hidden || !document.hasFocus())) nuevas.slice(0, 3).forEach((a) => Avisos.mostrar(a));
+    }
+    guardarLS('alertas-avisadas', avisadas);
+    if (barra.join() !== s.alertasNuevas.join()) G.set({ alertasNuevas: barra });
+  },
+  abrirPosibleFalla(nodo) { G.set((s) => ({ alertaAbierta: nodo, alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo) })); },
+  async marcarReportada(nodo, si) {
+    const r = await Backend.marcarAlerta(nodo, si);
+    G.set((s) => ({
+      alertas: s.alertas.map((a) => (a.nodo === nodo ? Object.assign({}, a, { reportada: r.reportada || null }) : a)),
+      alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo)
+    }));
+    return r;
+  },
+  crearFallaCon(nodo) { G.set({ alertaAbierta: null, semillaFalla: { nodos: [nodo], k: Date.now() } }); ir('fallas'); window.scrollTo({ top: 0 }); },
 
   /* Consulta del asesor (el servidor la registra en la bitácora) */
   buscar: (q) => Backend.buscar(q),
@@ -163,7 +204,7 @@ const A = {
 
   descartarAlerta(nodo) {
     const d = Object.assign({}, G.s.descartadas, { [nodo]: Date.now() });
-    guardarLS('alertas-descartadas', d); G.set({ descartadas: d });
+    guardarLS('alertas-descartadas', d); G.set((s) => ({ descartadas: d, alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo) }));
   },
   cambiarTema() {
     const orden = ['auto', 'light', 'dark'];
@@ -184,6 +225,50 @@ function cortoMotivo(f) { return f.motivo === 'OTRO' ? (f.motivoTexto || 'Otro m
 function clienteMotivo(f) { return f.motivo === 'OTRO' ? (f.clienteTexto || 'una afectación en la red de su zona') : MOTIVO[f.motivo].cliente; }
 function puede(vista) { const u = G.s.user; return !!u && CONFIG.roles[u.rol].vistas.includes(vista); }
 const esWorkforce = () => { const u = G.s.user; return !!u && (u.rol === 'workforce' || u.rol === 'jefatura'); };
+
+/* Posibles fallas que muestra la página: sin falla activa publicada y sin descartar en esta PC.
+   "alerta" (5 clientes o 2 reportes) y "observacion" (3 o 4 clientes). */
+function posiblesFallas(s, mf) {
+  const activa = (n) => (mf.porNodo.get(n) || []).some((f) => f.estado === 'ACTIVA');
+  const lista = (s.alertas || []).filter((a) => !activa(a.nodo) && !(s.descartadas[a.nodo] >= a.ultimo));
+  return { alertas: lista.filter((a) => a.nivel !== 'observacion'), observacion: lista.filter((a) => a.nivel === 'observacion') };
+}
+const umbralAlertas = () => G.s.umbral || { minutos: CONFIG.alerta.minutos, clientes: CONFIG.alerta.clientesDistintos, observar: CONFIG.alerta.observar, reportes: CONFIG.alerta.reportes };
+const lapsoAlerta = (a) => U.dur(Math.max(0, a.ultimo - a.primero));
+
+/* Avisos de escritorio (notificaciones del navegador) para Workforce */
+const Avisos = {
+  soportado: () => typeof window.Notification === 'function' && window.isSecureContext !== false,
+  permiso: () => (Avisos.soportado() ? Notification.permission : 'no'),
+  activos: () => Avisos.permiso() === 'granted' && leerLS('alertas-avisos-escritorio', true) !== false,
+  async activar() {
+    if (!Avisos.soportado()) return 'no';
+    let p = Notification.permission;
+    if (p === 'default') { try { p = await Notification.requestPermission(); } catch (e) { p = Notification.permission; } }
+    if (p === 'granted') guardarLS('alertas-avisos-escritorio', true);
+    G.set({ permisoAvisos: p, avisosEscritorio: p === 'granted' });
+    return p;
+  },
+  desactivar() { guardarLS('alertas-avisos-escritorio', false); G.set({ avisosEscritorio: false }); },
+  crear(titulo, cuerpo, tag, alTocar) {
+    try {
+      const n = new Notification(titulo, { body: cuerpo, tag, lang: 'es' });
+      n.onclick = () => { try { window.focus(); } catch (e) { /* nada */ } if (alTocar) alTocar(); n.close(); };
+      return n;
+    } catch (e) { return null; /* algunos navegadores solo permiten avisos desde un service worker */ }
+  },
+  mostrar(a) {
+    const info = Model.infoNodo(G.s.cat, a.nodo);
+    const partes = [U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos') + ' en ' + lapsoAlerta(a)];
+    if (a.reportes) partes.push(U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores'));
+    if (info && info.muni) partes.push(U.lugar(info.muni));
+    Avisos.crear('Posible falla en ' + a.nodo, partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
+  },
+  prueba() {
+    const um = umbralAlertas();
+    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos.', 'alertas-prueba');
+  }
+};
 const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 
 /* ---------- Íconos ---------- */
@@ -220,6 +305,8 @@ const ICONOS = {
   fallas: '<path d="M3 12h5l2-4 2.5 9L15 9l1.5 3H21"/><path d="M3 20h18"/>',
   equipo: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.3 6-5.3s5.4 1.9 6 5.3"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6-.3 4.6 1.4 5 4.4"/>',
   abajo: '<path d="m6 9 6 6 6-6"/>',
+  campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
+  correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',
   ojo: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
   papelera: '<path d="M4 7h16M10 7V4.5h4V7M6.5 7l1 13h9l1-13"/>',

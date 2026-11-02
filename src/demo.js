@@ -236,11 +236,18 @@ const Demo = (() => {
         logs.push({ t, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: r() < 0.82 ? 'contrato' : 'dni', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: U.esVirtual(x.nodo) ? 'SIN_NODO' : 'SIN_FALLA', f: null, tipo: 'consulta' });
       }
     }
-    // Alerta temprana: varios clientes de SCA05 sin falla publicada en los últimos minutos
+    // Posible falla: 6 clientes de SCA05 sin falla publicada en los últimos minutos (uno en una tienda
+    // y otro reportado por el asesor), y DNLGC04 en observación con 3 clientes
     const sca = filasDe(['SCA05']);
-    [38, 27, 19, 11, 6].forEach((mins, k) => {
-      const x = reg(sca[k * 7 % sca.length]); const a = ASESORES[k % ASESORES.length];
-      logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: k === 4 ? 'reporte' : 'consulta' });
+    const tienda = ASESORES.find((a) => a[2] === 'Tiendas');
+    [41, 33, 27, 19, 11, 6].forEach((mins, k) => {
+      const x = reg(sca[k * 7 % sca.length]); const a = k === 3 ? tienda : ASESORES[k % ASESORES.length];
+      logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: k === 5 ? 'reporte' : 'consulta' });
+    });
+    const obs = filasDe(['DNLGC04']);
+    [35, 22, 9].forEach((mins, k) => {
+      const x = reg(obs[k * 5 % obs.length]); const a = ASESORES[(k + 4) % ASESORES.length];
+      logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: 'consulta' });
     });
     logs.sort((a, b) => a.t - b.t);
 

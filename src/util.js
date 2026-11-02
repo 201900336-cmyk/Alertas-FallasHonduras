@@ -127,6 +127,29 @@ const U = (() => {
       ta.remove(); return ok;
     }
   }
+  /* Copia con formato (para pegar en Outlook con la tabla) y en texto (para donde no acepta formato) */
+  async function copiarHtml(html, texto) {
+    try {
+      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([texto], { type: 'text/plain' })
+        })]);
+        return true;
+      }
+    } catch (e) { /* sigue con el respaldo */ }
+    try {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      Object.assign(div.style, { position: 'fixed', left: '-10000px', top: '0' });
+      document.body.appendChild(div);
+      const sel = window.getSelection(), r = document.createRange();
+      r.selectNodeContents(div); sel.removeAllRanges(); sel.addRange(r);
+      const ok = document.execCommand('copy');
+      sel.removeAllRanges(); div.remove();
+      if (ok) return true;
+    } catch (e) { /* último recurso: solo texto */ }
+    return copiar(texto);
+  }
   function descargarCsv(nombre, filas) {
     const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const txt = '﻿' + filas.map((f) => f.map(esc).join(',')).join('\r\n');
@@ -150,5 +173,5 @@ const U = (() => {
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, oltBase, oltNombre,
-    oltPuerto, uid, copiar, descargarCsv, descargarTexto, plural, listaNatural };
+    oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
 })();

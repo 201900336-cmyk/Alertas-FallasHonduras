@@ -295,15 +295,58 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Pedro Mejía', tienda: 'CAC Mall Multiplaza TGU' } });
   const tTienda2 = r.datos.token;
 
-  /* ---------- Alertas y límites ---------- */
-  console.log('\n7. Alertas tempranas y límites');
-  const nodoAlerta = [...ix.nodoIdx.keys()].find((n) => !U.esVirtual(n) && ix.cnt[ix.nodoIdx.get(n)] > 20 && !nodosPrueba.includes(n));
-  Model.filasDeNodos(ix, [nodoAlerta]).slice(0, 3).forEach((i) => g.post({ accion: 'buscar', token: tAgente, datos: { q: String(ix.C.contrato[i]) } }));
-  g.cache.remove('alertas');
-  r = g.post({ accion: 'alertas', token: tWf });
-  ok(r.ok && r.datos.alertas.some((a) => a.nodo === nodoAlerta && a.nClientes === 3), 'alerta temprana por 3 clientes del mismo nodo: ' + nodoAlerta, r.datos);
+  /* ---------- Posibles fallas y límites ---------- */
+  console.log('\n7. Posibles fallas y límites');
+  const contratosDe = (n) => [...new Set(Model.filasDeNodos(ix, [n]).map((i) => String(ix.C.contrato[i])))];
+  const nodoAlerta = [...ix.nodoIdx.keys()].find((n) => !U.esVirtual(n) && contratosDe(n).length >= 8 && !nodosPrueba.includes(n));
+  const cAlerta = contratosDe(nodoAlerta);
+  const posibles = (tok) => { g.cache.remove('alertas'); const x = g.post({ accion: 'alertas', token: tok || tWf }); return x.ok ? x.datos : x; };
+  const deNodo = (d, n) => (d.alertas || []).find((x) => x.nodo === n);
+  // Workforce revisando el nodo no cuenta
+  cAlerta.slice(0, 5).forEach((c) => g.post({ accion: 'buscar', token: tWf, datos: { q: c } }));
+  ok(!deNodo(posibles(), nodoAlerta), 'las búsquedas de Workforce no cuentan para las posibles fallas');
+  cAlerta.slice(0, 3).forEach((c) => g.post({ accion: 'buscar', token: tAgente, datos: { q: c } }));
+  let pa = deNodo(posibles(), nodoAlerta);
+  ok(pa && pa.nivel === 'observacion' && pa.nClientes === 3, '3 clientes distintos del mismo nodo: en observación (' + nodoAlerta + ')', pa);
+  g.post({ accion: 'buscar', token: tAgente, datos: { q: cAlerta[0] } });        // el mismo cliente otra vez no suma
+  g.post({ accion: 'buscar', token: tTienda2, datos: { q: cAlerta[3] } });       // uno llega a una tienda
+  pa = deNodo(posibles(), nodoAlerta);
+  ok(pa && pa.nivel === 'observacion' && pa.nClientes === 4, 'un cliente repetido no suma y Tiendas sí cuenta (4)', pa);
+  g.post({ accion: 'buscar', token: tAgente, datos: { q: cAlerta[4] } });
+  const dPos = posibles();
+  pa = deNodo(dPos, nodoAlerta);
+  ok(pa && pa.nivel === 'alerta' && pa.nClientes === 5 && dPos.umbral.clientes === 5 && dPos.umbral.minutos === 60, 'con 5 clientes distintos en 60 min es posible falla', pa);
+  // Detalle para el correo
+  r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'detalle', nodo: nodoAlerta } });
+  const det = r.ok ? r.datos : {};
+  const enBase = (c) => Model.filasDeNodos(ix, [nodoAlerta]).map((i) => Model.registro(ix, i)).find((x) => String(x.contrato) === c);
+  ok(r.ok && det.clientes.length === 5 && det.nClientes === 5 && det.clientes.every((c) => c.enBase && c.nodo === nodoAlerta && c.nombre === enBase(c.contrato).nombre && c.nap === enBase(c.contrato).nap && c.olt === enBase(c.contrato).olt),
+    'el detalle trae los 5 clientes con nombre, NAP/TAP y OLT de la base', det.clientes && det.clientes.map((c) => [c.contrato, c.enBase, c.nodo]));
+  ok(det.clientes && det.clientes.find((c) => c.contrato === cAlerta[0]).veces >= 2 && det.clientes.reduce((t, c) => t + c.veces, 0) === det.consultas && det.clientes.some((c) => c.canales.includes('Tiendas: CAC Mall Multiplaza TGU')) && det.desde <= det.hasta,
+    'y cuántas veces consultó cada cliente y por qué canal (con la tienda)', det.clientes && det.clientes.map((c) => [c.veces, c.canales]));
+  ok(!/"(telefono|dni)"/.test(JSON.stringify(det)), 'el detalle no trae teléfonos ni DNI');
+  r = g.post({ accion: 'alerta', token: tAgente, datos: { op: 'detalle', nodo: nodoAlerta } });
+  ok(!r.ok && r.codigo === 'PERMISO', 'Concentrix no puede ver el detalle de una posible falla', r);
   r = g.post({ accion: 'alertas', token: tAgente });
-  ok(!r.ok && r.codigo === 'PERMISO', 'Concentrix no ve alertas de Workforce');
+  ok(!r.ok && r.codigo === 'PERMISO', 'ni la lista de posibles fallas');
+  // Reportada: la ve todo Workforce y se puede quitar
+  r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'reportada', nodo: nodoAlerta } });
+  ok(r.ok && r.datos.reportada && r.datos.reportada.por === 'Ana López', 'Workforce marca la posible falla como reportada', r);
+  pa = deNodo(posibles(tWfTemp), nodoAlerta);
+  ok(pa && pa.reportada && pa.reportada.por === 'Ana López', 'el resto de Workforce ve quién ya la reportó', pa);
+  g.post({ accion: 'alerta', token: tWfTemp, datos: { op: 'quitar', nodo: nodoAlerta } });
+  pa = deNodo(posibles(), nodoAlerta);
+  ok(pa && !pa.reportada, 'la marca se puede quitar', pa);
+  const marcas = JSON.parse(g.E.props.get('ALERTAS_REPORTADAS') || '{}');
+  marcas[nodoAlerta] = { por: 'Alguien', en: Date.now() - 7 * 3600000 };
+  g.E.props.set('ALERTAS_REPORTADAS', JSON.stringify(marcas));
+  pa = deNodo(posibles(), nodoAlerta);
+  ok(pa && !pa.reportada, 'una marca de hace más de 6 horas ya no cuenta', pa);
+  // Dos reportes de asesores en otro nodo también es posible falla
+  const nodoRep = [...ix.nodoIdx.keys()].find((n) => !U.esVirtual(n) && contratosDe(n).length >= 3 && n !== nodoAlerta && !nodosPrueba.includes(n));
+  contratosDe(nodoRep).slice(0, 2).forEach((c) => g.post({ accion: 'reportar', token: tAgente, datos: { contrato: c, nodo: nodoRep } }));
+  pa = deNodo(posibles(), nodoRep);
+  ok(pa && pa.nivel === 'alerta' && pa.reportes === 2, 'dos reportes de asesores en un nodo también son posible falla', pa);
   g.ejecutar('ALERTAS.LIMITE_CONSULTAS_HORA = 3');
   const tLim = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-agente' } }).datos.token;
   g.cache.remove('limite:karla.zelaya@concentrix.com:' + Math.floor(Date.now() / 3600000));

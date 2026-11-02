@@ -291,7 +291,7 @@ function BarraSuperior({ mf }) {
     return () => { document.removeEventListener('mousedown', c); document.removeEventListener('keydown', k); };
   }, [menu]);
   const nAct = mf.activas.length;
-  const nAlertas = esWorkforce() ? s.alertas.filter((a) => !(s.descartadas[a.nodo] >= a.ultimo) && !mf.porNodo.has(a.nodo)).length : 0;
+  const nAlertas = esWorkforce() ? posiblesFallas(s, mf).alertas.length : 0;
   return html`<header class="topbar">
     <a class="marca" href="#consulta" onClick=${() => ir('consulta')}>
       <div class="marca-glifo"><${Ico} n="marca" s=${20} /></div>
@@ -339,6 +339,21 @@ function AvisoCambios() {
   </div>`;
 }
 
+/* Una posible falla nueva para Workforce, en cualquier vista menos Fallas (ahí está el panel) */
+function AvisoPosibleFalla({ mf }) {
+  const s = useG();
+  if (!esWorkforce() || s.ruta === 'fallas' || !s.alertasNuevas.length) return null;
+  const lista = posiblesFallas(s, mf).alertas.filter((a) => s.alertasNuevas.includes(a.nodo) && !a.reportada);
+  if (!lista.length) return null;
+  const a = lista[0], otras = lista.length - 1;
+  return html`<div class="aviso aviso-pf" role="alert">
+    <span class="aviso-icono"><${Ico} n="alerta" s=${17} /></span>
+    <p><b>Posible falla en ${a.nodo}.</b> ${U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos')} en ${lapsoAlerta(a)}${a.reportes ? ', ' + U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : ''}.${otras ? ' Hay ' + U.plural(otras, 'otra más', otras + ' más') + ' en Fallas.' : ''}</p>
+    <button class="btn btn-chico" onClick=${() => A.abrirPosibleFalla(a.nodo)}>Ver clientes y correo</button>
+    <button class="btn btn-icono btn-chico aviso-x" aria-label="Cerrar el aviso" title="Cerrar el aviso (la posible falla sigue en Fallas)" onClick=${() => G.set({ alertasNuevas: [] })}><${Ico} n="x" s=${16} /></button>
+  </div>`;
+}
+
 function Shell() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
@@ -347,7 +362,7 @@ function Shell() {
   useEffect(() => { document.title = (mf.activas.length ? '(' + mf.activas.length + ') ' : '') + CONFIG.app + ', fallas de red fija'; }, [mf.activas.length]);
   return html`<div class="app">
     <${BarraSuperior} mf=${mf} />
-    <${AvisoCambios} />
+    <div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>
     ${Backend.modo === 'local' && html`<div class="demo-cinta">${s.meta.demo ? 'Estás viendo datos de demostración: clientes, fallas y consultas inventados.' : 'Modo demostración: los datos se guardan solo en esta PC.'}${!RT.api ? ' Falta conectar el servidor en config.js.' : ''}</div>`}
     <main class="contenido" id="contenido">
       ${ruta === 'consulta' && html`<${VistaConsulta} />`}
@@ -355,6 +370,7 @@ function Shell() {
       ${ruta === 'base' && html`<${VistaBase} />`}
       ${ruta === 'stats' && html`<${VistaStats} />`}
     </main>
+    ${esWorkforce() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />
   </div>`;
 }
