@@ -105,6 +105,7 @@ Luego, en el Sheet: **Alertas > 2. Conectar Genesys**.
 
 - Al configurar, Alertas agrega tu correo de Google como `jefatura`. Si tu correo de Genesys es otro, agrégalo también.
 - Para quitarle el acceso a alguien, pon **NO** en Activo (o el rol `bloqueado`). Aplica de inmediato, aunque ya tenga Alertas abierto. Sirve también para bloquear a un asesor de Concentrix.
+- Si las pestañas están ocultas, primero **Alertas > Mostrar las pestañas**, y al terminar **Alertas > Ocultar y proteger las pestañas**.
 
 **Alertas > 3. Contraseñas de acceso.**
 
@@ -217,10 +218,10 @@ Cada descarga queda anotada en la hoja **Descargas SMS** del Sheet (quién, cuá
 - **Posibles fallas**: la lista y el detalle (con los nombres de los clientes) solo los reciben Workforce y Jefatura, sin teléfonos ni DNI. El correo se copia en la PC de quien lo va a enviar; Alertas no manda correos solo.
 - **Teléfonos**: solo Workforce y Jefatura descargan los celulares, solo de los nodos de una falla, y cada descarga queda anotada en **Descargas SMS**. El archivo tiene datos personales: después de subirlo a Notifícame, conviene borrarlo de la computadora.
 - **Alertas > Cerrar todas las sesiones** obliga a todos a volver a entrar (por ejemplo, si una contraseña se filtró).
-- **Alertas > Bloquear todas las pestañas** protege de una vez todas las pestañas de los dos archivos (la base interna y el de consultas) para que solo el dueño del archivo pueda editarlas. Si el archivo se comparte con alguien, esa persona puede verlas pero no cambiarlas.
-  - Alertas sigue funcionando igual, porque corre con la cuenta del dueño, y las pestañas que cree después (por ejemplo, la Base nueva al subir la base completa) quedan bloqueadas solas.
-  - **Alertas > Desbloquear todas las pestañas** las libera de una vez. Las protecciones que pongas a mano no se tocan.
-  - Solo el dueño del archivo puede bloquear o desbloquear. Google siempre deja editar al dueño.
+- **Pestañas ocultas y protegidas**, como el archivo de auditorías: **Alertas > Ocultar y proteger las pestañas** deja a la vista solo **INICIO** (con el aviso de archivo confidencial) y protege todas las pestañas de los dos archivos (la base interna y el de consultas) para que solo la cuenta dueña las pueda cambiar.
+  - **Alertas > Mostrar las pestañas** las pone a la vista para revisar los datos o editar Usuarios y Tiendas; siguen protegidas. Cada vez que se abre el archivo se vuelven a ocultar solas.
+  - Solo la cuenta dueña del archivo puede mostrarlas u ocultarlas.
+  - Alertas sigue funcionando igual, porque corre con la cuenta dueña. Las pestañas que cree después (por ejemplo, la Base nueva al subir la base completa) quedan ocultas y protegidas solas.
 
 > La base tiene datos personales de clientes de Claro. Lo recomendable es que el Sheet esté en una cuenta corporativa de Google Workspace y que el área de seguridad de la información apruebe el uso antes de abrirlo a todos los asesores.
 
@@ -263,7 +264,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 195 pruebas del servidor en un emulador de Apps Script
+npm test                           # 196 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

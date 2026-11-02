@@ -21,7 +21,7 @@ function aBuffer(v, charset) {
 
 function crearEntorno(opciones = {}) {
   const E = {
-    libros: new Map(), props: new Map(), cache: new Map(), triggers: [], dialogos: [], alertas: [],
+    libros: new Map(), props: new Map(), cache: new Map(), triggers: [], dialogos: [], alertas: [], toasts: [],
     cuota: { propsLecturas: 0, propsEscrituras: 0, urlFetch: 0, escriturasHoja: 0 },
     genesys: {
       tokens: new Map(), region: opciones.region || 'mypurecloud.com',
@@ -136,6 +136,7 @@ function crearEntorno(opciones = {}) {
     setValue(v) { return this.setValues([[v]]); }
     setNumberFormat(f) { this.hoja.formatos.push({ r1: this.r, c1: this.c, r2: this.r + this.nr - 1, c2: this.c + this.nc - 1, f }); return this; }
     setFontWeight() { return this; }
+    setFontSize() { return this; }
     clear() { this.hoja.revisarEdicion(); for (let i = 0; i < this.nr; i++) { const f = this.hoja.filas[this.r - 1 + i]; if (f) for (let j = 0; j < this.nc; j++) f[this.c - 1 + j] = undefined; } return this; }
     clearContent() { return this.clear(); }
     createTextFinder(t) { return new TextFinder(this, t); }
@@ -227,7 +228,13 @@ function crearEntorno(opciones = {}) {
     }
     clear() { this.revisarEdicion(); this.filas = []; this.formatos = []; return this; }
     setFrozenRows(n) { this.congeladas = n; }
-    hideSheet() { this.oculta = true; return this; }
+    hideSheet() {
+      if (!this.oculta && this.libro.hojas.filter((h) => !h.oculta).length === 1) throw new Error('You can\'t hide all the sheets in a document.');
+      this.oculta = true; return this;
+    }
+    showSheet() { this.oculta = false; return this; }
+    isSheetHidden() { return this.oculta; }
+    setColumnWidth() { return this; }
   }
 
   class Libro {
@@ -238,13 +245,19 @@ function crearEntorno(opciones = {}) {
     getName() { return this.nombre; }
     getSheets() { return this.hojas.slice(); }
     getSheetByName(n) { return this.hojas.find((h) => h.nombre === n) || null; }
-    insertSheet(n) {
+    insertSheet(n, pos) {
       if (this.getSheetByName(n)) throw new Error('A sheet with the name "' + n + '" already exists. Please enter another name.');
       this.revisarCeldas(1000 * 26);
-      const h = new Hoja(this, n); this.hojas.push(h); return h;
+      const h = new Hoja(this, n);
+      if (typeof pos === 'number') this.hojas.splice(pos, 0, h); else this.hojas.push(h);
+      this.activa = h;
+      return h;
     }
+    setActiveSheet(h) { this.activa = h; return h; }
+    getActiveSheet() { return this.activa || this.hojas[0]; }
+    toast(msg, titulo) { E.toasts.push([titulo, msg]); }
     getOwner() { return usuario(E.dueno); }
-    deleteSheet(h) { h.revisarEdicion(); if (this.hojas.length === 1) throw new Error('You can\'t remove all the sheets in a document.'); this.hojas = this.hojas.filter((x) => x !== h); }
+    deleteSheet(h) { h.revisarEdicion(); if (this.hojas.length === 1) throw new Error('You can\'t remove all the sheets in a document.'); this.hojas = this.hojas.filter((x) => x !== h); if (this.activa === h) this.activa = null; }
     setSpreadsheetTimeZone(z) { this.zona = z; }
     getSpreadsheetTimeZone() { return this.zona; }
   }

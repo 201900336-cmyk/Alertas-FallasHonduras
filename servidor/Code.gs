@@ -21,11 +21,12 @@
  *  cifradas viven en Propiedades del script. No se ven en GitHub ni en la página.
  *
  *  No edites las hojas Base, Fallas, Cargas ni Catalogo a mano: usa Alertas.
- *  La hoja Usuarios sí se edita a mano.
+ *  Las hojas Usuarios y Tiendas sí se editan a mano (menú Alertas > Mostrar las pestañas).
  * ============================================================================
  */
 
 const ALERTAS = {
+  VERSION: '2.5',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 36,             // una falla cerrada sigue visible para los asesores
@@ -1731,13 +1732,14 @@ function onOpen() {
     .addItem('2. Conectar Genesys', 'dialogoGenesys')
     .addItem('3. Contraseñas de acceso', 'dialogoClaves')
     .addSeparator()
+    .addItem('Mostrar las pestañas', 'mostrarPestanas')
+    .addItem('Ocultar y proteger las pestañas', 'ocultarPestanas')
+    .addSeparator()
     .addItem('Ver dirección del servidor', 'verDireccion')
     .addItem('Cerrar todas las sesiones', 'cerrarSesiones')
     .addItem('Resumir y limpiar la bitácora de consultas', 'limpiarConsultasMenu')
-    .addSeparator()
-    .addItem('Bloquear todas las pestañas', 'bloquearPestanas')
-    .addItem('Desbloquear todas las pestañas', 'desbloquearPestanas')
     .addToUi();
+  ocultarAlAbrir_();
 }
 
 /* Cuando alguien edita la hoja Usuarios a mano, el cambio aplica de inmediato
@@ -1750,12 +1752,15 @@ function onEdit(e) {
   } catch (err) { /* una edición nunca debe fallar por esto */ }
 }
 
-/* ----- Bloquear las pestañas: solo el dueño del archivo las puede editar -----
-   Protege todas las pestañas de los dos archivos (la base interna y el de consultas) con una protección de
-   Google que solo deja editar al dueño. Alertas sigue funcionando igual porque corre con la cuenta del dueño.
-   Mientras el bloqueo esté puesto, las pestañas que Alertas cree después (por ejemplo, la Base nueva de una
-   carga completa) se bloquean solas. Solo el dueño puede ponerlo o quitarlo. */
-const BLOQUEO_DESC = 'Alertas: pestaña bloqueada, solo la edita el dueño';
+/* ----- Pestañas ocultas y protegidas (como el archivo de auditorías) -----
+   "Ocultar y proteger las pestañas" deja a la vista solo INICIO (con el aviso de archivo confidencial) y
+   protege todas las pestañas de los dos archivos, la base interna y el de consultas, para que solo la
+   cuenta dueña las pueda cambiar. "Mostrar las pestañas" las muestra para revisar o editar (siguen
+   protegidas). Cada vez que se abre el archivo se vuelven a ocultar solas. Solo la cuenta dueña puede
+   mostrarlas u ocultarlas. Alertas sigue funcionando igual porque corre con la cuenta dueña, y las pestañas
+   que cree después (por ejemplo, la Base nueva de una carga completa) quedan ocultas y protegidas solas. */
+const INICIO = 'INICIO';
+const BLOQUEO_DESC = 'Alertas: pestaña protegida, solo la cambia la cuenta dueña';
 function esDueno_() {
   try {
     const dueno = SpreadsheetApp.getActiveSpreadsheet().getOwner();
@@ -1771,33 +1776,90 @@ function librosAlertas_() {
 function protegerHoja_(h) {
   const ya = h.getProtections(SpreadsheetApp.ProtectionType.SHEET).filter((p) => p.getDescription() === BLOQUEO_DESC)[0];
   const p = ya || h.protect().setDescription(BLOQUEO_DESC);
-  p.removeEditors(p.getEditors());   // Google deja siempre al dueño
+  p.removeEditors(p.getEditors());   // Google deja siempre a la cuenta dueña
   if (p.canDomainEdit()) p.setDomainEdit(false);
   return p;
 }
+/* Una pestaña que Alertas crea cuando las pestañas ya están ocultas y protegidas: igual que las demás */
 function protegerSiBloqueado_(h) {
-  try { if (h && props_().getProperty('BLOQUEO_PESTANAS')) protegerHoja_(h); } catch (err) { /* nunca frena a Alertas */ }
+  try {
+    if (h && props_().getProperty('BLOQUEO_PESTANAS')) {
+      protegerHoja_(h);
+      if (h.getName() !== INICIO && !h.isSheetHidden()) h.hideSheet();
+    }
+  } catch (err) { /* nunca frena a Alertas */ }
   return h;
 }
-function bloquearPestanas() {
-  const ui = SpreadsheetApp.getUi();
-  if (!esDueno_()) { ui.alert('Bloquear las pestañas', 'Solo el dueño del archivo puede bloquear o desbloquear las pestañas.', ui.ButtonSet.OK); return; }
-  let n = 0;
-  librosAlertas_().forEach((libro) => libro.getSheets().forEach((h) => { protegerHoja_(h); n++; }));
-  props_().setProperty('BLOQUEO_PESTANAS', JSON.stringify({ por: Session.getEffectiveUser().getEmail(), en: Date.now() }));
-  ui.alert('Pestañas bloqueadas', n + ' pestañas bloqueadas, en la base interna y en el archivo de consultas. Solo tú puedes editarlas: si compartes el archivo, los demás pueden verlas pero no cambiarlas.\n\n'
-    + 'Alertas sigue funcionando igual, y las pestañas que cree después (por ejemplo, al subir la base completa) también quedan bloqueadas.\n\n'
-    + 'Para quitarlo: Alertas > Desbloquear todas las pestañas.', ui.ButtonSet.OK);
+/* La pestaña INICIO de cada archivo: qué es, que no se comparte y cómo ver los datos */
+function hojaInicio_(libro, deConsultas) {
+  let h = libro.getSheetByName(INICIO);
+  if (!h) h = libro.insertSheet(INICIO, 0);
+  const lineas = deConsultas ? [
+    'ALERTAS · Bitácora de consultas',
+    '',
+    'Archivo confidencial. Los datos están en pestañas ocultas y protegidas: solo la cuenta dueña los puede ver y cambiar.',
+    'No compartan este archivo. Alertas lo llena solo: cada consulta de la página queda aquí 30 días, y un resumen por día para las estadísticas.',
+    '',
+    'Para revisarlo: en la base interna de Alertas, menú Alertas › Mostrar las pestañas.',
+    'Al terminar: menú Alertas › Ocultar y proteger las pestañas.',
+    '',
+    'Versión ' + ALERTAS.VERSION
+  ] : [
+    'ALERTAS · Fallas de red de Servicios Fijos HN',
+    '',
+    'Archivo confidencial. Los datos están en pestañas ocultas y protegidas: solo la cuenta dueña los puede ver y cambiar.',
+    'No compartan este archivo. Concentrix, Tiendas, Workforce HN y Jefatura entran únicamente por la página web de Alertas.',
+    '',
+    'Para revisar los datos o editar usuarios y tiendas: menú Alertas › Mostrar las pestañas.',
+    'Al terminar: menú Alertas › Ocultar y proteger las pestañas. Cada vez que se abre el archivo se vuelven a ocultar solas.',
+    '',
+    'Versión ' + ALERTAS.VERSION
+  ];
+  h.clear();
+  h.getRange(1, 1, lineas.length, 1).setValues(lineas.map((t) => [t])).setFontSize(11);
+  h.getRange(1, 1).setFontWeight('bold').setFontSize(14);
+  h.setColumnWidth(1, 900);
+  if (h.isSheetHidden()) h.showSheet();
+  return h;
 }
-function desbloquearPestanas() {
+function ocultarPestanas() {
   const ui = SpreadsheetApp.getUi();
-  if (!esDueno_()) { ui.alert('Desbloquear las pestañas', 'Solo el dueño del archivo puede bloquear o desbloquear las pestañas.', ui.ButtonSet.OK); return; }
+  if (!esDueno_()) { ui.alert('Ocultar y proteger las pestañas', 'Solo la cuenta dueña del archivo puede mostrar u ocultar las pestañas.', ui.ButtonSet.OK); return; }
+  props_().setProperty('BLOQUEO_PESTANAS', JSON.stringify({ por: Session.getEffectiveUser().getEmail(), en: Date.now() }));
   let n = 0;
-  librosAlertas_().forEach((libro) => libro.getSheets().forEach((h) => h.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach((p) => {
-    if (p.getDescription() === BLOQUEO_DESC) { p.remove(); n++; }    // las protecciones que pusiste a mano no se tocan
-  })));
-  props_().deleteProperty('BLOQUEO_PESTANAS');
-  ui.alert('Pestañas desbloqueadas', n ? n + ' pestañas desbloqueadas. Quien tenga permiso de edición en el archivo puede volver a editarlas.' : 'No había pestañas bloqueadas.', ui.ButtonSet.OK);
+  librosAlertas_().forEach((libro, i) => {
+    const inicio = hojaInicio_(libro, i > 0);
+    libro.setActiveSheet(inicio);
+    libro.getSheets().forEach((h) => {
+      protegerHoja_(h);
+      if (h.getName() === INICIO) return;
+      if (!h.isSheetHidden()) h.hideSheet();
+      n++;
+    });
+  });
+  ui.alert('Pestañas ocultas y protegidas', n + ' pestañas ocultas y protegidas, en la base interna y en el archivo de consultas. Solo la cuenta dueña las puede ver y cambiar.\n\n'
+    + 'Alertas sigue funcionando igual: la página lee y escribe en ellas aunque estén ocultas.\n\n'
+    + 'Para revisarlas: Alertas > Mostrar las pestañas. Cada vez que se abre el archivo se vuelven a ocultar solas.', ui.ButtonSet.OK);
+}
+function mostrarPestanas() {
+  const ui = SpreadsheetApp.getUi();
+  if (!esDueno_()) { ui.alert('Mostrar las pestañas', 'Solo la cuenta dueña del archivo puede mostrar u ocultar las pestañas.', ui.ButtonSet.OK); return; }
+  let n = 0;
+  librosAlertas_().forEach((libro) => libro.getSheets().forEach((h) => {
+    if (h.getName() !== ALERTAS.HOJAS.catalogo && h.isSheetHidden()) { h.showSheet(); n++; }   // Catalogo es interna: sigue oculta
+  }));
+  SpreadsheetApp.getActiveSpreadsheet().toast((n ? n + ' pestañas a la vista' : 'Las pestañas ya estaban a la vista') + '. Siguen protegidas. Al terminar: Alertas > Ocultar y proteger las pestañas.', 'Alertas', 10);
+}
+/* Al abrir el archivo: si ya tiene INICIO, todo lo demás se vuelve a ocultar */
+function ocultarAlAbrir_() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const inicio = ss.getSheetByName(INICIO);
+    if (!inicio) return;
+    if (inicio.isSheetHidden()) inicio.showSheet();
+    ss.setActiveSheet(inicio);
+    ss.getSheets().forEach((h) => { if (h.getName() !== INICIO && !h.isSheetHidden()) h.hideSheet(); });
+  } catch (err) { /* abrir el archivo nunca falla por esto */ }
 }
 
 function limpiarConsultasMenu() {

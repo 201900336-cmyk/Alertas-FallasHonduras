@@ -721,58 +721,62 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g2.post({ accion: 'cargar', token: tw2, datos: { baseVersion: -1 } });
   ok(r.ok && r.datos.fallas.length === fViejas.length + 1 && r.datos.fallas.filter((f) => f.numero === 'F1254585').length === 1, 'las fallas viejas y la nueva conviven bien');
 
-  /* ---------- Bloquear las pestañas: solo el dueño ---------- */
-  console.log('\n13. Bloquear todas las pestañas (solo el dueño)');
+  /* ---------- Pestañas ocultas y protegidas, como el archivo de auditorías ---------- */
+  console.log('\n13. Ocultar y proteger las pestañas (solo la cuenta dueña)');
   const DESC = g2.ejecutar('BLOQUEO_DESC');
-  const pestanas = () => [g2.E.activo, g2.SpreadsheetApp.openById(g2.E.props.get('CONSULTAS_ID'))].flatMap((l) => l.getSheets());
+  const libroC2 = () => g2.SpreadsheetApp.openById(g2.E.props.get('CONSULTAS_ID'));
+  const pestanas = () => [g2.E.activo, libroC2()].flatMap((l) => l.getSheets());
   const deAlertas = (h) => h.getProtections('SHEET').filter((p) => p.getDescription() === DESC);
-  const conBloqueo = () => pestanas().filter((h) => deAlertas(h).length > 0);
+  const visibles = (l) => l.getSheets().filter((h) => !h.isSheetHidden()).map((h) => h.getName());
   const mensaje = () => (g2.E.alertas[g2.E.alertas.length - 1] || [])[1] || '';
   const OTRO = 'ariel.velasquez@claro.com.hn';
   g2.E.ahora = null;
+  const pestanasAntes = pestanas().length;
   g2.E.usuario = OTRO;
-  C2.bloquearPestanas();
-  ok(conBloqueo().length === 0 && /Solo el dueño/.test(mensaje()), 'alguien que no es el dueño del archivo no puede bloquearlas', mensaje());
+  C2.ocultarPestanas();
+  ok(pestanas().every((h) => !deAlertas(h).length) && visibles(g2.E.activo).length > 1 && /Solo la cuenta dueña/.test(mensaje()), 'alguien que no es la cuenta dueña no puede ocultarlas ni protegerlas', mensaje());
   g2.E.usuario = null;
-  const manual = g2.E.activo.getSheetByName('Usuarios').protect().setDescription('Protección puesta a mano');
-  C2.bloquearPestanas();
+  C2.ocultarPestanas();
+  const inicio = g2.E.activo.getSheetByName('INICIO'), inicioC = libroC2().getSheetByName('INICIO');
+  const txtInicio = inicio ? inicio.getRange(1, 1, 9, 1).getValues().map((x) => x[0]).join('\n') : '';
+  ok(inicio && g2.E.activo.getSheets()[0] === inicio && /Archivo confidencial/.test(txtInicio) && /Mostrar las pestañas/.test(txtInicio) && /Versión \d/.test(txtInicio),
+    'crea la pestaña INICIO, primera, con el aviso de archivo confidencial y cómo ver los datos', txtInicio);
+  ok(JSON.stringify(visibles(g2.E.activo)) === '["INICIO"]' && JSON.stringify(visibles(libroC2())) === '["INICIO"]' && inicioC && /Bitácora de consultas/.test(inicioC.getRange(1, 1).getValue()),
+    'en los dos archivos (base interna y consultas) solo queda a la vista INICIO', [visibles(g2.E.activo), visibles(libroC2())]);
   const todas = pestanas().length;
-  ok(conBloqueo().length === todas && /pestañas bloqueadas/.test(mensaje()), `el dueño bloquea de una vez las ${todas} pestañas de los dos archivos (base interna y consultas)`, mensaje());
-  ok(pestanas().every((h) => deAlertas(h).every((p) => p.getEditors().length === 1 && p.getEditors()[0].getEmail() === g2.E.dueno)), 'cada bloqueo deja solo al dueño como editor');
-  C2.bloquearPestanas();
-  ok(pestanas().every((h) => deAlertas(h).length === 1), 'bloquear otra vez no duplica las protecciones');
+  ok(todas === pestanasAntes + 2 && pestanas().every((h) => deAlertas(h).length === 1 && deAlertas(h)[0].getEditors().map((u) => u.getEmail()).join() === g2.E.dueno) && /ocultas y protegidas/.test(mensaje()),
+    `las ${todas} pestañas quedan protegidas, con la cuenta dueña como única editora`, mensaje());
+  C2.ocultarPestanas();
+  ok(pestanas().length === todas && pestanas().every((h) => deAlertas(h).length === 1), 'hacerlo otra vez no duplica INICIO ni las protecciones');
   g2.E.usuario = OTRO;
   let errEd = null;
-  try { g2.E.activo.getSheetByName('Cargas').appendRow(['x']); } catch (e) { errEd = e.message; }
-  ok(errEd && /protected/.test(errEd), 'con el bloqueo, otra persona con acceso al archivo ya no puede editar las pestañas', errEd);
-  C2.desbloquearPestanas();
-  ok(conBloqueo().length === todas && /Solo el dueño/.test(mensaje()), 'ni desbloquearlas', mensaje());
+  try { g2.E.activo.getSheetByName('Usuarios').appendRow(['intruso@claro.com.hn', 'Intruso', 'jefatura', 'SÍ', '']); } catch (e) { errEd = e.message; }
+  ok(errEd && /protected/.test(errEd), 'otra persona con acceso al archivo no puede cambiar las pestañas', errEd);
+  C2.mostrarPestanas();
+  ok(JSON.stringify(visibles(g2.E.activo)) === '["INICIO"]' && /Solo la cuenta dueña/.test(mensaje()), 'ni mostrarlas desde el menú', mensaje());
   g2.E.usuario = null;
-  // Alertas corre con la cuenta del dueño: sigue funcionando igual
+  // Alertas corre con la cuenta dueña: sigue funcionando con las pestañas ocultas y protegidas
   const tw3 = entrar2('w'), ta3 = entrar2('a1');
   r = g2.post({ accion: 'buscar', token: ta3, datos: { q: String(ixc.C.contrato[0]) } });
-  ok(r.ok && r.datos.estado === 'ok', 'con las pestañas bloqueadas, las búsquedas siguen funcionando (y se anotan en la bitácora)', r);
+  ok(r.ok && r.datos.estado === 'ok', 'las búsquedas siguen funcionando (y se anotan en la bitácora oculta)', r);
   r = g2.post({ accion: 'falla', token: tw3, datos: { op: 'publicar', falla: { nodos: [nodoF], motivo: 'FIBRA' } } });
   ok(r.ok, 'Workforce sigue publicando fallas', r);
   let x3 = g2.post({ accion: 'base', token: tw3, datos: { op: 'iniciar', total: bc.filas, columnas: Model.columnasCarga(bc), archivo: 'chica2.xlsx' } });
   for (let d0 = 0; d0 < bc.filas; d0 += x3.datos.filasPorLote) g2.post({ accion: 'base', token: tw3, datos: { op: 'lote', id: x3.datos.id, desde: d0, filas: Model.filasCarga(bc, d0, Math.min(bc.filas, d0 + x3.datos.filasPorLote)) } });
   x3 = g2.post({ accion: 'base', token: tw3, datos: { op: 'finalizar', id: x3.datos.id, catalogo: catc } });
-  ok(x3.ok && deAlertas(g2.E.activo.getSheetByName('Base')).length === 1, 'una carga completa funciona y la Base nueva queda bloqueada también', x3);
+  const baseN = g2.E.activo.getSheetByName('Base');
+  ok(x3.ok && baseN.isSheetHidden() && deAlertas(baseN).length === 1, 'una carga completa funciona y la Base nueva queda oculta y protegida también', x3);
   g2.E.activo.deleteSheet(g2.E.activo.getSheetByName('Tiendas')); g2.cache.remove('tiendas');
   r = g2.post({ accion: 'config' });
   const tNueva = g2.E.activo.getSheetByName('Tiendas');
-  ok(r.ok && tNueva && deAlertas(tNueva).length === 1, 'y una pestaña que Alertas vuelve a crear (Tiendas) queda bloqueada sola', r.ok);
-  C2.desbloquearPestanas();
-  ok(conBloqueo().length === 0 && /desbloqueadas/.test(mensaje()) && g2.E.activo.getSheetByName('Usuarios').getProtections('SHEET').includes(manual),
-    'el dueño las desbloquea todas de una vez (una protección puesta a mano se queda)', mensaje());
-  g2.E.usuario = OTRO;
-  let errEd2 = null;
-  try { g2.E.activo.getSheetByName('Cargas').getRange(1, 20).setValue('x'); g2.E.activo.getSheetByName('Cargas').getRange(1, 20).setValue(''); } catch (e) { errEd2 = e.message; }
-  g2.E.usuario = null;
-  ok(!errEd2, 'desbloqueadas, quien tenga permiso de edición puede volver a editarlas', errEd2);
-  g2.E.activo.deleteSheet(g2.E.activo.getSheetByName('Tiendas')); g2.cache.remove('tiendas');
-  g2.post({ accion: 'config' });
-  ok(deAlertas(g2.E.activo.getSheetByName('Tiendas')).length === 0, 'sin el bloqueo, las pestañas nuevas ya no se bloquean');
+  ok(r.ok && tNueva && tNueva.isSheetHidden() && deAlertas(tNueva).length === 1, 'y una pestaña que Alertas vuelve a crear (Tiendas) queda oculta y protegida sola', r.ok);
+  C2.mostrarPestanas();
+  const toast = (g2.E.toasts[g2.E.toasts.length - 1] || [])[1] || '';
+  ok(visibles(g2.E.activo).length === g2.E.activo.getSheets().length - 1 && g2.E.activo.getSheetByName('Catalogo').isSheetHidden() && visibles(libroC2()).length === libroC2().getSheets().length,
+    'Mostrar las pestañas las pone a la vista en los dos archivos (menos Catalogo, que es interna)', [visibles(g2.E.activo), toast]);
+  ok(pestanas().every((h) => deAlertas(h).length === 1) && /Siguen protegidas/.test(toast), 'y siguen protegidas', toast);
+  C2.onOpen();
+  ok(JSON.stringify(visibles(g2.E.activo)) === '["INICIO"]' && g2.E.activo.getActiveSheet().getName() === 'INICIO', 'al abrir el archivo se vuelven a ocultar solas y queda INICIO', visibles(g2.E.activo));
 
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);
