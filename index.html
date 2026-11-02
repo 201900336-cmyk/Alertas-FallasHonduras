@@ -588,6 +588,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tabla td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .tabla small.numero-falla { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .input.numero-falla { text-transform: uppercase; }
+.falla-card .meta .sin-numero { color: var(--ink-3); }
 .input.numero-falla::placeholder { text-transform: none; }
 .numero-falla { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .tabla tr:last-child td { border-bottom: 0; }
@@ -1583,6 +1584,8 @@ const U = (() => {
   const esVirtual = (nodo) => /VIRTUAL|VITUAL/i.test(nodo || '');
   // ID de una falla tal como se muestra: sin guiones (las de antes del 2 nov 2026 se guardaron como F-261030-05)
   const idFalla = (id) => String(id == null ? '' : id).replace(/-/g, '');
+  // Cómo se nombra una falla: el número de falla que pone Workforce (F1254585) o, si no lo tiene, el ID de Alertas
+  const numeroFalla = (f) => (f && f.numero ? String(f.numero).replace(/-/g, '') : idFalla(f && f.id));
   function oltBase(olt) { return String(olt || '').split('/')[0]; }
   function oltNombre(olt) {
     const b = oltBase(olt);
@@ -1651,7 +1654,7 @@ const U = (() => {
   };
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
-    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, oltBase, oltNombre,
+    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
 })();
 
@@ -2164,7 +2167,7 @@ const Model = (() => {
   function reincidente(lista, rec, now) {
     return historialCliente(lista, rec, now, CONFIG.reincidente.dias).total >= CONFIG.reincidente.fallas;
   }
-  /* Lo mismo que arma el servidor para la búsqueda: por nodo, las fallas del último año (sin número si no es Workforce) */
+  /* Lo mismo que arma el servidor para la búsqueda: por nodo, las fallas del último año, con el número de falla */
   function historialNodos(fallas, nodos, completo, now) {
     const desde = now - 400 * U.DIA, out = {};
     nodos.forEach((n) => { out[n] = []; });
@@ -2173,7 +2176,7 @@ const Model = (() => {
       f.nodos.forEach((n) => {
         if (!out[n]) return;
         const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.estado === 'ACTIVA' ? null : f.cerradaEn };
-        if (completo && f.numero) x.numero = f.numero;
+        if (f.numero) x.numero = f.numero;
         out[n].push(x);
       });
     });
@@ -2463,6 +2466,8 @@ const Demo = (() => {
       if (f.estado === 'CERRADA') f.historial.push(hist('CERRADA', f.cerradaEn, f.cerradaPor, f.notaCierre));
       delete f.historialExtra;
       f.id = Model.nuevoId(fallas, f.publicadaEn);
+      // Número de falla del NOC (inventado); la más reciente todavía no lo tiene
+      if (f.numero === undefined) f.numero = 'F' + (1253900 + fallas.length * 17);
       fallas.push(f);
       return f;
     };
@@ -2501,7 +2506,7 @@ const Demo = (() => {
     // Activas
     const f1 = crear({ nodos: ['GRA03', 'GRA04', 'GRA07'], motivo: 'ENERGIA', inicio: now - 95 * M, publicadaEn: now - 82 * M, publicadaPor: W[2], eta: now + 65 * M, estado: 'ACTIVA', referencia: 'Correo NOC #9114', detalle: 'ENEE reporta corte en circuito de la zona.' });
     const pubF2 = now - 32 * M;
-    const f2 = crear({ nodos: ['ALTGC03', 'ALTGC04', 'ALTGC05', 'ALTGC08'], motivo: 'FIBRA', inicio: now - 44 * M, publicadaEn: pubF2, publicadaPor: W[1], estado: 'ACTIVA', referencia: 'Correo NOC #9121', detalle: 'Corte por trabajos de terceros en bulevar.',
+    const f2 = crear({ nodos: ['ALTGC03', 'ALTGC04', 'ALTGC05', 'ALTGC08'], motivo: 'FIBRA', inicio: now - 44 * M, publicadaEn: pubF2, publicadaPor: W[1], estado: 'ACTIVA', numero: '', referencia: 'Correo NOC #9121', detalle: 'Corte por trabajos de terceros en bulevar.',
       historialExtra: [hist('EDITADA', now - 21 * M, W[1], 'Agregó ALTGC08')] });
 
     // Consultas de 30 días
@@ -2884,7 +2889,7 @@ function BackendLocal() {
           historial: [{ accion: 'PUBLICADA', en: ahora, por, detalle: U.plural(x.nodos.length, '1 nodo', x.nodos.length + ' nodos') }]
         };
         fallas.push(f);
-        tipo = 'FALLA_PUBLICADA'; texto = 'publicó la falla ' + U.idFalla(f.id) + ' (' + nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 2) + ')';
+        tipo = 'FALLA_PUBLICADA'; texto = 'publicó la falla ' + U.numeroFalla(f) + ' (' + nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 2) + ')';
       } else {
         f = fallas.find((x) => x.id === d.id);
         if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
@@ -2892,16 +2897,16 @@ function BackendLocal() {
           Object.assign(f, d.falla);
           if (d.falla.nodos) f.impacto = resumir(Model.impacto(c.cat, f.nodos));
           f.historial.push({ accion: 'EDITADA', en: ahora, por, detalle: d.detalle || '' });
-          tipo = 'FALLA_EDITADA'; texto = 'actualizó la falla ' + U.idFalla(f.id) + (d.detalle ? ' (' + d.detalle + ')' : '');
+          tipo = 'FALLA_EDITADA'; texto = 'actualizó la falla ' + U.numeroFalla(f) + (d.detalle ? ' (' + d.detalle + ')' : '');
         } else if (op === 'cerrar') {
           if (f.estado === 'CERRADA') throw errorAlertas('DATOS', 'Otra persona ya cerró esta falla.');
           Object.assign(f, { estado: 'CERRADA', cerradaEn: Math.max(f.inicio, Math.min(d.cerradaEn || ahora, ahora)), cerradaPor: por, notaCierre: d.nota || '' });
           f.historial.push({ accion: 'CERRADA', en: ahora, por, detalle: d.nota || '' });
-          tipo = 'FALLA_CERRADA'; texto = 'cerró la falla ' + U.idFalla(f.id) + ' (' + nombreMotivo(f) + ')';
+          tipo = 'FALLA_CERRADA'; texto = 'cerró la falla ' + U.numeroFalla(f) + ' (' + nombreMotivo(f) + ')';
         } else if (op === 'reabrir') {
           Object.assign(f, { estado: 'ACTIVA', cerradaEn: null, cerradaPor: null, notaCierre: '' });
           f.historial.push({ accion: 'REABIERTA', en: ahora, por, detalle: '' });
-          tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.idFalla(f.id);
+          tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.numeroFalla(f);
         }
       }
       const version = await confirmar(tipo, texto, { fallas });
@@ -3629,7 +3634,6 @@ function HistorialCliente({ rec, lista, now, rein }) {
   const per = PERIODOS_HIST.find((p) => p[0] === dias);
   const h = Model.historialCliente(lista, rec, now, dias);
   const c = useContactos(rec.contrato);
-  const wf = puede('fallas');
   return html`<section class="panel historial-cliente" aria-label="Historial de fallas del cliente">
     <div class="panel-cab">
       <h3>Historial de fallas de este cliente</h3>
@@ -3650,7 +3654,7 @@ function HistorialCliente({ rec, lista, now, rein }) {
         <div class="hist-motivo"><b>${nombreMotivo(f)}</b><span class="sub">Nodo ${rec.nodo}</span></div>
         <div class="num hist-fechas">${fechaHist(f.inicio, now)} → ${f.fin ? fechaHist(f.fin, now) : 'sigue activa'}</div>
         <div class="num hist-dur">${U.dur((f.fin || now) - f.inicio)}</div>
-        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">Activa</span>`}${wf && f.numero && html`<span class="chip codigo">${f.numero}</span>`}</div>
+        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">Activa</span>`}${f.numero && html`<span class="chip codigo">${U.numeroFalla(f)}</span>`}</div>
       </li>`)}</ol>`
       : html`<div class="vacio hist-vacio"><b>Sin fallas ${per[2]}</b>Workforce HN no ha registrado fallas en su nodo en este periodo.</div>`}
     <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}.</p>
@@ -3665,12 +3669,12 @@ function Veredicto({ v, rec, now }) {
     l1 = nombreMotivo(f) + ' en el nodo ' + rec.nodo + '.';
     l2 = 'Afectado desde las ' + U.hora(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
       + (f.eta ? (f.eta > now ? U.conPunto('Solución estimada: ' + U.cuandoCorto(f.eta, now)) : 'La hora estimada (' + U.hora(f.eta) + ') ya pasó; Workforce HN sigue dando seguimiento.') : 'Aún sin hora estimada de solución.');
-    sello = 'Falla ' + U.idFalla(f.id) + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
+    sello = 'Falla ' + U.numeroFalla(f) + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
   } else if (v.tipo === 'RESUELTA') {
     titulo = 'Falla resuelta';
     l1 = U.conPunto(nombreMotivo(f) + ' en el nodo ' + rec.nodo + ', solucionada ' + U.cuando(f.cerradaEn, now));
     l2 = 'Si el cliente sigue sin servicio, pídele reiniciar su equipo antes de escalar.';
-    sello = 'Falla ' + U.idFalla(f.id);
+    sello = 'Falla ' + U.numeroFalla(f);
   } else if (v.tipo === 'SIN_FALLA') {
     titulo = 'Sin falla general';
     l1 = 'El nodo ' + rec.nodo + ' no tiene fallas reportadas por Workforce HN.';
@@ -3868,7 +3872,7 @@ function FallaItem({ f, now }) {
   const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
   const imp = f.impacto || { total: 0, hfc: 0, gpon: 0, deps: [] };
   return html`<button type="button" class="falla-item" data-s=${f.estado} aria-expanded=${abierto} onClick=${() => setAbierto(!abierto)}>
-    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.idFalla(f.id)}</span></div>
+    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
     <div class="nodos">${U.listaNatural(f.nodos, 3)}</div>
     <div class="m">
       ${activa ? html`<span>Desde las ${U.hora(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
@@ -3911,7 +3915,7 @@ function VistaFallas() {
   if (s.cargando) return html`<div class="panel vacio" style="margin-top:20px"><b>Cargando…</b></div>`;
   if (!s.cat) return html`<${SinBase} />`;
   const pestanas = [
-    ['publicar', edicion ? 'Editar ' + U.idFalla(edicion.id) : 'Publicar falla', null],
+    ['publicar', edicion ? 'Editar ' + U.numeroFalla(edicion) : 'Publicar falla', null],
     ['activas', 'Activas', mf.activas.length],
     ['resueltas', 'Resueltas ' + CONFIG.horasVisibleTrasCierre + ' h', mf.resueltas.length],
     ['historial', 'Historial', s.fallas.length]
@@ -3927,7 +3931,7 @@ function VistaFallas() {
         ${txt}${n != null && html`<span class="n">${n}</span>`}</button>`)}
     </div>
     ${tab === 'publicar' && html`<${FormFalla} key=${edicion ? edicion.id : 'nueva' + (semilla ? semilla.k : '')} edicion=${edicion} semilla=${semilla} mf=${mf}
-        onListo=${(f, editada) => { setEdicion(null); setSemilla(null); setTab('activas'); tostada(editada ? 'Cambios guardados en ' + U.idFalla(f.id) : 'Falla ' + U.idFalla(f.id) + ' publicada'); }}
+        onListo=${(f, editada) => { setEdicion(null); setSemilla(null); setTab('activas'); tostada(editada ? 'Cambios guardados en ' + U.numeroFalla(f) : 'Falla ' + U.numeroFalla(f) + ' publicada'); }}
         onCancelar=${() => { setEdicion(null); setTab('activas'); }} />`}
     ${tab === 'activas' && html`<${ListaFallas} fallas=${mf.activas} vacio="No hay fallas activas. Cuando llegue un correo con nodos afectados, publícala en la pestaña Publicar falla."
         onEditar=${editar} onCerrar=${setCerrando} smsTodas=${true} />`}
@@ -4109,7 +4113,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const imp = useMemo(() => Model.impacto(cat, nodos), [cat, nodos]);
   const ocupados = useMemo(() => {
     const m = new Map();
-    for (const f of mf.activas) if (!edicion || f.id !== edicion.id) for (const n of f.nodos) m.set(n, U.idFalla(f.id));
+    for (const f of mf.activas) if (!edicion || f.id !== edicion.id) for (const n of f.nodos) m.set(n, U.numeroFalla(f));
     return m;
   }, [mf, edicion]);
 
@@ -4183,11 +4187,11 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   }
 
   const etaTs = eta === 'sin' ? null : eta === 'custom' ? deLocal(etaCustom) : Date.now() + Number(eta) * U.MIN;
-  const numeroLimpio = numero.trim().toUpperCase().replace(/\s+/g, '');
+  const numeroLimpio = numero.trim().toUpperCase().replace(/[\s-]+/g, '');
   const motivoOk = motivo && (motivo !== 'OTRO' || (motivoTexto.trim() && clienteTexto.trim()));
   const listo = nodos.length > 0 && motivoOk;
   const borrador = {
-    id: edicion ? edicion.id : 'Nueva', nodos, motivo: motivo || 'ENERGIA', motivoTexto, clienteTexto, inicio: deLocal(inicio) || Date.now(),
+    id: edicion ? edicion.id : 'Nueva', numero: numeroLimpio, nodos, motivo: motivo || 'ENERGIA', motivoTexto, clienteTexto, inicio: deLocal(inicio) || Date.now(),
     eta: etaTs, estado: 'ACTIVA', publicadaEn: Date.now(), publicadaPor: A.quien()
   };
   const ejemplo = useMemo(() => {
@@ -4284,7 +4288,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       </div>
 
       <div class="paso">
-        <div class="paso-cab"><span class="paso-num">4</span><div><h3>Número de falla y notas internas</h3><p>Solo las ve Workforce HN.</p></div></div>
+        <div class="paso-cab"><span class="paso-num">4</span><div><h3>Número de falla y notas internas</h3><p>El número de falla es como se nombra la falla en Alertas y también lo ven los asesores. La referencia y las notas solo las ve Workforce HN.</p></div></div>
         <div class="fila-campos">
           <label class="campo"><span>Número de falla</span><input class="input numero-falla" value=${numero} onInput=${(e) => setNumero(e.currentTarget.value)} placeholder="Ejemplo: F1254585" autocapitalize="characters" spellcheck="false" maxlength="30" /></label>
           <label class="campo"><span>Referencia del correo o ticket</span><input class="input" value=${referencia} onInput=${(e) => setReferencia(e.currentTarget.value)} placeholder="Ejemplo: Correo NOC #9114" /></label>
@@ -4316,7 +4320,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       </div>
     </div>
 
-    ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en ' + U.idFalla(edicion.id) : 'Publicar falla'} onCerrar=${() => setConfirmar(false)}
+    ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en ' + U.numeroFalla(edicion) : 'Publicar falla'} onCerrar=${() => setConfirmar(false)}
         sub=${edicion ? cambiosDetalle() + '. Todos los que estén usando Alertas recibirán el aviso para actualizar.' : 'Los asesores la verán de inmediato al consultar a estos clientes.'}
         pie=${html`<button class="btn btn-borde" onClick=${() => setConfirmar(false)}>Revisar</button>
           <button class="btn btn-primario" disabled=${guardando} onClick=${guardar}>${edicion ? 'Guardar cambios' : 'Publicar falla'}</button>`}>
@@ -4387,7 +4391,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
   const sms = useSms(f.id);
   return html`<article class="panel falla-card" data-s=${f.estado}>
     <div class="falla-card-cab">
-      <div><span class="id">${U.idFalla(f.id)}</span><h3>${nombreMotivo(f)}</h3></div>
+      <div><span class="id numero-falla">${U.numeroFalla(f)}</span><h3>${nombreMotivo(f)}</h3></div>
       <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : 'RESUELTA'}>${activa ? 'Activa' : 'Resuelta'}</span></div>
     </div>
     <div class="lista-nodos" style="margin-top:0">${f.nodos.slice(0, 10).map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}${f.nodos.length > 10 && html`<span class="chip">y ${f.nodos.length - 10} más</span>`}</div>
@@ -4398,7 +4402,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     </div>
     <${BarraTec} hfc=${imp.hfc} gpon=${imp.gpon} leyenda=${true} />
     <dl class="meta">
-      ${f.numero && html`<dt>N.º de falla</dt><dd class="fuerte numero-falla">${f.numero}</dd>`}
+      ${!f.numero && activa && html`<dt>N.º de falla</dt><dd class="sin-numero">Sin número todavía. Agrégalo con Editar.</dd>`}
       <dt>Inicio</dt><dd>${U.cuandoCorto(f.inicio, now)}</dd>
       ${activa && html`<dt>Estimada</dt><dd>${f.eta ? U.cuandoCorto(f.eta, now) + (f.eta < now ? ' (ya pasó)' : '') : 'Sin hora'}</dd>`}
       <dt>Publicó</dt><dd>${f.publicadaPor.nombre}, ${U.cuandoCorto(f.publicadaEn, now)}</dd>
@@ -4411,7 +4415,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     <div class="acc">
       ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />Cerrar falla</button>`}
       ${activa && onEditar && html`<button class="btn btn-borde btn-chico" onClick=${() => onEditar(f)}><${Ico} n="lapiz" s=${15} />Editar</button>`}
-      ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + U.idFalla(f.id) + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
+      ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + U.numeroFalla(f) + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
       <button class="btn btn-borde btn-chico sms" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Teléfonos para SMS'}</button>
       <button class="btn btn-fantasma btn-chico" onClick=${() => setVerHist(true)}>Historial de cambios</button>
     </div>
@@ -4423,7 +4427,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
 const ACCION = { PUBLICADA: 'Publicó', EDITADA: 'Editó', CERRADA: 'Cerró', REABIERTA: 'Reabrió' };
 function ModalHistorialFalla({ f, onCerrar }) {
   const now = G.s.now;
-  return html`<${Modal} titulo=${'Historial de ' + U.idFalla(f.id)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3)} onCerrar=${onCerrar}
+  return html`<${Modal} titulo=${'Historial de ' + U.numeroFalla(f)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3)} onCerrar=${onCerrar}
       pie=${html`<button class="btn btn-primario" onClick=${onCerrar}>Listo</button>`}>
     <ul class="bitacora">${f.historial.slice().reverse().map((h, k) => html`<li key=${k}>
       <span class="cuando">${U.dia(h.en)}, ${U.hora(h.en)}</span>
@@ -4438,10 +4442,10 @@ function ModalCerrar({ f, onCerrar }) {
   const [ocupado, setOcupado] = useState(false);
   async function ok() {
     setOcupado(true);
-    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada('Falla ' + U.idFalla(f.id) + ' cerrada'); onCerrar(); }
+    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada('Falla ' + U.numeroFalla(f) + ' cerrada'); onCerrar(); }
     catch (e) { tostada(e.message); setOcupado(false); }
   }
-  return html`<${Modal} titulo=${'Cerrar falla ' + U.idFalla(f.id)} onCerrar=${onCerrar}
+  return html`<${Modal} titulo=${'Cerrar falla ' + U.numeroFalla(f)} onCerrar=${onCerrar}
       sub=${'Los asesores la verán como resuelta durante ' + CONFIG.horasVisibleTrasCierre + ' horas, y el guion le pedirá al cliente reiniciar su equipo.'}
       pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-peligro" disabled=${ocupado} onClick=${ok}>Cerrar falla</button>`}>
     <label class="campo"><span>Hora de solución</span><input class="input" type="datetime-local" value=${hora} onInput=${(e) => setHora(e.currentTarget.value)} /></label>
@@ -4462,11 +4466,11 @@ function Historial() {
   const lista = s.fallas.filter((f) => f.publicadaEn >= desde
     && (!mot || f.motivo === mot)
     && (!tec || (tec === 'HFC' ? (f.impacto.hfc >= f.impacto.gpon) : (f.impacto.gpon > f.impacto.hfc)))
-    && (!q || (qId && U.idFalla(f.id).includes(qId)) || (f.numero || '').includes(q.replace(/\s+/g, '')) || f.nodos.some((n) => n.includes(q)) || f.publicadaPor.nombre.toUpperCase().includes(q)))
+    && (!q || (qId && (U.idFalla(f.id).includes(qId) || U.numeroFalla(f).includes(qId))) || f.nodos.some((n) => n.includes(q)) || f.publicadaPor.nombre.toUpperCase().includes(q)))
     .sort((a, b) => b.publicadaEn - a.publicadaEn);
   function exportar() {
-    U.descargarCsv('fallas-alertas.csv', [['ID', 'Número de falla', 'Estado', 'Motivo', 'Nodos', 'Clientes', 'HFC', 'GPON', 'Inicio', 'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Duración (h)', 'Referencia']].concat(
-      lista.map((f) => [U.idFalla(f.id), f.numero || '', f.estado === 'ACTIVA' ? 'Activa' : 'Resuelta', nombreMotivo(f), f.nodos.join(' '), f.impacto.total, f.impacto.hfc, f.impacto.gpon,
+    U.descargarCsv('fallas-alertas.csv', [['Número de falla', 'ID de Alertas', 'Estado', 'Motivo', 'Nodos', 'Clientes', 'HFC', 'GPON', 'Inicio', 'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Duración (h)', 'Referencia']].concat(
+      lista.map((f) => [f.numero || '', U.idFalla(f.id), f.estado === 'ACTIVA' ? 'Activa' : 'Resuelta', nombreMotivo(f), f.nodos.join(' '), f.impacto.total, f.impacto.hfc, f.impacto.gpon,
         new Date(f.inicio).toLocaleString('es-HN'), new Date(f.publicadaEn).toLocaleString('es-HN'), f.publicadaPor.nombre,
         f.cerradaEn ? new Date(f.cerradaEn).toLocaleString('es-HN') : '', f.cerradaPor ? f.cerradaPor.nombre : '',
         U.n1(U.horas((f.cerradaEn || s.now) - f.inicio)), f.referencia || ''])));
@@ -4491,7 +4495,7 @@ function Historial() {
         <table class="tabla">
           <thead><tr><th>ID</th><th>Motivo</th><th>Nodos</th><th class="der">Clientes</th><th>Tecnología</th><th>Inicio</th><th class="der">Duración</th><th>Publicó</th><th>Cerró</th><th></th></tr></thead>
           <tbody>${lista.slice(0, 300).map((f) => html`<tr key=${f.id}>
-            <td class="num fuerte">${U.idFalla(f.id)}${f.numero && html`<small class="numero-falla">${f.numero}</small>`}</td>
+            <td class="num fuerte">${U.numeroFalla(f)}</td>
             <td>${cortoMotivo(f)}</td>
             <td class="codigo" style="max-width:220px">${U.listaNatural(f.nodos, 3)}</td>
             <td class="der">${U.n(f.impacto.total)}</td>
@@ -4834,7 +4838,7 @@ function calcular(s, c, desde, per) {
     if (h.accion === 'PUBLICADA') { e.publicadas++; e.clientes += f.impacto.total || 0; e.tPub.push(Math.max(0, f.publicadaEn - f.inicio)); }
     if (h.accion === 'CERRADA') { e.cerradas++; if (f.cerradaEn) e.dur.push(f.cerradaEn - f.inicio); }
     if (h.accion === 'EDITADA' || h.accion === 'REABIERTA') e.ediciones++;
-    bitacora.push({ en: h.en, quien: h.por.nombre, texto: (ACCION[h.accion] || h.accion).toLowerCase() + ' la falla ' + U.idFalla(f.id) + (h.detalle ? ': ' + h.detalle : '') });
+    bitacora.push({ en: h.en, quien: h.por.nombre, texto: (ACCION[h.accion] || h.accion).toLowerCase() + ' la falla ' + U.numeroFalla(f) + (h.detalle ? ': ' + h.detalle : '') });
   }));
   (s.cargas || []).forEach((b) => { if (b.en >= desde) bitacora.push({ en: b.en, quien: b.por.nombre, texto: 'subió la base de clientes (' + U.n(b.filas) + ' servicios)' }); });
   bitacora.sort((a, b) => b.en - a.en);

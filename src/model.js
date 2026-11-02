@@ -349,7 +349,7 @@ const Model = (() => {
   function reincidente(lista, rec, now) {
     return historialCliente(lista, rec, now, CONFIG.reincidente.dias).total >= CONFIG.reincidente.fallas;
   }
-  /* Lo mismo que arma el servidor para la búsqueda: por nodo, las fallas del último año (sin número si no es Workforce) */
+  /* Lo mismo que arma el servidor para la búsqueda: por nodo, las fallas del último año, con el número de falla */
   function historialNodos(fallas, nodos, completo, now) {
     const desde = now - 400 * U.DIA, out = {};
     nodos.forEach((n) => { out[n] = []; });
@@ -358,7 +358,7 @@ const Model = (() => {
       f.nodos.forEach((n) => {
         if (!out[n]) return;
         const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.estado === 'ACTIVA' ? null : f.cerradaEn };
-        if (completo && f.numero) x.numero = f.numero;
+        if (f.numero) x.numero = f.numero;
         out[n].push(x);
       });
     });

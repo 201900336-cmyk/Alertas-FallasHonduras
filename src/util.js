@@ -106,6 +106,8 @@ const U = (() => {
   const esVirtual = (nodo) => /VIRTUAL|VITUAL/i.test(nodo || '');
   // ID de una falla tal como se muestra: sin guiones (las de antes del 2 nov 2026 se guardaron como F-261030-05)
   const idFalla = (id) => String(id == null ? '' : id).replace(/-/g, '');
+  // Cómo se nombra una falla: el número de falla que pone Workforce (F1254585) o, si no lo tiene, el ID de Alertas
+  const numeroFalla = (f) => (f && f.numero ? String(f.numero).replace(/-/g, '') : idFalla(f && f.id));
   function oltBase(olt) { return String(olt || '').split('/')[0]; }
   function oltNombre(olt) {
     const b = oltBase(olt);
@@ -174,6 +176,6 @@ const U = (() => {
   };
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
-    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, oltBase, oltNombre,
+    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
 })();

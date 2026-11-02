@@ -138,7 +138,7 @@ function calcular(s, c, desde, per) {
     if (h.accion === 'PUBLICADA') { e.publicadas++; e.clientes += f.impacto.total || 0; e.tPub.push(Math.max(0, f.publicadaEn - f.inicio)); }
     if (h.accion === 'CERRADA') { e.cerradas++; if (f.cerradaEn) e.dur.push(f.cerradaEn - f.inicio); }
     if (h.accion === 'EDITADA' || h.accion === 'REABIERTA') e.ediciones++;
-    bitacora.push({ en: h.en, quien: h.por.nombre, texto: (ACCION[h.accion] || h.accion).toLowerCase() + ' la falla ' + U.idFalla(f.id) + (h.detalle ? ': ' + h.detalle : '') });
+    bitacora.push({ en: h.en, quien: h.por.nombre, texto: (ACCION[h.accion] || h.accion).toLowerCase() + ' la falla ' + U.numeroFalla(f) + (h.detalle ? ': ' + h.detalle : '') });
   }));
   (s.cargas || []).forEach((b) => { if (b.en >= desde) bitacora.push({ en: b.en, quien: b.por.nombre, texto: 'subió la base de clientes (' + U.n(b.filas) + ' servicios)' }); });
   bitacora.sort((a, b) => b.en - a.en);

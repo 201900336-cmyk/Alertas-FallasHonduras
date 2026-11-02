@@ -21,7 +21,7 @@ function VistaFallas() {
   if (s.cargando) return html`<div class="panel vacio" style="margin-top:20px"><b>Cargando…</b></div>`;
   if (!s.cat) return html`<${SinBase} />`;
   const pestanas = [
-    ['publicar', edicion ? 'Editar ' + U.idFalla(edicion.id) : 'Publicar falla', null],
+    ['publicar', edicion ? 'Editar ' + U.numeroFalla(edicion) : 'Publicar falla', null],
     ['activas', 'Activas', mf.activas.length],
     ['resueltas', 'Resueltas ' + CONFIG.horasVisibleTrasCierre + ' h', mf.resueltas.length],
     ['historial', 'Historial', s.fallas.length]
@@ -37,7 +37,7 @@ function VistaFallas() {
         ${txt}${n != null && html`<span class="n">${n}</span>`}</button>`)}
     </div>
     ${tab === 'publicar' && html`<${FormFalla} key=${edicion ? edicion.id : 'nueva' + (semilla ? semilla.k : '')} edicion=${edicion} semilla=${semilla} mf=${mf}
-        onListo=${(f, editada) => { setEdicion(null); setSemilla(null); setTab('activas'); tostada(editada ? 'Cambios guardados en ' + U.idFalla(f.id) : 'Falla ' + U.idFalla(f.id) + ' publicada'); }}
+        onListo=${(f, editada) => { setEdicion(null); setSemilla(null); setTab('activas'); tostada(editada ? 'Cambios guardados en ' + U.numeroFalla(f) : 'Falla ' + U.numeroFalla(f) + ' publicada'); }}
         onCancelar=${() => { setEdicion(null); setTab('activas'); }} />`}
     ${tab === 'activas' && html`<${ListaFallas} fallas=${mf.activas} vacio="No hay fallas activas. Cuando llegue un correo con nodos afectados, publícala en la pestaña Publicar falla."
         onEditar=${editar} onCerrar=${setCerrando} smsTodas=${true} />`}
@@ -219,7 +219,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const imp = useMemo(() => Model.impacto(cat, nodos), [cat, nodos]);
   const ocupados = useMemo(() => {
     const m = new Map();
-    for (const f of mf.activas) if (!edicion || f.id !== edicion.id) for (const n of f.nodos) m.set(n, U.idFalla(f.id));
+    for (const f of mf.activas) if (!edicion || f.id !== edicion.id) for (const n of f.nodos) m.set(n, U.numeroFalla(f));
     return m;
   }, [mf, edicion]);
 
@@ -293,11 +293,11 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   }
 
   const etaTs = eta === 'sin' ? null : eta === 'custom' ? deLocal(etaCustom) : Date.now() + Number(eta) * U.MIN;
-  const numeroLimpio = numero.trim().toUpperCase().replace(/\s+/g, '');
+  const numeroLimpio = numero.trim().toUpperCase().replace(/[\s-]+/g, '');
   const motivoOk = motivo && (motivo !== 'OTRO' || (motivoTexto.trim() && clienteTexto.trim()));
   const listo = nodos.length > 0 && motivoOk;
   const borrador = {
-    id: edicion ? edicion.id : 'Nueva', nodos, motivo: motivo || 'ENERGIA', motivoTexto, clienteTexto, inicio: deLocal(inicio) || Date.now(),
+    id: edicion ? edicion.id : 'Nueva', numero: numeroLimpio, nodos, motivo: motivo || 'ENERGIA', motivoTexto, clienteTexto, inicio: deLocal(inicio) || Date.now(),
     eta: etaTs, estado: 'ACTIVA', publicadaEn: Date.now(), publicadaPor: A.quien()
   };
   const ejemplo = useMemo(() => {
@@ -394,7 +394,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       </div>
 
       <div class="paso">
-        <div class="paso-cab"><span class="paso-num">4</span><div><h3>Número de falla y notas internas</h3><p>Solo las ve Workforce HN.</p></div></div>
+        <div class="paso-cab"><span class="paso-num">4</span><div><h3>Número de falla y notas internas</h3><p>El número de falla es como se nombra la falla en Alertas y también lo ven los asesores. La referencia y las notas solo las ve Workforce HN.</p></div></div>
         <div class="fila-campos">
           <label class="campo"><span>Número de falla</span><input class="input numero-falla" value=${numero} onInput=${(e) => setNumero(e.currentTarget.value)} placeholder="Ejemplo: F1254585" autocapitalize="characters" spellcheck="false" maxlength="30" /></label>
           <label class="campo"><span>Referencia del correo o ticket</span><input class="input" value=${referencia} onInput=${(e) => setReferencia(e.currentTarget.value)} placeholder="Ejemplo: Correo NOC #9114" /></label>
@@ -426,7 +426,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       </div>
     </div>
 
-    ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en ' + U.idFalla(edicion.id) : 'Publicar falla'} onCerrar=${() => setConfirmar(false)}
+    ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en ' + U.numeroFalla(edicion) : 'Publicar falla'} onCerrar=${() => setConfirmar(false)}
         sub=${edicion ? cambiosDetalle() + '. Todos los que estén usando Alertas recibirán el aviso para actualizar.' : 'Los asesores la verán de inmediato al consultar a estos clientes.'}
         pie=${html`<button class="btn btn-borde" onClick=${() => setConfirmar(false)}>Revisar</button>
           <button class="btn btn-primario" disabled=${guardando} onClick=${guardar}>${edicion ? 'Guardar cambios' : 'Publicar falla'}</button>`}>
@@ -497,7 +497,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
   const sms = useSms(f.id);
   return html`<article class="panel falla-card" data-s=${f.estado}>
     <div class="falla-card-cab">
-      <div><span class="id">${U.idFalla(f.id)}</span><h3>${nombreMotivo(f)}</h3></div>
+      <div><span class="id numero-falla">${U.numeroFalla(f)}</span><h3>${nombreMotivo(f)}</h3></div>
       <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : 'RESUELTA'}>${activa ? 'Activa' : 'Resuelta'}</span></div>
     </div>
     <div class="lista-nodos" style="margin-top:0">${f.nodos.slice(0, 10).map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}${f.nodos.length > 10 && html`<span class="chip">y ${f.nodos.length - 10} más</span>`}</div>
@@ -508,7 +508,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     </div>
     <${BarraTec} hfc=${imp.hfc} gpon=${imp.gpon} leyenda=${true} />
     <dl class="meta">
-      ${f.numero && html`<dt>N.º de falla</dt><dd class="fuerte numero-falla">${f.numero}</dd>`}
+      ${!f.numero && activa && html`<dt>N.º de falla</dt><dd class="sin-numero">Sin número todavía. Agrégalo con Editar.</dd>`}
       <dt>Inicio</dt><dd>${U.cuandoCorto(f.inicio, now)}</dd>
       ${activa && html`<dt>Estimada</dt><dd>${f.eta ? U.cuandoCorto(f.eta, now) + (f.eta < now ? ' (ya pasó)' : '') : 'Sin hora'}</dd>`}
       <dt>Publicó</dt><dd>${f.publicadaPor.nombre}, ${U.cuandoCorto(f.publicadaEn, now)}</dd>
@@ -521,7 +521,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     <div class="acc">
       ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />Cerrar falla</button>`}
       ${activa && onEditar && html`<button class="btn btn-borde btn-chico" onClick=${() => onEditar(f)}><${Ico} n="lapiz" s=${15} />Editar</button>`}
-      ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + U.idFalla(f.id) + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
+      ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + U.numeroFalla(f) + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
       <button class="btn btn-borde btn-chico sms" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Teléfonos para SMS'}</button>
       <button class="btn btn-fantasma btn-chico" onClick=${() => setVerHist(true)}>Historial de cambios</button>
     </div>
@@ -533,7 +533,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
 const ACCION = { PUBLICADA: 'Publicó', EDITADA: 'Editó', CERRADA: 'Cerró', REABIERTA: 'Reabrió' };
 function ModalHistorialFalla({ f, onCerrar }) {
   const now = G.s.now;
-  return html`<${Modal} titulo=${'Historial de ' + U.idFalla(f.id)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3)} onCerrar=${onCerrar}
+  return html`<${Modal} titulo=${'Historial de ' + U.numeroFalla(f)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3)} onCerrar=${onCerrar}
       pie=${html`<button class="btn btn-primario" onClick=${onCerrar}>Listo</button>`}>
     <ul class="bitacora">${f.historial.slice().reverse().map((h, k) => html`<li key=${k}>
       <span class="cuando">${U.dia(h.en)}, ${U.hora(h.en)}</span>
@@ -548,10 +548,10 @@ function ModalCerrar({ f, onCerrar }) {
   const [ocupado, setOcupado] = useState(false);
   async function ok() {
     setOcupado(true);
-    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada('Falla ' + U.idFalla(f.id) + ' cerrada'); onCerrar(); }
+    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada('Falla ' + U.numeroFalla(f) + ' cerrada'); onCerrar(); }
     catch (e) { tostada(e.message); setOcupado(false); }
   }
-  return html`<${Modal} titulo=${'Cerrar falla ' + U.idFalla(f.id)} onCerrar=${onCerrar}
+  return html`<${Modal} titulo=${'Cerrar falla ' + U.numeroFalla(f)} onCerrar=${onCerrar}
       sub=${'Los asesores la verán como resuelta durante ' + CONFIG.horasVisibleTrasCierre + ' horas, y el guion le pedirá al cliente reiniciar su equipo.'}
       pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-peligro" disabled=${ocupado} onClick=${ok}>Cerrar falla</button>`}>
     <label class="campo"><span>Hora de solución</span><input class="input" type="datetime-local" value=${hora} onInput=${(e) => setHora(e.currentTarget.value)} /></label>
@@ -572,11 +572,11 @@ function Historial() {
   const lista = s.fallas.filter((f) => f.publicadaEn >= desde
     && (!mot || f.motivo === mot)
     && (!tec || (tec === 'HFC' ? (f.impacto.hfc >= f.impacto.gpon) : (f.impacto.gpon > f.impacto.hfc)))
-    && (!q || (qId && U.idFalla(f.id).includes(qId)) || (f.numero || '').includes(q.replace(/\s+/g, '')) || f.nodos.some((n) => n.includes(q)) || f.publicadaPor.nombre.toUpperCase().includes(q)))
+    && (!q || (qId && (U.idFalla(f.id).includes(qId) || U.numeroFalla(f).includes(qId))) || f.nodos.some((n) => n.includes(q)) || f.publicadaPor.nombre.toUpperCase().includes(q)))
     .sort((a, b) => b.publicadaEn - a.publicadaEn);
   function exportar() {
-    U.descargarCsv('fallas-alertas.csv', [['ID', 'Número de falla', 'Estado', 'Motivo', 'Nodos', 'Clientes', 'HFC', 'GPON', 'Inicio', 'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Duración (h)', 'Referencia']].concat(
-      lista.map((f) => [U.idFalla(f.id), f.numero || '', f.estado === 'ACTIVA' ? 'Activa' : 'Resuelta', nombreMotivo(f), f.nodos.join(' '), f.impacto.total, f.impacto.hfc, f.impacto.gpon,
+    U.descargarCsv('fallas-alertas.csv', [['Número de falla', 'ID de Alertas', 'Estado', 'Motivo', 'Nodos', 'Clientes', 'HFC', 'GPON', 'Inicio', 'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Duración (h)', 'Referencia']].concat(
+      lista.map((f) => [f.numero || '', U.idFalla(f.id), f.estado === 'ACTIVA' ? 'Activa' : 'Resuelta', nombreMotivo(f), f.nodos.join(' '), f.impacto.total, f.impacto.hfc, f.impacto.gpon,
         new Date(f.inicio).toLocaleString('es-HN'), new Date(f.publicadaEn).toLocaleString('es-HN'), f.publicadaPor.nombre,
         f.cerradaEn ? new Date(f.cerradaEn).toLocaleString('es-HN') : '', f.cerradaPor ? f.cerradaPor.nombre : '',
         U.n1(U.horas((f.cerradaEn || s.now) - f.inicio)), f.referencia || ''])));
@@ -601,7 +601,7 @@ function Historial() {
         <table class="tabla">
           <thead><tr><th>ID</th><th>Motivo</th><th>Nodos</th><th class="der">Clientes</th><th>Tecnología</th><th>Inicio</th><th class="der">Duración</th><th>Publicó</th><th>Cerró</th><th></th></tr></thead>
           <tbody>${lista.slice(0, 300).map((f) => html`<tr key=${f.id}>
-            <td class="num fuerte">${U.idFalla(f.id)}${f.numero && html`<small class="numero-falla">${f.numero}</small>`}</td>
+            <td class="num fuerte">${U.numeroFalla(f)}</td>
             <td>${cortoMotivo(f)}</td>
             <td class="codigo" style="max-width:220px">${U.listaNatural(f.nodos, 3)}</td>
             <td class="der">${U.n(f.impacto.total)}</td>

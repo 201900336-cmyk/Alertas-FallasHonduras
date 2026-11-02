@@ -524,15 +524,14 @@ function accionBuscar_(d, ses) {
   return { estado: filas.length ? 'ok' : 'no', tipo: tipo, q: q, filas: filas, fallas: rel, historial: historial, version: e.version };
 }
 
-/* Historial de fallas de cada nodo (último año) para la tarjeta del cliente.
-   Quien atiende (Concentrix y Tiendas) no recibe el número de falla. */
+/* Historial de fallas de cada nodo (último año) para la tarjeta del cliente, con el número de falla */
 function historialNodos_(nodos, completo, version) {
   const out = {};
   nodos.forEach((n) => { out[n] = []; });
   fallasHistorial_(version).forEach((f) => f.nodos.forEach((n) => {
     if (!out[n]) return;
     const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.fin };
-    if (completo && f.numero) x.numero = f.numero;
+    if (f.numero) x.numero = f.numero;
     out[n].push(x);
   }));
   return out;
@@ -656,11 +655,11 @@ function leerFallas_(h) {
     .map((f, i) => (f[0] ? filaAFalla_(f, i + 2) : null)).filter(Boolean);
 }
 function sinFila_(f) { const c = {}; Object.keys(f).forEach((k) => { if (k !== '_fila') c[k] = f[k]; }); return c; }
-/* Lo que recibe quien atiende (Concentrix y Tiendas): sin número de falla, referencia, notas internas,
-   historial ni correos. Esa parte solo la ve Workforce HN. */
+/* Lo que recibe quien atiende (Concentrix y Tiendas): con el número de falla (es como se nombra la falla),
+   pero sin referencia, notas internas, historial ni correos. Esa parte solo la ve Workforce HN. */
 function fallaPublica_(f) {
   return {
-    id: f.id, estado: f.estado, motivo: f.motivo, motivoTexto: f.motivoTexto, clienteTexto: f.clienteTexto, nodos: f.nodos,
+    id: f.id, numero: f.numero || '', estado: f.estado, motivo: f.motivo, motivoTexto: f.motivoTexto, clienteTexto: f.clienteTexto, nodos: f.nodos,
     inicio: f.inicio, eta: f.eta, publicadaEn: f.publicadaEn, publicadaPor: { nombre: (f.publicadaPor && f.publicadaPor.nombre) || '' },
     cerradaEn: f.cerradaEn, impacto: f.impacto
   };
@@ -697,7 +696,7 @@ function accionFalla_(d, ses) {
         historial: [{ accion: 'PUBLICADA', en: ahora, por: por, detalle: datos.nodos.length === 1 ? '1 nodo' : datos.nodos.length + ' nodos' }]
       });
       tipo = 'FALLA_PUBLICADA';
-      texto = 'publicó la falla ' + idFalla_(f.id) + ' (' + nombreMotivo_(f) + ' en ' + lista_(f.nodos, 2) + ')';
+      texto = 'publicó la falla ' + nombreFalla_(f) + ' (' + nombreMotivo_(f) + ' en ' + lista_(f.nodos, 2) + ')';
     } else {
       f = todas.filter((x) => x.id === String(d.id || ''))[0];
       if (!f) throw fallo_('DATOS', 'La falla ya no existe.');
@@ -707,20 +706,20 @@ function accionFalla_(d, ses) {
         const det = texto_(d.detalle, 200);
         f.historial.push({ accion: 'EDITADA', en: ahora, por: por, detalle: det });
         tipo = 'FALLA_EDITADA';
-        texto = 'actualizó la falla ' + idFalla_(f.id) + (det ? ' (' + det + ')' : '');
+        texto = 'actualizó la falla ' + nombreFalla_(f) + (det ? ' (' + det + ')' : '');
       } else if (d.op === 'cerrar') {
         if (f.estado === 'CERRADA') throw fallo_('DATOS', 'Otra persona ya cerró esta falla.');
         const cuando = Math.min(Number(d.cerradaEn) || ahora, ahora);
         f.estado = 'CERRADA'; f.cerradaEn = Math.max(cuando, f.inicio); f.cerradaPor = por; f.notaCierre = texto_(d.nota, 200);
         f.historial.push({ accion: 'CERRADA', en: ahora, por: por, detalle: f.notaCierre });
         tipo = 'FALLA_CERRADA';
-        texto = 'cerró la falla ' + idFalla_(f.id) + ' (' + nombreMotivo_(f) + ')';
+        texto = 'cerró la falla ' + nombreFalla_(f) + ' (' + nombreMotivo_(f) + ')';
       } else if (d.op === 'reabrir') {
         if (f.estado === 'ACTIVA') throw fallo_('DATOS', 'La falla ya está activa.');
         f.estado = 'ACTIVA'; f.cerradaEn = null; f.cerradaPor = null; f.notaCierre = '';
         f.historial.push({ accion: 'REABIERTA', en: ahora, por: por, detalle: '' });
         tipo = 'FALLA_REABIERTA';
-        texto = 'reabrió la falla ' + idFalla_(f.id);
+        texto = 'reabrió la falla ' + nombreFalla_(f);
       } else throw fallo_('DATOS', 'Operación no válida.');
     }
     columnaNumeroFallas_(h);
@@ -759,7 +758,7 @@ function validarFalla_(x, ahora, nueva) {
   if (eta != null && (!isFinite(eta) || eta <= inicio)) eta = null;
   return {
     nodos: nodos, motivo: motivo, motivoTexto: motivoTexto, clienteTexto: clienteTexto, inicio: inicio, eta: eta,
-    numero: texto_(x.numero, 30).toUpperCase().replace(/\s+/g, ''), referencia: texto_(x.referencia, 120), detalle: texto_(x.detalle, 300),
+    numero: texto_(x.numero, 30).toUpperCase().replace(/[\s-]+/g, ''), referencia: texto_(x.referencia, 120), detalle: texto_(x.detalle, 300),
     impacto: impacto_(cat, nodos, idx)
   };
 }
@@ -768,6 +767,9 @@ function validarFalla_(x, ahora, nueva) {
    Las publicadas antes del 2 nov 2026 tienen guiones (F-261030-05): se muestran sin ellos
    (idFalla_) y cuentan para el número del día, así nunca se repite un ID. */
 const idFalla_ = (id) => String(id == null ? '' : id).replace(/-/g, '');
+/* Cómo se nombra una falla en pantalla y en los textos: el número de falla que pone Workforce
+   (por ejemplo F1254585) y, si todavía no lo tiene, el ID de Alertas */
+const nombreFalla_ = (f) => (f && f.numero ? String(f.numero) : idFalla_(f && f.id));
 function nuevoId_(todas, ahora) {
   const pref = 'F' + Utilities.formatDate(new Date(ahora), ALERTAS.ZONA, 'yyMMdd');
   let max = 0;
@@ -1170,7 +1172,7 @@ function accionTelefonos_(d, ses) {
     else sinTelefono++;
   });
 
-  const ids = fallas.map((f) => idFalla_(f.id));
+  const ids = fallas.map(nombreFalla_);
   const listaNodos = Object.keys(nodos);
   try {
     const hd = hojaEn_(libro_(), ALERTAS.HOJAS.descargas, COL_DESCARGAS);
@@ -1178,7 +1180,7 @@ function accionTelefonos_(d, ses) {
   } catch (e) { console.error('No se pudo anotar la descarga: ' + (e && e.message)); }
 
   const cuando = Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyy-MM-dd_HHmm');
-  const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + idFalla_(id) + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
+  const nombre = id === 'activas' ? 'sms_fallas_activas_' + cuando : 'sms_' + nombreFalla_(fallas[0]) + '_' + listaNodos.slice(0, 3).join('-') + (listaNodos.length > 3 ? '-y-mas' : '');
   return {
     archivo: nombre.replace(/[^A-Za-z0-9_\-]/g, '') + '.csv', fallas: ids, nodos: listaNodos.length,
     clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono, telefonos: numeros

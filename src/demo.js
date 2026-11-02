@@ -142,6 +142,8 @@ const Demo = (() => {
       if (f.estado === 'CERRADA') f.historial.push(hist('CERRADA', f.cerradaEn, f.cerradaPor, f.notaCierre));
       delete f.historialExtra;
       f.id = Model.nuevoId(fallas, f.publicadaEn);
+      // Número de falla del NOC (inventado); la más reciente todavía no lo tiene
+      if (f.numero === undefined) f.numero = 'F' + (1253900 + fallas.length * 17);
       fallas.push(f);
       return f;
     };
@@ -180,7 +182,7 @@ const Demo = (() => {
     // Activas
     const f1 = crear({ nodos: ['GRA03', 'GRA04', 'GRA07'], motivo: 'ENERGIA', inicio: now - 95 * M, publicadaEn: now - 82 * M, publicadaPor: W[2], eta: now + 65 * M, estado: 'ACTIVA', referencia: 'Correo NOC #9114', detalle: 'ENEE reporta corte en circuito de la zona.' });
     const pubF2 = now - 32 * M;
-    const f2 = crear({ nodos: ['ALTGC03', 'ALTGC04', 'ALTGC05', 'ALTGC08'], motivo: 'FIBRA', inicio: now - 44 * M, publicadaEn: pubF2, publicadaPor: W[1], estado: 'ACTIVA', referencia: 'Correo NOC #9121', detalle: 'Corte por trabajos de terceros en bulevar.',
+    const f2 = crear({ nodos: ['ALTGC03', 'ALTGC04', 'ALTGC05', 'ALTGC08'], motivo: 'FIBRA', inicio: now - 44 * M, publicadaEn: pubF2, publicadaPor: W[1], estado: 'ACTIVA', numero: '', referencia: 'Correo NOC #9121', detalle: 'Corte por trabajos de terceros en bulevar.',
       historialExtra: [hist('EDITADA', now - 21 * M, W[1], 'Agregó ALTGC08')] });
 
     // Consultas de 30 días

@@ -224,17 +224,19 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.fallas.find((f) => f.id === f1.id).numero === 'F1254585', 'Workforce ve el número de falla');
   const paraAsesor = JSON.stringify(g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: -1 } }).datos.fallas);
   const paraTienda = JSON.stringify(g.post({ accion: 'cargar', token: tTienda, datos: { baseVersion: -1 } }).datos.fallas);
-  ok(paraAsesor.includes(f1.id) && ['F1254585', 'NOC #9150', 'ENEE reporta', 'historial', '@claro.com.hn'].every((x) => !paraAsesor.includes(x) && !paraTienda.includes(x)) && paraAsesor.includes('Ana López'),
-    'Concentrix y Tiendas no reciben el número de falla, la referencia, las notas internas ni correos (sí quién publicó)', paraAsesor.slice(0, 300));
+  ok(paraAsesor.includes(f1.id) && ['NOC #9150', 'ENEE reporta', 'historial', '@claro.com.hn'].every((x) => !paraAsesor.includes(x) && !paraTienda.includes(x)) && paraAsesor.includes('Ana López'),
+    'Concentrix y Tiendas no reciben la referencia, las notas internas ni correos (sí quién publicó)', paraAsesor.slice(0, 300));
+  ok(paraAsesor.includes('"numero":"F1254585"') && paraTienda.includes('"numero":"F1254585"'), 'pero sí el número de falla, que es como se nombra la falla');
   r = g.post({ accion: 'estado', token: tAgente });
   ok(r.ok && r.datos.cambio && r.datos.cambio.tipo === 'FALLA_PUBLICADA' && r.datos.cambio.por.nombre === 'Ana López', 'estado avisa el cambio y quién lo hizo', r.datos);
+  ok(r.ok && /publicó la falla F1254585 /.test(r.datos.cambio.texto), 'el aviso nombra la falla con su número de falla: ' + (r.datos && r.datos.cambio && r.datos.cambio.texto));
   const cli = enNodo(nodosPrueba[0]);
   r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });
   ok(r.ok && r.datos.fallas.some((f) => f.id === f1.id), 'la búsqueda trae la falla del nodo del cliente');
-  ok(!JSON.stringify(r.datos).includes('F1254585') && !JSON.stringify(r.datos).includes('NOC #9150'), 'y tampoco trae el número de falla ni la referencia');
+  ok(JSON.stringify(r.datos).includes('F1254585') && !JSON.stringify(r.datos).includes('NOC #9150'), 'con el número de falla y sin la referencia');
   const hist1 = r.datos.historial && r.datos.historial[cli.nodo];
-  ok(hist1 && hist1.length === 1 && hist1[0].id === f1.id && hist1[0].fin === null && hist1[0].motivo === 'FIBRA' && !('numero' in hist1[0]),
-    'la búsqueda trae el historial de fallas del nodo del cliente (la activa, sin número para Concentrix)', r.datos && r.datos.historial);
+  ok(hist1 && hist1.length === 1 && hist1[0].id === f1.id && hist1[0].fin === null && hist1[0].motivo === 'FIBRA' && hist1[0].numero === 'F1254585',
+    'la búsqueda trae el historial de fallas del nodo del cliente (la activa, con su número de falla)', r.datos && r.datos.historial);
   const rWfH = g.post({ accion: 'buscar', token: tWf, datos: { q: String(cli.contrato) } });
   ok(rWfH.ok && rWfH.datos.historial[cli.nodo][0].numero === 'F1254585', 'Workforce sí ve el número de falla en el historial');
   let rc = g.post({ accion: 'contactos', token: tAgente, datos: { contrato: String(cli.contrato) } });
@@ -245,8 +247,8 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'editar', id: f1.id, falla: { nodos: nodosPrueba.slice(0, 2), eta: null }, detalle: 'Quitó ' + nodosPrueba[2] } });
   ok(r.ok && r.datos.falla.nodos.length === 2 && r.datos.falla.eta === null && r.datos.falla.historial.length === 2, 'editar quita un nodo y la hora estimada', r.datos && r.datos.falla);
   ok(r.ok && r.datos.falla.numero === 'F1254585', 'editar sin tocar el número lo conserva');
-  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'editar', id: f1.id, falla: { numero: 'F1254590' }, detalle: 'Número de falla F1254590' } });
-  ok(r.ok && r.datos.falla.numero === 'F1254590' && hFallas.getRange(2, 20).getValue() === 'F1254590', 'cambiar el número de falla');
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'editar', id: f1.id, falla: { numero: 'f-125 4590' }, detalle: 'Número de falla F1254590' } });
+  ok(r.ok && r.datos.falla.numero === 'F1254590' && hFallas.getRange(2, 20).getValue() === 'F1254590', 'cambiar el número de falla (se guarda sin espacios ni guiones)', r.datos && r.datos.falla && r.datos.falla.numero);
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id, nota: 'Empalme terminado' } });
   ok(r.ok && r.datos.falla.estado === 'CERRADA' && r.datos.falla.cerradaPor.nombre === 'Ana López', 'cerrar la falla');
   const cerrada = r.datos.falla.cerradaEn;
@@ -446,12 +448,12 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.telefonos.length > 0 && r.datos.telefonos.every((t) => /^504[3789]\d{7}$/.test(t)), 'todos con 504 adelante y 8 dígitos de celular');
   ok(r.ok && r.datos.clientes === porC.size && r.datos.conCelular === eCel && r.datos.soloFijo === eFijo && r.datos.sinTelefono === eSin,
     `cuenta clientes con celular (${eCel}), solo con fijo (${eFijo}) y sin teléfono (${eSin})`, r.datos && [r.datos.clientes, r.datos.conCelular, r.datos.soloFijo, r.datos.sinTelefono]);
-  ok(r.ok && /^sms_F\d{8}_[A-Za-z0-9_\-]+\.csv$/.test(r.datos.archivo), 'nombre del archivo: ' + (r.datos && r.datos.archivo));
+  ok(r.ok && /^sms_F1254590_[A-Za-z0-9_\-]+\.csv$/.test(r.datos.archivo), 'nombre del archivo, con el número de falla: ' + (r.datos && r.datos.archivo));
   const hdes = g.E.activo.getSheetByName('Descargas SMS');
   ok(hdes && hdes.getLastRow() === 2 && hdes.getRange(2, 3).getValue() === 'Ana López' && Number(hdes.getRange(2, 7).getValue()) === espera.size,
     'queda anotado quién descargó y cuántos números');
   r = g.post({ accion: 'telefonos', token: tWf, datos: { id: 'activas' } });
-  ok(r.ok && r.datos.fallas.includes(f1.id) && r.datos.telefonos.length >= espera.size && /^sms_fallas_activas_/.test(r.datos.archivo), 'todas las fallas activas en un solo archivo', r.datos && r.datos.fallas);
+  ok(r.ok && r.datos.fallas.includes('F1254590') && r.datos.telefonos.length >= espera.size && /^sms_fallas_activas_/.test(r.datos.archivo), 'todas las fallas activas en un solo archivo', r.datos && r.datos.fallas);
   r = g.post({ accion: 'telefonos', token: tWf, datos: { id: 'F-000000-99' } });
   ok(!r.ok && r.codigo === 'DATOS', 'una falla que no existe da un mensaje claro', r);
   const iTel = [...Array(b2.filas).keys()].find((i) => setN.has(b2.dicts.nodo[b2.cols.nodo[i]]) && b2.cols.telefono[i]);

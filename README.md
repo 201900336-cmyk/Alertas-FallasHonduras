@@ -148,11 +148,11 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 - **Mapa de fallas activas** (inicio de Consulta): con el nombre de cada departamento, y debajo la lista de departamentos afectados con sus clientes.
 - **Historial de fallas del cliente**: debajo del cliente y del guion. Muestra las fallas de su nodo desde que es cliente (90 días, 6 meses o 1 año): de cuándo a cuándo, cuánto duró cada una y las horas sin servicio en total. También dice cuántas veces lo consultaron en los últimos 7 días.
   - Con 3 o más fallas en 90 días lo marca como **Cliente reincidente** y el guion agrega una frase reconociéndolo.
-  - El número de falla solo lo ve Workforce HN.
+  - Cada falla sale con su número de falla.
   - Sale de las fallas publicadas en Alertas para el nodo actual del cliente; si el cliente se cambió de nodo, no salen las de su nodo anterior.
 - **Workforce HN**: en **Fallas > Nueva falla** escribe los nodos (por ejemplo `NODO01, NODO02`), elige el motivo y la hora estimada, revisa a cuántos clientes afecta y **Publicar falla**. Puede editarla, cerrarla o reabrirla.
-- En el paso 4 van el **número de falla** (por ejemplo `F1254585`), la referencia del correo o ticket y las notas. Solo los ve Workforce HN. El número aparece en la tarjeta de la falla, en el historial (se puede buscar por él) y en el CSV del historial.
-- Cada falla tiene un número de Alertas sin guiones: **F**, la fecha (año, mes y día) y el número del día, por ejemplo `F26110201` (la primera del 2 nov 2026). Las publicadas antes del 2 nov se guardaron con guiones (`F-261030-05`) y la página las muestra igual, sin guiones (`F26103005`).
+- En el paso 4 van el **número de falla** (por ejemplo `F1254585`), la referencia del correo o ticket y las notas. El número de falla es como se nombra la falla en todo Alertas y también lo ven los asesores: en el panel de fallas, en el veredicto y en el historial del cliente. Se guarda en mayúsculas, sin espacios ni guiones. La referencia y las notas solo las ve Workforce HN.
+- Si una falla todavía no tiene número de falla, sale con el ID que le pone Alertas: **F**, la fecha (año, mes y día) y el número del día, sin guiones, por ejemplo `F26110201`. La tarjeta avisa "Sin número todavía" y se agrega con **Editar**. Las publicadas antes del 2 nov se guardaron con guiones (`F-261030-05`) y salen sin ellos (`F26103005`). El historial encuentra una falla por su número de falla o por su ID, y el CSV trae los dos.
 - Una falla cerrada sigue visible para los asesores **36 horas** y luego sale de su panel. Workforce la conserva en el historial.
 - Cuando Workforce publica, edita, cierra o sube una base, los demás ven el aviso **"Workforce HN hizo una actualización"** en alrededor de un minuto. Lo que diga cada búsqueda siempre está al día: el servidor responde con las fallas del momento.
 - **Posibles fallas** (Workforce y Jefatura): cuando **5 clientes distintos** de un nodo sin falla publicada consultan en **60 minutos**, o 2 asesores lo reportan con **Reportar posible falla**, el nodo aparece en **Fallas > Posibles fallas**. Solo cuentan las búsquedas de Concentrix y Tiendas (las de Workforce revisando no suman, y un cliente que vuelve a llamar cuenta una vez). Con 3 o 4 clientes el nodo queda **en observación**.
@@ -203,7 +203,7 @@ Cada descarga queda anotada en la hoja **Descargas SMS** del Sheet (quién, cuá
 - **Límites**: 400 búsquedas por hora por persona y 8,000 por hora para toda la cuenta de Tiendas.
 - **Contraseñas equivocadas**: cinco errores bloquean 15 minutos solo a esa persona (por nombre y tienda), no a las demás tiendas. Si llegan 100 intentos fallidos en 15 minutos (alguien probando contraseñas), se bloquea la cuenta de Tiendas; cambiar la contraseña la desbloquea. Para el acceso temporal de Workforce el tope es 20.
 - **No hay búsquedas parciales**: solo contrato o DNI completos, máximo 20 resultados. No se puede listar la base desde la página.
-- **Lo interno de cada falla** (número de falla, referencia, notas, historial de cambios y correos de Workforce) solo viaja a Workforce y Jefatura. A Concentrix y Tiendas el servidor les manda solo lo que muestra su pantalla.
+- **Lo interno de cada falla** (referencia, notas, historial de cambios y correos de Workforce) solo viaja a Workforce y Jefatura. A Concentrix y Tiendas el servidor les manda solo lo que muestra su pantalla, que incluye el número de falla.
 - **Posibles fallas**: la lista y el detalle (con los nombres de los clientes) solo los reciben Workforce y Jefatura, sin teléfonos ni DNI. El correo se copia en la PC de quien lo va a enviar; Alertas no manda correos solo.
 - **Teléfonos**: solo Workforce y Jefatura descargan los celulares, solo de los nodos de una falla, y cada descarga queda anotada en **Descargas SMS**. El archivo tiene datos personales: después de subirlo a Notifícame, conviene borrarlo de la computadora.
 - **Alertas > Cerrar todas las sesiones** obliga a todos a volver a entrar (por ejemplo, si una contraseña se filtró).
@@ -249,7 +249,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 167 pruebas del servidor en un emulador de Apps Script
+npm test                           # 169 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

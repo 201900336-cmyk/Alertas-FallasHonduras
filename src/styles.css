@@ -576,6 +576,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tabla td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .tabla small.numero-falla { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .input.numero-falla { text-transform: uppercase; }
+.falla-card .meta .sin-numero { color: var(--ink-3); }
 .input.numero-falla::placeholder { text-transform: none; }
 .numero-falla { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .tabla tr:last-child td { border-bottom: 0; }

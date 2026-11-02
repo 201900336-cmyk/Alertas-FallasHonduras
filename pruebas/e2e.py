@@ -90,7 +90,7 @@ with sync_playwright() as p:
     w.click('.publicar-barra .btn-primario'); w.click('.modal .btn-primario')
     w.wait_for_selector('.falla-card', timeout=15000)
     ok(w.locator('.falla-card').count() >= 1, f'falla publicada en el servidor ({total} clientes)')
-    ok('F1254585' in w.locator('.falla-card .meta').first.inner_text(), 'la tarjeta muestra el número de falla F1254585')
+    ok(w.locator('.falla-card .id').first.inner_text() == 'F1254585', 'la tarjeta se nombra con el número de falla F1254585', w.locator('.falla-card .id').first.inner_text())
     w.locator('.falla-card').first.screenshot(path=OUT + 'e03c_tarjeta.png')
     c_falla = http('/test/contrato?nodo=' + ejemplos[0])['contrato']
     w.goto(APP + '#consulta'); w.wait_for_selector('.buscador-caja input')
@@ -101,7 +101,8 @@ with sync_playwright() as p:
     t.goto(APP + '#consulta'); t.wait_for_selector('.aviso', timeout=15000)
     ok('Ana López publicó la falla' in t.locator('.aviso p').inner_text(), 'aviso con quién publicó', t.locator('.aviso p').inner_text())
     t.click('.aviso .btn'); t.wait_for_selector('.falla-item')
-    ok('F1254585' not in json.dumps(t.evaluate('() => G.s.fallas')) and 'NOC #9150' not in t.content(), 'el número de falla y la referencia no llegan a Tiendas')
+    ok('F1254585' in t.locator('.falla-item .id').all_inner_texts() and 'NOC #9150' not in json.dumps(t.evaluate('() => G.s.fallas')) and 'NOC #9150' not in t.content(),
+       'Tiendas ve la falla con su número de falla (F1254585), sin la referencia', t.locator('.falla-item .id').all_inner_texts())
     ok(t.locator('.mapa path[fill*="seq-5"]').count() >= 1, 'el mapa pinta el departamento afectado')
     cab = t.locator('.mapa-grid.apilado .hbar.cab').inner_text()
     ok('Departamento' in cab and 'Clientes' in cab, 'en Consulta el mapa va a todo lo ancho, con la lista abajo y los encabezados Departamento y Clientes')
@@ -111,7 +112,7 @@ with sync_playwright() as p:
     ok('Le comento' in t.locator('.guion-texto').inner_text(), 'Tiendas recibe el guion')
     t.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)
     hist = t.locator('.historial-cliente').inner_text()
-    ok('Falla de energía comercial' in hist and 'sigue activa' in hist and 'F1254585' not in hist, 'Tiendas ve el historial de fallas del cliente, sin el número de falla')
+    ok('Falla de energía comercial' in hist and 'sigue activa' in hist and 'F1254585' in hist, 'Tiendas ve el historial de fallas del cliente, con el número de falla')
     t.wait_for_function("() => { const b = document.querySelector('.hist-kpis > div:last-child b'); return b && b.textContent !== '…'; }", timeout=15000)
     ok(t.locator('.hist-kpis > div:last-child b').inner_text() in ('0', '1'), 'y cuántas veces lo consultaron antes (' + t.locator('.hist-kpis > div:last-child').inner_text().replace('\n', ' ') + ')')
     t.screenshot(path=OUT + 'e05_tiendas_falla.png', full_page=True)

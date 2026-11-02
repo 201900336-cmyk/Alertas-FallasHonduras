@@ -181,7 +181,6 @@ function HistorialCliente({ rec, lista, now, rein }) {
   const per = PERIODOS_HIST.find((p) => p[0] === dias);
   const h = Model.historialCliente(lista, rec, now, dias);
   const c = useContactos(rec.contrato);
-  const wf = puede('fallas');
   return html`<section class="panel historial-cliente" aria-label="Historial de fallas del cliente">
     <div class="panel-cab">
       <h3>Historial de fallas de este cliente</h3>
@@ -202,7 +201,7 @@ function HistorialCliente({ rec, lista, now, rein }) {
         <div class="hist-motivo"><b>${nombreMotivo(f)}</b><span class="sub">Nodo ${rec.nodo}</span></div>
         <div class="num hist-fechas">${fechaHist(f.inicio, now)} → ${f.fin ? fechaHist(f.fin, now) : 'sigue activa'}</div>
         <div class="num hist-dur">${U.dur((f.fin || now) - f.inicio)}</div>
-        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">Activa</span>`}${wf && f.numero && html`<span class="chip codigo">${f.numero}</span>`}</div>
+        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">Activa</span>`}${f.numero && html`<span class="chip codigo">${U.numeroFalla(f)}</span>`}</div>
       </li>`)}</ol>`
       : html`<div class="vacio hist-vacio"><b>Sin fallas ${per[2]}</b>Workforce HN no ha registrado fallas en su nodo en este periodo.</div>`}
     <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}.</p>
@@ -217,12 +216,12 @@ function Veredicto({ v, rec, now }) {
     l1 = nombreMotivo(f) + ' en el nodo ' + rec.nodo + '.';
     l2 = 'Afectado desde las ' + U.hora(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
       + (f.eta ? (f.eta > now ? U.conPunto('Solución estimada: ' + U.cuandoCorto(f.eta, now)) : 'La hora estimada (' + U.hora(f.eta) + ') ya pasó; Workforce HN sigue dando seguimiento.') : 'Aún sin hora estimada de solución.');
-    sello = 'Falla ' + U.idFalla(f.id) + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
+    sello = 'Falla ' + U.numeroFalla(f) + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
   } else if (v.tipo === 'RESUELTA') {
     titulo = 'Falla resuelta';
     l1 = U.conPunto(nombreMotivo(f) + ' en el nodo ' + rec.nodo + ', solucionada ' + U.cuando(f.cerradaEn, now));
     l2 = 'Si el cliente sigue sin servicio, pídele reiniciar su equipo antes de escalar.';
-    sello = 'Falla ' + U.idFalla(f.id);
+    sello = 'Falla ' + U.numeroFalla(f);
   } else if (v.tipo === 'SIN_FALLA') {
     titulo = 'Sin falla general';
     l1 = 'El nodo ' + rec.nodo + ' no tiene fallas reportadas por Workforce HN.';
@@ -420,7 +419,7 @@ function FallaItem({ f, now }) {
   const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
   const imp = f.impacto || { total: 0, hfc: 0, gpon: 0, deps: [] };
   return html`<button type="button" class="falla-item" data-s=${f.estado} aria-expanded=${abierto} onClick=${() => setAbierto(!abierto)}>
-    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.idFalla(f.id)}</span></div>
+    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
     <div class="nodos">${U.listaNatural(f.nodos, 3)}</div>
     <div class="m">
       ${activa ? html`<span>Desde las ${U.hora(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
