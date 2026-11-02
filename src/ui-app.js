@@ -334,7 +334,7 @@ function AvisoCambios() {
   const quien = c.por ? c.por.nombre : 'Alguien';
   return html`<div class="aviso" role="alert">
     <span class="aviso-icono"><${Ico} n="refrescar" s=${17} /></span>
-    <p><b>${CONFIG.equipo} hizo una actualización.</b> ${U.conPunto(quien + ' ' + (c.texto || 'hizo cambios') + (c.en ? ' a las ' + U.hora(c.en) : ''))} Actualiza para ver los cambios.</p>
+    <p><b>${CONFIG.equipo} hizo una actualización.</b> ${U.conPunto(quien + ' ' + (c.texto || 'hizo cambios') + (c.en ? ' a ' + U.las(c.en) : ''))} Actualiza para ver los cambios.</p>
     <button class="btn btn-chico" onClick=${A.actualizar}>Actualizar</button>
   </div>`;
 }

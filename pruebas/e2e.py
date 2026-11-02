@@ -203,6 +203,53 @@ with sync_playwright() as p:
     x.locator('.pf-tarjeta', has_text=nodoPF).locator('button:has-text("Crear falla")').click()
     x.wait_for_selector(f'.lista-nodos .nodo-chip:has-text("{nodoPF}")', timeout=5000)
     ok(x.locator('.lista-nodos .nodo-chip').count() == 1, 'Crear falla deja el nodo listo en Publicar falla')
+    ok(x.locator('.motivo-posible').get_attribute('aria-pressed') == 'true', 'con el motivo "Posible falla general" ya elegido')
+    primera = x.evaluate("""(n) => { const a = G.s.alertas.find((x) => x.nodo === n); const d = new Date(a.primero); const p = (v) => String(v).padStart(2, '0');
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }""", nodoPF)
+    ok(x.locator('input[type=datetime-local]').first.input_value() == primera, 'y el inicio en la primera llamada de los clientes (' + primera[11:] + ')', x.locator('input[type=datetime-local]').first.input_value())
+    x.locator('.paso', has_text='Motivo').screenshot(path=OUT + 'e06c_motivo_posible.png')
+    x.click('.publicar-barra .btn-primario'); x.click('.modal .btn-primario')
+    x.wait_for_selector(f'.falla-card:has-text("{nodoPF}")', timeout=15000)
+    fpos = x.evaluate("(n) => G.s.fallas.find((f) => f.estado === 'ACTIVA' && f.motivo === 'VALIDACION' && f.nodos.includes(n))", nodoPF)
+    det = (fpos or {}).get('deteccion') or {}
+    ok(fpos and det.get('clientes') == 5 and det.get('llamadas', 0) >= 5 and det.get('aviso') and det['primera'] <= det['aviso'] <= fpos['publicadaEn'],
+       f'se publica como posible falla y el servidor guarda la detección ({det.get("llamadas")} llamadas de {det.get("clientes")} clientes antes de publicar)', det)
+    tarjeta_pf = x.locator('.falla-card', has_text=nodoPF)
+    ok('En validación' in tarjeta_pf.inner_text() and tarjeta_pf.locator('button:has-text("Descartar")').count() == 1, 'la tarjeta dice En validación y ofrece Descartar')
+    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+    a.fill('.buscador-caja input', contratosPF[1]); a.keyboard.press('Enter'); a.wait_for_selector(f'.cliente-ids:has-text("{contratosPF[1]}")', timeout=20000)
+    ok(a.locator('.veredicto').get_attribute('data-s') == 'FALLA' and 'Posible falla general' in a.locator('.veredicto').inner_text(), 'Concentrix ve "Posible falla general" en ese nodo')
+    a.wait_for_selector('.nota-qflow', timeout=5000)
+    nota = a.locator('.nota-qflow p').inner_text()
+    ok(nota.startswith('Cliente en posible falla general, nodo ' + nodoPF) and 'en validación con el VOC' in nota, 'con la nota para Qflow: ' + nota)
+    a.click('.nota-qflow button'); a.wait_for_timeout(300)
+    ok(a.evaluate('() => navigator.clipboard.readText()') == nota and 'Nota copiada' in a.locator('.nota-qflow button').inner_text(), 'Copiar nota del caso la deja en el portapapeles')
+    a.locator('.guion').screenshot(path=OUT + 'e06d_nota_qflow.png')
+    # Descartarla: el VOC no encontró falla
+    tarjeta_pf.locator('button:has-text("Descartar")').click(); x.wait_for_selector('.modal:has-text("Descartar la posible falla")', timeout=5000)
+    x.fill('.modal input[placeholder^="Ejemplo: El VOC"]', 'El VOC no encontró falla'); x.click('.modal .btn-peligro'); x.wait_for_timeout(1500)
+    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+    a.fill('.buscador-caja input', contratosPF[2]); a.keyboard.press('Enter'); a.wait_for_selector(f'.cliente-ids:has-text("{contratosPF[2]}")', timeout=20000)
+    a.wait_for_selector('.historial-cliente', timeout=15000)
+    ok(a.locator('.veredicto').get_attribute('data-s') == 'SIN_FALLA' and 'Posible falla' not in a.locator('.historial-cliente').inner_text(),
+       'descartada, Concentrix ya no la ve (ni como resuelta ni en el historial del cliente)', a.locator('.veredicto').get_attribute('data-s'))
+    x.evaluate('() => A.revisarAlertas()'); x.wait_for_timeout(1500)
+    ok(x.locator('.pf-tarjeta', has_text=nodoPF).count() == 0, 'y el aviso de posible falla no vuelve a salir con los mismos clientes')
+    # Llamó: Tiendas consultó a c_falla durante F1254585; al cerrarla, el historial lo marca
+    f_energia = x.evaluate("() => G.s.fallas.find((f) => f.numero === 'F1254585').id")
+    x.evaluate("(id) => A.cerrarFalla(id, Date.now(), 'Energía restablecida')", f_energia); x.wait_for_timeout(1000)
+    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+    a.fill('.buscador-caja input', c_falla); a.keyboard.press('Enter'); a.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)
+    a.wait_for_selector('.hist-etiquetas .llamo', timeout=15000)
+    ok(a.locator('.hist-etiquetas .llamo').first.inner_text().strip() == 'Llamó 1 vez', 'el historial marca que el cliente llamó durante esa falla (sin contar las búsquedas de Workforce)', a.locator('.hist-etiquetas .llamo').all_inner_texts())
+    nota = a.locator('.nota-qflow p').inner_text()
+    ok(nota.startswith('Cliente en falla general F1254585 (energía comercial), nodo ') and 'solucionada hoy a' in nota, 'nota para Qflow de una falla resuelta: ' + nota)
+    a.locator('.historial-cliente').screenshot(path=OUT + 'e06e_llamo.png')
+    x.goto(APP + '#stats'); x.wait_for_selector('.deteccion', timeout=60000); x.wait_for_timeout(800)
+    det_txt = x.locator('.deteccion').inner_text()
+    ok('1 posible falla descartada' in det_txt and 'F1254585' in det_txt and 'De la primera llamada a publicar' in det_txt,
+       'Estadísticas: detección de fallas, sin la posible falla descartada (la cuenta aparte)', det_txt[:300])
+    x.locator('.deteccion').screenshot(path=OUT + 'e06f_deteccion.png')
 
     if EXCEL:
         print('8. Subir la base real desde la página')

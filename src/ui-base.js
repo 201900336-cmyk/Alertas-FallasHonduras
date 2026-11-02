@@ -84,7 +84,7 @@ function VistaBase() {
         <div class="panel-cab"><h3>Base actual</h3>${s.meta.demo && html`<span class="der marca-estado" data-s="RESUELTA">Demostración</span>`}</div>
         ${r ? html`
           <div class="panel-cuerpo" style="padding-top:8px">
-            <div class="sub">${(r.por && r.en) || ult ? html`Subida por <b style="color:var(--ink)">${(r.por && r.por.nombre) || ult.por.nombre}</b> el ${U.dia(r.en || ult.en)} a las ${U.hora(r.en || ult.en)}` : 'Sin registro de carga'}${r.archivo ? html`<br />${r.archivo}` : ''}</div>
+            <div class="sub">${(r.por && r.en) || ult ? html`Subida por <b style="color:var(--ink)">${(r.por && r.por.nombre) || ult.por.nombre}</b> el ${U.dia(r.en || ult.en)} a ${U.las(r.en || ult.en)}` : 'Sin registro de carga'}${r.archivo ? html`<br />${r.archivo}` : ''}</div>
           </div>
           <div class="resumen-base">
             <div><b class="num">${U.n(r.filas)}</b><span>servicios</span></div>

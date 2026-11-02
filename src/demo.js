@@ -238,6 +238,20 @@ const Demo = (() => {
         logs.push({ t, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: r() < 0.82 ? 'contrato' : 'dni', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: U.esVirtual(x.nodo) ? 'SIN_NODO' : 'SIN_FALLA', f: null, tipo: 'consulta' });
       }
     }
+    // Llamadas antes de publicar cada falla: los clientes llaman y reciben "Sin falla general" hasta que
+    // Workforce HN la publica. De aquí sale el tiempo de detección. Algunas se publicaron antes de que llamaran.
+    for (const f of fallas) {
+      if (f.estado !== 'ACTIVA' && r() < 0.18) continue;
+      const filas = filasDe(f.nodos); if (!filas.length) continue;
+      const k = f.estado === 'ACTIVA' ? ent(6, 9) : ent(2, 9);
+      let t = f.publicadaEn - ent(1, 8) * M, previo = null;
+      for (let j = 0; j < k; j++) {
+        const i = previo != null && r() < 0.12 ? previo : pick(filas); previo = i;
+        const x = reg(i); const a = asesor();
+        logs.push({ t, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: j === 1 && r() < 0.2 ? 'reporte' : 'consulta' });
+        t -= ent(2, 24) * M;
+      }
+    }
     // Posible falla: 6 clientes de SCA05 sin falla publicada en los últimos minutos (uno en una tienda
     // y otro reportado por el asesor), y DNLGC04 en observación con 3 clientes
     const sca = filasDe(['SCA05']);
@@ -252,6 +266,8 @@ const Demo = (() => {
       logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: 'consulta' });
     });
     logs.sort((a, b) => a.t - b.t);
+    // El servidor lo calcula y lo guarda al publicar; aquí se calcula con las mismas reglas
+    fallas.forEach((f) => { f.deteccion = Model.deteccion(logs, f.nodos, f.publicadaEn); });
 
     const baseHist = [21, 14, 7, 2].map((d, k) => ({
       en: U.inicioDia(now - d * D) + 7.5 * H, por: k % 2 ? W[3] : W[0], archivo: 'Contrato por Nodo (demo) semana ' + (k + 1) + '.xlsx',

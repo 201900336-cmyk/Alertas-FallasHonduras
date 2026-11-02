@@ -282,6 +282,7 @@ button { cursor: pointer; }
 .hist-dur { font-weight: 650; white-space: nowrap; }
 .hist-etiquetas { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .hist-etiquetas .chip { font-size: 12px; }
+.hist-etiquetas .llamo { font-weight: 650; color: var(--ink); }
 .hist-vacio { padding: 18px 16px; }
 .hist-pie { margin: 0; padding: 10px 20px 16px; border-top: 1px solid var(--line); }
 
@@ -357,6 +358,11 @@ button { cursor: pointer; }
 .recos { margin: 18px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .recos li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
 .recos li svg { margin-top: 2px; color: var(--ink-3); }
+/* Nota corta para la descripción del caso en Qflow */
+.nota-qflow { margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.nota-qflow-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nota-qflow-cab > span { font-size: 12px; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.nota-qflow p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
 
 .no-encontrado { padding: 26px; display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start; }
 .no-encontrado .ico { width: 48px; height: 48px; border-radius: 14px; background: var(--surface-3); display: grid; place-items: center; color: var(--ink-2); }
@@ -538,6 +544,11 @@ button { cursor: pointer; }
 .motivo svg { flex: none; color: var(--ink-3); }
 .motivo[aria-pressed="true"] { border-color: var(--ink); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--ink); }
 .motivo[aria-pressed="true"] svg { color: var(--ink); }
+/* Posible falla general: a todo el ancho, con la explicación */
+.motivo-posible { grid-column: 1 / -1; align-items: flex-start; padding: 12px 14px; }
+.motivo-posible svg { margin-top: 1px; }
+.motivo-posible b { display: block; font-size: 14px; }
+.motivo-posible small { display: block; margin-top: 2px; font-weight: 500; font-size: 12.5px; color: var(--ink-3); line-height: 1.4; }
 .fila-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .eta-opciones { display: flex; flex-wrap: wrap; gap: 6px; }
 
@@ -634,6 +645,30 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .comp-barras .pista i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 4px 4px 0; }
 .comp-barras b { min-width: 52px; text-align: right; font-weight: 650; }
 .equipo-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; }
+/* Detección de fallas: KPI propios y una barra por falla (gris: llamando sin aviso; ámbar: del aviso a publicar) */
+.det-kpis { margin-top: 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.det-kpis .kpi { padding: 14px 20px; }
+.det-kpis .kpi .v { font-size: 26px; }
+.det-tabla td { vertical-align: middle; }
+.det-tabla .sub { font-size: 12px; }
+.det-linea { display: flex; align-items: center; gap: 10px; min-width: 210px; }
+.det-pista { flex: 1; display: flex; height: 10px; min-width: 120px; }
+.det-pista i { display: block; height: 100%; background: var(--chart-ink); }
+.det-pista i:first-child { border-radius: 3px 0 0 3px; }
+.det-pista i:last-child { border-radius: 0 3px 3px 0; }
+.det-pista i:only-child { border-radius: 3px; }
+.det-pista i.det-aviso { background: var(--resuelta); }
+.det-linea b { min-width: 58px; text-align: right; font-weight: 650; font-size: 13px; }
+.det-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--ok-text); font-weight: 600; font-size: 13px; }
+.det-nota { margin: 12px 0 0; font-size: 12.5px; line-height: 1.45; max-width: 110ch; }
+.det-nodos-movil { display: none; }
+@media (max-width: 720px) {
+  /* En el teléfono los nodos van debajo de la falla, para que la barra quepa mejor */
+  .det-tabla .det-nodos { display: none; }
+  .det-nodos-movil { display: block; margin-top: 2px; }
+  .det-linea { min-width: 170px; }
+  .det-pista { min-width: 90px; }
+}
 .impacto-linea { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .impacto-linea .tec { font-size: 12px; }
 .c-12 { grid-column: span 12; } .c-8 { grid-column: span 8; } .c-7 { grid-column: span 7; } .c-6 { grid-column: span 6; } .c-5 { grid-column: span 5; } .c-4 { grid-column: span 4; }
@@ -1436,7 +1471,11 @@ const CONFIG = {
   },
 
   // "cliente" es la forma en que el asesor le explica el motivo al cliente.
+  // VALIDACION: posible falla general, para publicarla apenas llega el aviso de 5 clientes mientras el VOC
+  // la confirma. Al confirmarla se edita y se le pone el motivo real; si se cierra así, queda descartada.
   motivos: [
+    { id: 'VALIDACION', nombre: 'Posible falla general', corto: 'Posible falla', posible: true,
+      cliente: 'un posible inconveniente en la red de su zona que nuestro equipo técnico está validando' },
     { id: 'ENERGIA', nombre: 'Falla de energía comercial', corto: 'Energía comercial',
       cliente: 'una interrupción del suministro de energía eléctrica que afecta nuestros equipos en su zona' },
     { id: 'FIBRA', nombre: 'Corte de fibra óptica', corto: 'Corte de fibra',
@@ -1468,9 +1507,23 @@ const CONFIG = {
     SIN_FALLA: [
       'Si el cliente dice que sus vecinos tampoco tienen servicio, usa Reportar posible falla: Workforce HN recibe la alerta cuando varios clientes del mismo nodo llaman.'
     ],
-    SIN_NODO: []
-  }
-};
+    SIN_NODO: [],
+    POSIBLE: [
+      'Es una posible falla: Workforce HN la está validando con el VOC. Si se confirma, aquí verás el motivo y la hora estimada.',
+      'Si lo que reporta el cliente es distinto a lo de sus vecinos (por ejemplo, solo un equipo o una sola TV), sigue con el soporte normal.'
+    ]
+  },
+
+  // Nota corta para pegar en la descripción del caso en Qflow, según el resultado de la consulta. Así todos
+  // documentan igual. {nodo} {numero} {motivo} {inicio} {eta} {cerrada} {contrato} se reemplazan con los datos
+  // del cliente y la falla; {inicio} y {cerrada} ya traen "las" o el día ("ayer a las 3:00 p. m.").
+  notaQflow: {
+    FALLA: 'Cliente en falla general {numero} ({motivo}), nodo {nodo}, desde {inicio}; {eta}. Se le informó al cliente.',
+    POSIBLE: 'Cliente en posible falla general, nodo {nodo}, desde {inicio}; en validación con el VOC. Se le informó al cliente.',
+    RESUELTA: 'Cliente en falla general {numero} ({motivo}), nodo {nodo}, solucionada {cerrada}. Se le indicó reiniciar el equipo.',
+    SIN_FALLA: 'Sin falla general en el nodo {nodo}. Se continúa con el soporte normal.',
+    SIN_NODO: 'Nodo virtual ({nodo}): no se puede confirmar una falla general. Se continúa con el soporte normal.'
+  }};
 
 const MOTIVO = Object.fromEntries(CONFIG.motivos.map((m) => [m.id, m]));
 
@@ -1527,7 +1580,9 @@ const U = (() => {
     if (d === -1) return 'mañana';
     return 'el ' + dia(ts);
   };
-  const cuando = (ts, now) => diaRel(ts, now) + ' a las ' + hora(ts);
+  /* "las 3:00 p. m." o "la 1:30 p. m." (la una lleva "la") */
+  const las = (ts) => { const h = hora(ts); return (/^1:/.test(h) ? 'la ' : 'las ') + h; };
+  const cuando = (ts, now) => diaRel(ts, now) + ' a ' + las(ts);
   const cuandoCorto = (ts, now) => (esHoy(ts, now) ? hora(ts) : dia(ts) + ', ' + hora(ts));
 
   const dur = (ms) => {
@@ -1653,7 +1708,7 @@ const U = (() => {
     return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
   };
 
-  return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
+  return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
 })();
@@ -2136,7 +2191,11 @@ const Model = (() => {
   }
 
   /* ---------- Fallas ---------- */
-  const visible = (f, now) => f.estado === 'ACTIVA' || (f.estado === 'CERRADA' && f.cerradaEn && now - f.cerradaEn < CONFIG.horasVisibleTrasCierre * U.HORA);
+  /* Posible falla general (motivo VALIDACION): se publica mientras el VOC la confirma. Si se cierra sin
+     ponerle el motivo real, queda descartada: no la ven los asesores ni entra al historial del cliente. */
+  const esPosible = (f) => !!f && f.motivo === 'VALIDACION';
+  const descartada = (f) => esPosible(f) && f.estado !== 'ACTIVA';
+  const visible = (f, now) => f.estado === 'ACTIVA' || (f.estado === 'CERRADA' && f.cerradaEn && !descartada(f) && now - f.cerradaEn < CONFIG.horasVisibleTrasCierre * U.HORA);
   function mapaFallas(fallas, now) {
     const visibles = fallas.filter((f) => visible(f, now));
     const porNodo = new Map();
@@ -2172,7 +2231,7 @@ const Model = (() => {
     const desde = now - 400 * U.DIA, out = {};
     nodos.forEach((n) => { out[n] = []; });
     fallas.forEach((f) => {
-      if (f.estado !== 'ACTIVA' && (f.cerradaEn || 0) < desde) return;
+      if (f.estado !== 'ACTIVA' && ((f.cerradaEn || 0) < desde || descartada(f))) return;
       f.nodos.forEach((n) => {
         if (!out[n]) return;
         const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.estado === 'ACTIVA' ? null : f.cerradaEn };
@@ -2203,6 +2262,8 @@ const Model = (() => {
       if (l.r === 'FALLA' || l.r === 'NO_ENCONTRADO' || esInterno(l.canal)) continue;
       const lst = mf.porNodo.get(l.n);
       if (lst && lst.some((f) => f.estado === 'ACTIVA')) continue;
+      // Lo de antes de cerrar su última falla (resuelta o descartada) ya quedó explicado por esa falla
+      if (lst && lst.some((f) => f.cerradaEn && l.t <= f.cerradaEn)) continue;
       const desc = descartadas && descartadas[l.n];
       if (desc && l.t <= desc) continue;
       let e = por.get(l.n);
@@ -2219,6 +2280,61 @@ const Model = (() => {
       })
       .filter((e) => e.nivel)
       .sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alerta' ? -1 : 1) || b.nClientes - a.nClientes || b.ultimo - a.ultimo);
+  }
+
+  /* ---------- Detección (igual que deteccionFalla_ del servidor) ----------
+     La racha de consultas de clientes de los nodos que llega hasta la publicación, hasta 4 horas atrás: sin
+     pausas de más de 45 minutos entre una y otra, ni entre la última y la publicación. Llamadas que se
+     cortaron antes (de otro problema ya pasado) no cuentan.
+     logs: [{ t, n, c, canal, r, tipo }] */
+  function deteccion(logs, nodos, publicada) {
+    const enNodos = new Set(nodos);
+    const filas = logs.filter((l) => enNodos.has(l.n) && l.t <= publicada && l.t >= publicada - 4 * U.HORA
+      && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !esInterno(l.canal)).sort((a, b) => a.t - b.t);
+    // La racha de llamadas que llega hasta la publicación: sin pausas de más de 45 minutos entre una
+    // llamada y la siguiente, ni entre la última y la publicación
+    let ini = filas.length, ref = publicada;
+    for (let i = filas.length - 1; i >= 0; i--) { if (ref - filas[i].t > 45 * U.MIN) break; ini = i; ref = filas[i].t; }
+    const racha = filas.slice(ini);
+    if (!racha.length) return { primera: null, aviso: null, llamadas: 0, clientes: 0 };
+    let aviso = null;
+    for (let i = 0; i < racha.length && aviso == null; i++) {
+      const vistos = new Set(); let reportes = 0;
+      for (let j = i; j < racha.length && racha[j].t - racha[i].t <= CONFIG.alerta.minutos * U.MIN; j++) {
+        if (racha[j].c) vistos.add(String(racha[j].c));
+        if (racha[j].tipo === 'reporte') reportes++;
+        if (vistos.size >= CONFIG.alerta.clientesDistintos || reportes >= CONFIG.alerta.reportes) { aviso = racha[j].t; break; }
+      }
+    }
+    return { primera: racha[0].t, aviso, llamadas: racha.length, clientes: new Set(racha.filter((x) => x.c).map((x) => String(x.c))).size };
+  }
+
+  /* Cuántas veces llamó un cliente durante una falla: sus consultas entre el inicio y el fin, contando
+     como una sola las que están a menos de 10 minutos (varias búsquedas en la misma llamada) */
+  function llamadasEn(veces, desde, hasta) {
+    let n = 0, ultima = -Infinity;
+    (veces || []).filter((t) => t >= desde && t <= hasta).sort((a, b) => a - b).forEach((t) => { if (t - ultima > 10 * U.MIN) { n++; ultima = t; } });
+    return n;
+  }
+
+  /* Nota para la descripción del caso en Qflow (plantillas en CONFIG.notaQflow) */
+  function notaQflow(v, rec, now) {
+    const f = v.falla;
+    const clave = v.tipo === 'FALLA' && esPosible(f) ? 'POSIBLE' : v.tipo;
+    const plantilla = CONFIG.notaQflow[clave];
+    if (!plantilla) return '';
+    const hora = (t) => U.hora(t).replace(/\u00a0/g, ' ');
+    // "las 3:00 p. m.", "la 1:30 p. m.", "ayer a las 9:15 a. m." o "el 30 oct a las 9:15 a. m."
+    const momento = (t) => { const h = hora(t), art = /^1:/.test(h) ? 'la ' : 'las '; return U.esHoy(t, now) ? art + h : U.diaRel(t, now) + ' a ' + art + h; };
+    const motivo = !f ? '' : f.motivo === 'OTRO' ? String(f.motivoTexto || 'otro motivo').replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ])/, (c) => c.toLowerCase())
+      : MOTIVO[f.motivo].nombre.replace(/^Falla de /, '').toLowerCase();
+    const datos = {
+      contrato: String(rec.contrato), nodo: rec.nodo, numero: f ? U.numeroFalla(f) : '', motivo,
+      inicio: f ? momento(f.inicio) : '',
+      eta: f && f.eta && f.eta > now ? 'solución estimada ' + U.cuandoCorto(f.eta, now).replace(/\u00a0/g, ' ') : 'sin hora estimada de solución',
+      cerrada: f && f.cerradaEn ? (U.esHoy(f.cerradaEn, now) ? 'hoy a ' : '') + momento(f.cerradaEn) : ''
+    };
+    return plantilla.replace(/\{(\w+)\}/g, (m, k) => (k in datos ? datos[k] : m)).replace(/\.\./g, '.');
   }
 
   /* ---------- Correo para reportar una posible falla (al VOC o al personal interno) ----------
@@ -2253,7 +2369,7 @@ const Model = (() => {
     const nodoTxt = d.nodo + (tec ? ' (' + tec + ')' : '');
 
     const asunto = 'Posible falla en nodo ' + d.nodo + (tec || muni ? ' (' + [tec, muni && U.lugar(muni)].filter(Boolean).join(', ') + ')' : '') + ' – ' + n + ' clientes en ' + lapso;
-    const cuando = hora(desde) === hora(hasta) ? 'A las ' + hora(desde) : 'De ' + hora(desde) + ' a ' + hora(hasta);
+    const cuando = hora(desde) === hora(hasta) ? (/^1:/.test(hora(desde)) ? 'A la ' : 'A las ') + hora(desde) : 'De ' + hora(desde) + ' a ' + hora(hasta);
     const p1 = ['Les reportamos una posible falla en el nodo ', { b: nodoTxt }, (lugar ? ', ' + lugar : '') + '. ' + cuando + ' se comunicaron con nosotros ',
       { b: n + ' clientes distintos' }, ' de este nodo' + canales + reportes + '.'];
     const p2 = [(info && info.total ? 'El nodo tiene ' + U.n(info.total) + ' clientes. ' : '') + 'Por ahora no tenemos una falla registrada en este nodo.'];
@@ -2316,7 +2432,7 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, esInterno, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();
 
@@ -2562,6 +2678,20 @@ const Demo = (() => {
         logs.push({ t, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: r() < 0.82 ? 'contrato' : 'dni', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: U.esVirtual(x.nodo) ? 'SIN_NODO' : 'SIN_FALLA', f: null, tipo: 'consulta' });
       }
     }
+    // Llamadas antes de publicar cada falla: los clientes llaman y reciben "Sin falla general" hasta que
+    // Workforce HN la publica. De aquí sale el tiempo de detección. Algunas se publicaron antes de que llamaran.
+    for (const f of fallas) {
+      if (f.estado !== 'ACTIVA' && r() < 0.18) continue;
+      const filas = filasDe(f.nodos); if (!filas.length) continue;
+      const k = f.estado === 'ACTIVA' ? ent(6, 9) : ent(2, 9);
+      let t = f.publicadaEn - ent(1, 8) * M, previo = null;
+      for (let j = 0; j < k; j++) {
+        const i = previo != null && r() < 0.12 ? previo : pick(filas); previo = i;
+        const x = reg(i); const a = asesor();
+        logs.push({ t, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: j === 1 && r() < 0.2 ? 'reporte' : 'consulta' });
+        t -= ent(2, 24) * M;
+      }
+    }
     // Posible falla: 6 clientes de SCA05 sin falla publicada en los últimos minutos (uno en una tienda
     // y otro reportado por el asesor), y DNLGC04 en observación con 3 clientes
     const sca = filasDe(['SCA05']);
@@ -2576,6 +2706,8 @@ const Demo = (() => {
       logs.push({ t: now - mins * M, u: a[0], un: a[1], canal: a[2], tienda: a[3], q: 'contrato', c: x.contrato, n: x.nodo, tec: x.tecnologia, dep: x.departamento, r: 'SIN_FALLA', f: null, tipo: 'consulta' });
     });
     logs.sort((a, b) => a.t - b.t);
+    // El servidor lo calcula y lo guarda al publicar; aquí se calcula con las mismas reglas
+    fallas.forEach((f) => { f.deteccion = Model.deteccion(logs, f.nodos, f.publicadaEn); });
 
     const baseHist = [21, 14, 7, 2].map((d, k) => ({
       en: U.inicioDia(now - d * D) + 7.5 * H, por: k % 2 ? W[3] : W[0], archivo: 'Contrato por Nodo (demo) semana ' + (k + 1) + '.xlsx',
@@ -2875,7 +3007,8 @@ function BackendLocal() {
       const l = (await Store.leerLogs(ahora - 30 * U.DIA)).filter((x) => String(x.c) === String(contrato)).sort((a, b) => b.t - a.t);
       const actual = l.length && ahora - l[0].t < 120000 ? 1 : 0;
       const antes = l.slice(actual);
-      return { n7: antes.filter((x) => ahora - x.t <= 7 * U.DIA).length, n30: antes.length, anterior: antes.length ? antes[0].t : null };
+      return { n7: antes.filter((x) => ahora - x.t <= 7 * U.DIA).length, n30: antes.length, anterior: antes.length ? antes[0].t : null,
+        veces: l.slice(0, 25).filter((x) => !Model.esInterno(x.canal)).map((x) => x.t) };
     },
     async reportar(rec) {
       await log({ tipo: 'reporte', q: 'contrato', c: rec.contrato, n: rec.nodo, tec: rec.tecnologia, dep: rec.departamento, r: 'SIN_FALLA', f: null });
@@ -2897,6 +3030,7 @@ function BackendLocal() {
           publicadaEn: ahora, publicadaPor: por, cerradaEn: null, cerradaPor: null, notaCierre: '', impacto: resumir(Model.impacto(c.cat, x.nodos)),
           historial: [{ accion: 'PUBLICADA', en: ahora, por, detalle: U.plural(x.nodos.length, '1 nodo', x.nodos.length + ' nodos') }]
         };
+        f.deteccion = Model.deteccion(await Store.leerLogs(ahora - 4 * U.HORA), f.nodos, ahora);
         fallas.push(f);
         tipo = 'FALLA_PUBLICADA'; texto = 'publicó la falla ' + U.numeroFalla(f) + ' (' + nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 2) + ')';
       } else {
@@ -2937,8 +3071,10 @@ function BackendLocal() {
       const c = await indice();
       const ahora = Date.now();
       const fallas = await Store.leerFallas();
+      // Solo lo que llegó después de cerrar la última falla del nodo (resuelta o descartada)
+      const cierre = Math.max(0, ...fallas.filter((f) => f.cerradaEn && f.nodos.includes(nodo)).map((f) => f.cerradaEn));
       const logs = (await Store.leerLogs(ahora - CONFIG.alerta.minutos * U.MIN))
-        .filter((l) => l.n === nodo && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
+        .filter((l) => l.n === nodo && l.t > cierre && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
         .sort((a, b) => a.t - b.t);
       const por = new Map();
       let reportes = 0;
@@ -3207,7 +3343,13 @@ const A = {
     }));
     return r;
   },
-  crearFallaCon(nodo) { G.set({ alertaAbierta: null, semillaFalla: { nodos: [nodo], k: Date.now() } }); ir('fallas'); window.scrollTo({ top: 0 }); },
+  // Desde una posible falla se publica como "Posible falla general" mientras el VOC la confirma; el inicio
+  // de la afectación es la primera llamada de los clientes de ese nodo
+  crearFallaCon(nodo) {
+    const a = (G.s.alertas || []).find((x) => x.nodo === nodo);
+    G.set({ alertaAbierta: null, semillaFalla: { nodos: [nodo], motivo: 'VALIDACION', inicio: a && a.primero ? a.primero : null, k: Date.now() } });
+    ir('fallas'); window.scrollTo({ top: 0 });
+  },
 
   /* Consulta del asesor (el servidor la registra en la bitácora) */
   buscar: (q) => Backend.buscar(q),
@@ -3333,6 +3475,7 @@ const ICONOS = {
   copiar: '<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  VALIDACION: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/><path d="M11 7.8v3.6"/><path d="M11 14.2h.01"/>',
   ENERGIA: '<path d="M13 3 5 13.5h6L10 21l8-10.5h-6L13 3z"/>',
   FIBRA: '<circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.2 8.6 20 18M8.2 15.4 20 6"/>',
   EQUIPO: '<path d="M4 8h13l-3.5-3.5"/><path d="M20 16H7l3.5 3.5"/>',
@@ -3643,6 +3786,9 @@ function HistorialCliente({ rec, lista, now, rein }) {
   const per = PERIODOS_HIST.find((p) => p[0] === dias);
   const h = Model.historialCliente(lista, rec, now, dias);
   const c = useContactos(rec.contrato);
+  // Cuántas veces llamó durante cada falla (Concentrix y Tiendas). En la falla activa no cuenta la llamada de
+  // ahora (las consultas de los últimos 10 minutos): lo útil es saber si ya había llamado por esta falla.
+  const llamadas = (f) => (!c || !c.veces ? 0 : Model.llamadasEn(c.veces, f.inicio, f.fin || now - 10 * U.MIN));
   return html`<section class="panel historial-cliente" aria-label="Historial de fallas del cliente">
     <div class="panel-cab">
       <h3>Historial de fallas de este cliente</h3>
@@ -3658,25 +3804,32 @@ function HistorialCliente({ rec, lista, now, rein }) {
         <span>${U.plural(c && !c.error ? c.n7 : 2, 'consulta anterior', 'consultas anteriores')} en 7 días</span>
         ${c && !c.error && html`<small>${c.anterior ? 'La anterior: ' + fechaHist(c.anterior, now) : 'Sin consultas en los últimos 30 días'}</small>`}</div>
     </div>
-    ${h.total ? html`<ol class="hist-lista">${h.fallas.map((f) => html`<li key=${f.id}>
+    ${h.total ? html`<ol class="hist-lista">${h.fallas.map((f) => { const llamo = llamadas(f); return html`<li key=${f.id}>
         <span class="hist-punto" data-s=${f.fin ? 'RESUELTA' : 'FALLA'}></span>
         <div class="hist-motivo"><b>${nombreMotivo(f)}</b><span class="sub">Nodo ${rec.nodo}</span></div>
         <div class="num hist-fechas">${fechaHist(f.inicio, now)} → ${f.fin ? fechaHist(f.fin, now) : 'sigue activa'}</div>
         <div class="num hist-dur">${U.dur((f.fin || now) - f.inicio)}</div>
-        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">Activa</span>`}${f.numero && html`<span class="chip codigo">${U.numeroFalla(f)}</span>`}</div>
-      </li>`)}</ol>`
+        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">${Model.esPosible(f) ? 'En validación' : 'Activa'}</span>`}${llamo > 0 && html`<span class="chip llamo" title=${f.fin ? 'Llamadas de este cliente durante la falla (varias búsquedas en la misma llamada cuentan una vez)' : 'Llamadas anteriores de este cliente durante esta falla, sin contar la de ahora'}>
+          <${Ico} n="telefono" s=${13} />${f.fin ? U.plural(llamo, 'Llamó 1 vez', 'Llamó ' + llamo + ' veces') : U.plural(llamo, 'Ya había llamado 1 vez', 'Ya había llamado ' + llamo + ' veces')}</span>`}${f.numero && html`<span class="chip codigo">${U.numeroFalla(f)}</span>`}</div>
+      </li>`; })}</ol>`
       : html`<div class="vacio hist-vacio"><b>Sin fallas ${per[2]}</b>Workforce HN no ha registrado fallas en su nodo en este periodo.</div>`}
-    <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}.</p>
+    <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}. "Llamó" cuenta sus llamadas al Call Center y visitas a Tiendas durante cada falla, en los últimos 30 días.</p>
   </section>`;
 }
 
 function Veredicto({ v, rec, now }) {
   const f = v.falla;
   let titulo = '', l1 = '', l2 = '', sello = '';
-  if (v.tipo === 'FALLA') {
+  if (v.tipo === 'FALLA' && Model.esPosible(f)) {
+    titulo = 'Posible falla general';
+    l1 = 'Workforce HN está validando con el equipo técnico una posible falla en el nodo ' + rec.nodo + '.';
+    l2 = 'Reportada desde ' + U.las(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
+      + (f.eta && f.eta > now ? U.conPunto('Solución estimada: ' + U.cuandoCorto(f.eta, now)) : 'Todavía sin confirmar ni hora estimada.');
+    sello = 'Posible falla, publicada ' + U.cuandoCorto(f.publicadaEn, now);
+  } else if (v.tipo === 'FALLA') {
     titulo = 'Falla general';
     l1 = nombreMotivo(f) + ' en el nodo ' + rec.nodo + '.';
-    l2 = 'Afectado desde las ' + U.hora(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
+    l2 = 'Afectado desde ' + U.las(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
       + (f.eta ? (f.eta > now ? U.conPunto('Solución estimada: ' + U.cuandoCorto(f.eta, now)) : 'La hora estimada (' + U.hora(f.eta) + ') ya pasó; Workforce HN sigue dando seguimiento.') : 'Aún sin hora estimada de solución.');
     sello = 'Falla ' + U.numeroFalla(f) + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
   } else if (v.tipo === 'RESUELTA') {
@@ -3743,9 +3896,22 @@ function partesGuion(v, rec, modo, now, rein) {
   const nombre = empresa ? '' : U.primerNombre(rec.nombre);
   const M = (x) => ({ v: x });
   const motivo = f ? clienteMotivo(f) : '';
+  if (v.tipo === 'FALLA' && Model.esPosible(f)) {
+    if (modo === 'chat') {
+      return ['Hola', nombre ? ', ' : '', nombre ? M(nombre) : '', '. Validamos su contrato ', M(String(rec.contrato)),
+        ': varios clientes de su zona nos reportaron el mismo inconveniente y nuestro equipo técnico ya está validando ', M('una posible falla general'),
+        '. Lamentamos las molestias.', rein ? ' Sabemos que no es la primera vez que le pasa en los últimos meses.' : '', '\n\n',
+        'Cuando se solucione, su servicio se restablecerá de forma automática. ¡Gracias por su paciencia!'];
+    }
+    return ['Le comento, ', nombre ? M(nombre) : 'estimado cliente', ', que validando su contrato vemos que varios clientes de su zona nos han reportado el mismo inconveniente, y nuestro equipo técnico ya está validando ',
+      M('una posible falla general'), ' en la red que da servicio a su zona. Lamentamos mucho las molestias.',
+      rein ? ' Sabemos que no es la primera vez que su servicio se ve afectado en los últimos meses y entendemos su molestia.' : '', '\n\n',
+      'En cuanto se confirme y se solucione, su servicio se restablecerá de forma automática, sin que tenga que hacer nada.\n\n',
+      'Le agradecemos mucho su paciencia y comprensión.'];
+  }
   if (v.tipo === 'FALLA') {
     const etaOk = f.eta && f.eta > now;
-    const etaTxt = etaOk ? (U.esHoy(f.eta, now) ? 'alrededor de las ' + U.hora(f.eta) : U.diaRel(f.eta, now) + ' alrededor de las ' + U.hora(f.eta)) : '';
+    const etaTxt = etaOk ? (U.esHoy(f.eta, now) ? 'alrededor de ' + U.las(f.eta) : U.diaRel(f.eta, now) + ' alrededor de ' + U.las(f.eta)) : '';
     if (modo === 'chat') {
       return ['Hola', nombre ? ', ' : '', nombre ? M(nombre) : '', '. Validamos su contrato ', M(String(rec.contrato)),
         ' y su servicio se encuentra dentro de una afectación general por ', M(motivo), '. Lamentamos mucho las molestias.',
@@ -3781,7 +3947,9 @@ function Guion({ rec, v, now, rein }) {
   const [modo, setModoEstado] = useState(leerLS('alertas-modo-guion', 'llamada'));
   const setModo = (m) => { guardarLS('alertas-modo-guion', m); setModoEstado(m); };
   const [reportado, setReportado] = useState(false);
-  const recos = CONFIG.recomendaciones[v.tipo] || [];
+  const recos = (v.tipo === 'FALLA' && Model.esPosible(v.falla) ? CONFIG.recomendaciones.POSIBLE : CONFIG.recomendaciones[v.tipo]) || [];
+  const nota = Model.notaQflow(v, rec, now);
+  const [notaCopiada, setNotaCopiada] = useState('');
   const conGuion = v.tipo === 'FALLA' || v.tipo === 'RESUELTA';
   const partes = conGuion ? partesGuion(v, rec, modo, now, rein) : [];
   const texto = partes.map((p) => (typeof p === 'string' ? p : p.v)).join('');
@@ -3809,6 +3977,12 @@ function Guion({ rec, v, now, rein }) {
           <button class="btn btn-borde" disabled=${reportado} onClick=${reportar}><${Ico} n="bandera" s=${16} />${reportado ? 'Aviso enviado' : 'Reportar posible falla en ' + rec.nodo}</button>
         </div>`}`}
     ${recos.length > 0 && html`<ul class="recos">${recos.map((r) => html`<li><${Ico} n="derecha" s=${16} /><span>${r}</span></li>`)}</ul>`}
+    ${nota && html`<div class="nota-qflow">
+      <div class="nota-qflow-cab"><span>Nota del caso para Qflow</span>
+        <button class="btn btn-borde btn-chico" onClick=${async () => { if (await U.copiar(nota)) { setNotaCopiada(nota); tostada('Nota copiada: pégala en la descripción del caso en Qflow'); } }}>
+          <${Ico} n=${notaCopiada === nota ? 'check' : 'copiar'} s=${15} />${notaCopiada === nota ? 'Nota copiada' : 'Copiar nota del caso'}</button></div>
+      <p>${nota}</p>
+    </div>`}
   </aside>`;
 }
 
@@ -3884,7 +4058,7 @@ function FallaItem({ f, now }) {
     <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
     <div class="nodos">${U.listaNatural(f.nodos, 3)}</div>
     <div class="m">
-      ${activa ? html`<span>Desde las ${U.hora(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
+      ${activa ? html`<span>Desde ${U.las(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
         : html`<span>Resuelta ${U.cuandoCorto(f.cerradaEn, now)}</span><span>Se oculta en ${U.dur(restante)}</span>`}
       <span class="impacto-linea"><span><b class="num">${U.n(imp.total)}</b> clientes</span>
         ${imp.hfc > 0 && html`<span class="tec" data-t="HFC">HFC${imp.gpon > 0 ? ' ' + U.n(imp.hfc) : ''}</span>`}
@@ -4070,7 +4244,7 @@ function ModalPosibleFalla({ nodo }) {
       ${!d.clientes.length ? html`<p class="sub">Ya no hay consultas de clientes de ${nodo} en los últimos ${d.minutos} minutos.</p>` : html`
         <div class="pf-datos">
           <div><b>${d.nClientes}</b><span>${U.plural(d.nClientes, 'cliente', 'clientes distintos')}</span></div>
-          <div><b>${U.dur(d.hasta - d.desde)}</b><span>${U.hora(d.desde) === U.hora(d.hasta) ? 'a las ' + U.hora(d.desde) : 'de ' + U.hora(d.desde) + ' a ' + U.hora(d.hasta)}</span></div>
+          <div><b>${U.dur(d.hasta - d.desde)}</b><span>${U.hora(d.desde) === U.hora(d.hasta) ? 'a ' + U.las(d.desde) : 'de ' + U.hora(d.desde) + ' a ' + U.hora(d.hasta)}</span></div>
           <div><b>${d.reportes}</b><span>${U.plural(d.reportes, 'reporte de asesor', 'reportes de asesores')}</span></div>
           <div><b>${porCC} · ${porTienda}</b><span>Call Center · Tiendas</span></div>
         </div>
@@ -4097,10 +4271,10 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const [nodos, setNodos] = useState(edicion ? edicion.nodos.slice() : semilla ? semilla.nodos.slice() : []);
   const [texto, setTexto] = useState('');
   const [desconocidos, setDesconocidos] = useState([]);
-  const [motivo, setMotivo] = useState(ini.motivo || '');
+  const [motivo, setMotivo] = useState(ini.motivo || (semilla && semilla.motivo) || '');
   const [motivoTexto, setMotivoTexto] = useState(ini.motivoTexto || '');
   const [clienteTexto, setClienteTexto] = useState(ini.clienteTexto || '');
-  const [inicio, setInicio] = useState(aLocal(ini.inicio || Date.now()));
+  const [inicio, setInicio] = useState(aLocal(ini.inicio || (semilla && semilla.inicio) || Date.now()));
   const [eta, setEta] = useState(ini.eta ? 'custom' : 'sin');
   const [etaCustom, setEtaCustom] = useState(ini.eta ? aLocal(ini.eta) : aLocal(Date.now() + 2 * U.HORA));
   const [numero, setNumero] = useState(ini.numero || '');
@@ -4269,7 +4443,9 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       <div class="paso">
         <div class="paso-cab"><span class="paso-num">2</span><div><h3>Motivo</h3><p>El asesor se lo explica al cliente con palabras sencillas.</p></div></div>
         <div class="motivos" role="group" aria-label="Motivo de la falla">
-          ${CONFIG.motivos.map((m) => html`<button type="button" class="motivo" aria-pressed=${motivo === m.id} onClick=${() => setMotivo(m.id)} key=${m.id}>
+          ${CONFIG.motivos.filter((m) => m.posible).map((m) => html`<button type="button" class="motivo motivo-posible" aria-pressed=${motivo === m.id} onClick=${() => setMotivo(m.id)} key=${m.id}>
+            <${Ico} n=${m.id} s=${20} /><span><b>${m.nombre}</b><small>Mientras el VOC la confirma. El asesor le dice al cliente que se está validando. Cuando la confirmen, edítala y ponle el motivo real.</small></span></button>`)}
+          ${CONFIG.motivos.filter((m) => !m.posible).map((m) => html`<button type="button" class="motivo" aria-pressed=${motivo === m.id} onClick=${() => setMotivo(m.id)} key=${m.id}>
             <${Ico} n=${m.id} s=${20} />${m.nombre}</button>`)}
         </div>
         ${motivo === 'OTRO' && html`<div class="fila-campos" style="margin-top:14px">
@@ -4401,7 +4577,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
   return html`<article class="panel falla-card" data-s=${f.estado}>
     <div class="falla-card-cab">
       <div><span class="id numero-falla">${U.numeroFalla(f)}</span><h3>${nombreMotivo(f)}</h3></div>
-      <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : 'RESUELTA'}>${activa ? 'Activa' : 'Resuelta'}</span></div>
+      <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : Model.descartada(f) ? 'SIN_NODO' : 'RESUELTA'}>${activa ? (Model.esPosible(f) ? 'En validación' : 'Activa') : Model.descartada(f) ? 'Descartada' : 'Resuelta'}</span></div>
     </div>
     <div class="lista-nodos" style="margin-top:0">${f.nodos.slice(0, 10).map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}${f.nodos.length > 10 && html`<span class="chip">y ${f.nodos.length - 10} más</span>`}</div>
     <div class="cifras">
@@ -4411,6 +4587,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     </div>
     <${BarraTec} hfc=${imp.hfc} gpon=${imp.gpon} leyenda=${true} />
     <dl class="meta">
+      ${activa && Model.esPosible(f) && html`<dt>VOC</dt><dd class="sin-numero">Si la confirma, usa Editar y elige el motivo real. Si no, Descartar.</dd>`}
       ${!f.numero && activa && html`<dt>N.º de falla</dt><dd class="sin-numero">Sin número todavía. Agrégalo con Editar.</dd>`}
       <dt>Inicio</dt><dd>${U.cuandoCorto(f.inicio, now)}</dd>
       ${activa && html`<dt>Estimada</dt><dd>${f.eta ? U.cuandoCorto(f.eta, now) + (f.eta < now ? ' (ya pasó)' : '') : 'Sin hora'}</dd>`}
@@ -4422,7 +4599,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
       ${f.notaCierre && html`<dt>Cierre</dt><dd>${f.notaCierre}</dd>`}
     </dl>
     <div class="acc">
-      ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />Cerrar falla</button>`}
+      ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />${Model.esPosible(f) ? 'Descartar' : 'Cerrar falla'}</button>`}
       ${activa && onEditar && html`<button class="btn btn-borde btn-chico" onClick=${() => onEditar(f)}><${Ico} n="lapiz" s=${15} />Editar</button>`}
       ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + U.numeroFalla(f) + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
       <button class="btn btn-borde btn-chico sms" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Teléfonos para SMS'}</button>
@@ -4446,19 +4623,22 @@ function ModalHistorialFalla({ f, onCerrar }) {
 }
 
 function ModalCerrar({ f, onCerrar }) {
+  const posible = Model.esPosible(f);   // cerrar una posible falla sin confirmarla es descartarla
   const [hora, setHora] = useState(aLocal(Date.now()));
   const [nota, setNota] = useState('');
   const [ocupado, setOcupado] = useState(false);
   async function ok() {
     setOcupado(true);
-    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada('Falla ' + U.numeroFalla(f) + ' cerrada'); onCerrar(); }
+    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada(posible ? 'Posible falla ' + U.numeroFalla(f) + ' descartada' : 'Falla ' + U.numeroFalla(f) + ' cerrada'); onCerrar(); }
     catch (e) { tostada(e.message); setOcupado(false); }
   }
-  return html`<${Modal} titulo=${'Cerrar falla ' + U.numeroFalla(f)} onCerrar=${onCerrar}
-      sub=${'Los asesores la verán como resuelta durante ' + CONFIG.horasVisibleTrasCierre + ' horas, y el guion le pedirá al cliente reiniciar su equipo.'}
-      pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-peligro" disabled=${ocupado} onClick=${ok}>Cerrar falla</button>`}>
-    <label class="campo"><span>Hora de solución</span><input class="input" type="datetime-local" value=${hora} onInput=${(e) => setHora(e.currentTarget.value)} /></label>
-    <label class="campo"><span>Nota de cierre</span><input class="input" value=${nota} onInput=${(e) => setNota(e.currentTarget.value)} placeholder="Ejemplo: Energía restablecida por la ENEE" /></label>
+  return html`<${Modal} titulo=${(posible ? 'Descartar la posible falla ' : 'Cerrar falla ') + U.numeroFalla(f)} onCerrar=${onCerrar}
+      sub=${posible
+        ? 'Sigue como posible falla general. Si el VOC la confirmó, cancela, edítala y ponle el motivo real antes de cerrarla. Si la cierras así, queda descartada: los asesores dejan de verla y no queda en el historial de los clientes.'
+        : 'Los asesores la verán como resuelta durante ' + CONFIG.horasVisibleTrasCierre + ' horas, y el guion le pedirá al cliente reiniciar su equipo.'}
+      pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-peligro" disabled=${ocupado} onClick=${ok}>${posible ? 'Descartar' : 'Cerrar falla'}</button>`}>
+    <label class="campo"><span>${posible ? 'Hora' : 'Hora de solución'}</span><input class="input" type="datetime-local" value=${hora} onInput=${(e) => setHora(e.currentTarget.value)} /></label>
+    <label class="campo"><span>Nota de cierre</span><input class="input" value=${nota} onInput=${(e) => setNota(e.currentTarget.value)} placeholder=${posible ? 'Ejemplo: El VOC no encontró falla en el nodo' : 'Ejemplo: Energía restablecida por la ENEE'} /></label>
   </${Modal}>`;
 }
 
@@ -4510,7 +4690,7 @@ function Historial() {
             <td class="der">${U.n(f.impacto.total)}</td>
             <td><${BarraTec} hfc=${f.impacto.hfc} gpon=${f.impacto.gpon} /></td>
             <td class="num">${U.dia(f.inicio)}, ${U.hora(f.inicio)}</td>
-            <td class="der">${f.estado === 'ACTIVA' ? html`<span class="marca-estado" data-s="FALLA">Activa</span>` : U.dur(f.cerradaEn - f.inicio)}</td>
+            <td class="der">${f.estado === 'ACTIVA' ? html`<span class="marca-estado" data-s="FALLA">${Model.esPosible(f) ? 'En validación' : 'Activa'}</span>` : Model.descartada(f) ? html`<span class="marca-estado" data-s="SIN_NODO">Descartada</span>` : U.dur(f.cerradaEn - f.inicio)}</td>
             <td>${f.publicadaPor.nombre}</td>
             <td>${f.cerradaPor ? f.cerradaPor.nombre : ''}</td>
             <td><button class="btn btn-fantasma btn-chico" onClick=${() => setVer(f)}>Ver</button></td>
@@ -4611,7 +4791,7 @@ function VistaBase() {
         <div class="panel-cab"><h3>Base actual</h3>${s.meta.demo && html`<span class="der marca-estado" data-s="RESUELTA">Demostración</span>`}</div>
         ${r ? html`
           <div class="panel-cuerpo" style="padding-top:8px">
-            <div class="sub">${(r.por && r.en) || ult ? html`Subida por <b style="color:var(--ink)">${(r.por && r.por.nombre) || ult.por.nombre}</b> el ${U.dia(r.en || ult.en)} a las ${U.hora(r.en || ult.en)}` : 'Sin registro de carga'}${r.archivo ? html`<br />${r.archivo}` : ''}</div>
+            <div class="sub">${(r.por && r.en) || ult ? html`Subida por <b style="color:var(--ink)">${(r.por && r.por.nombre) || ult.por.nombre}</b> el ${U.dia(r.en || ult.en)} a ${U.las(r.en || ult.en)}` : 'Sin registro de carga'}${r.archivo ? html`<br />${r.archivo}` : ''}</div>
           </div>
           <div class="resumen-base">
             <div><b class="num">${U.n(r.filas)}</b><span>servicios</span></div>
@@ -4773,6 +4953,7 @@ function VistaStats() {
           <div class="panel-cuerpo"><${GraficaConsultas} serie=${d.serie} porHora=${per === 'hoy'} /></div></section>
         <section class="panel c-4"><div class="panel-cab"><h3>HFC frente a GPON</h3></div>
           <div class="panel-cuerpo"><${Comparativo} d=${d} /></div></section>
+        <section class="panel c-12"><${Deteccion} x=${d.det} /></section>
         <section class="panel c-7"><div class="panel-cab"><h3>Clientes afectados por departamento</h3><span class="der sub">Suma de clientes en las fallas del periodo</span></div>
           <div class="panel-cuerpo"><${MapaHonduras} valores=${d.porDep} fallas=${d.fallasPorDep} /></div></section>
         <section class="panel c-5"><div class="panel-cab"><h3>Motivos de las fallas</h3></div>
@@ -4792,7 +4973,9 @@ function VistaStats() {
 const claveDia = (t) => new Date(U.inicioDia(t) + 12 * U.HORA).toISOString().slice(0, 10);
 function calcular(s, c, desde, per) {
   const cat = s.cat, now = s.now;
-  const fallas = s.fallas.filter((f) => f.publicadaEn >= desde);
+  // Las posibles fallas que el VOC descartó no fueron fallas: no cuentan en las estadísticas
+  const delPeriodo = s.fallas.filter((f) => f.publicadaEn >= desde);
+  const fallas = delPeriodo.filter((f) => !Model.descartada(f));
   const cerradas = fallas.filter((f) => f.estado === 'CERRADA');
   const prom = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
   const mttr = prom(cerradas.map((f) => f.cerradaEn - f.inicio));
@@ -4853,9 +5036,22 @@ function calcular(s, c, desde, per) {
   bitacora.sort((a, b) => b.en - a.en);
   const equipo = [...eq.values()].map((e) => Object.assign(e, { tPubP: prom(e.tPub), durP: prom(e.dur) })).sort((a, b) => b.publicadas - a.publicadas);
 
+  // Detección: cuánto pasó desde la primera llamada del nodo hasta publicar la falla. El servidor lo
+  // calcula y lo guarda al publicarla; las fallas publicadas antes de este cambio no lo tienen.
+  const mediana = (a) => { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+  const conDato = fallas.filter((f) => f.deteccion).sort((a, b) => b.publicadaEn - a.publicadaEn);
+  const conLlamadas = conDato.filter((f) => f.deteccion.primera);
+  const conAviso = conDato.filter((f) => f.deteccion.aviso);
+  const det = {
+    filas: conDato, sinDato: fallas.length - conDato.length, descartadas: delPeriodo.length - fallas.length,
+    conLlamadas: conLlamadas.length, primera: mediana(conLlamadas.map((f) => f.publicadaEn - f.deteccion.primera)),
+    conAviso: conAviso.length, aviso: mediana(conAviso.map((f) => f.publicadaEn - f.deteccion.aviso)),
+    antes: conDato.length - conLlamadas.length, clientes: conDato.reduce((a, f) => a + (f.deteccion.clientes || 0), 0)
+  };
+
   return { consultas: c.consultas || 0, conFalla: c.conFalla || 0, clientesUnicos: c.clientesUnicos || 0, clientesAprox: !!c.clientesAprox, fallas, activas: s.fallas.filter((f) => f.estado === 'ACTIVA').length,
     afectados: afH + afG, afH, afG, mttr, tPub, serie, tec, motivos, porDep, fallasPorDep, reincidentes, topClientes, recurrentes,
-    canales: c.canales || {}, asesores: c.asesores || [], reportes: c.reportes || 0, equipo, bitacora };
+    canales: c.canales || {}, asesores: c.asesores || [], reportes: c.reportes || 0, equipo, bitacora, det };
 }
 
 /* ---------- Gráficas ---------- */
@@ -4964,6 +5160,65 @@ function MapaHonduras({ valores, fallas, vacio, apilado, nombres }) {
     ${tabla && html`<table class="tabla" style="margin-top:10px"><thead><tr><th>Departamento</th><th class="der">Clientes afectados</th><th class="der">Fallas</th></tr></thead>
       <tbody>${lista.map(([k, v]) => html`<tr key=${k}><td>${HN_MAPA.deps[k] ? HN_MAPA.deps[k].name : U.lugar(k)}</td><td class="der">${U.n(v)}</td><td class="der">${U.n(fallas[k] || 0)}</td></tr>`)}</tbody></table>`}
     ${tt.nodo}
+  </div>`;
+}
+
+/* ---------- Detección: de la primera llamada a la publicación ----------
+   Cada fila es una falla: la barra va desde que llamó el primer cliente hasta que se publicó; la parte
+   ámbar es desde el aviso de posible falla (5 clientes distintos o 2 avisos de asesores). */
+function Deteccion({ x }) {
+  const [todas, setTodas] = useState(false);
+  const lista = todas ? x.filas : x.filas.slice(0, 8);
+  const espera = (f) => (f.deteccion.primera ? f.publicadaEn - f.deteccion.primera : 0);
+  const max = Math.max(20 * U.MIN, ...lista.map(espera));
+  const pct = (ms) => Math.max(0, Math.min(100, (ms / max) * 100));
+  const nodos = (f) => f.nodos.slice(0, 3).join(', ') + (f.nodos.length > 3 ? ' +' + (f.nodos.length - 3) : '');
+  const fecha = (t) => new Date(t).toLocaleString('es-HN');
+  const minutos = (ms) => Math.round(ms / U.MIN);
+  const exportar = () => U.descargarCsv('deteccion-fallas.csv', [['Número de falla', 'Motivo', 'Nodos', 'Publicada', 'Primera llamada', 'Aviso de posible falla',
+    'Minutos desde la primera llamada', 'Minutos desde el aviso', 'Llamadas antes de publicar', 'Clientes antes de publicar']]
+    .concat(x.filas.map((f) => { const t = f.deteccion; return [U.numeroFalla(f), nombreMotivo(f), f.nodos.join(' '), fecha(f.publicadaEn), t.primera ? fecha(t.primera) : '',
+      t.aviso ? fecha(t.aviso) : '', t.primera ? minutos(f.publicadaEn - t.primera) : 0, t.aviso ? minutos(f.publicadaEn - t.aviso) : '', t.llamadas, t.clientes]; })));
+  const nota = 'Cuenta las consultas de Concentrix y Tiendas en los nodos de la falla en las 4 horas antes de publicarla, sin pausas de más de 45 minutos entre una y otra ni antes de publicar. '
+    + 'El aviso es el momento en que se juntaron ' + CONFIG.alerta.clientesDistintos + ' clientes distintos en ' + CONFIG.alerta.minutos + ' minutos o ' + CONFIG.alerta.reportes + ' avisos de asesores. '
+    + (x.sinDato ? U.plural(x.sinDato, '1 falla del periodo se publicó', x.sinDato + ' fallas del periodo se publicaron') + ' antes de que Alertas midiera esto y no ' + (x.sinDato === 1 ? 'tiene' : 'tienen') + ' el dato.' : '');
+  return html`<div class="deteccion">
+    <div class="panel-cab"><div><h3>Detección de fallas</h3><div class="sub">Cuánto pasó desde que los clientes empezaron a llamar hasta que se publicó la falla</div></div>
+      <div class="der">
+        ${x.descartadas ? html`<span class="chip">${U.plural(x.descartadas, '1 posible falla descartada', x.descartadas + ' posibles fallas descartadas')}</span>` : null}
+        <button class="btn btn-borde btn-chico" disabled=${!x.filas.length} onClick=${exportar}><${Ico} n="descargar" s=${15} />CSV</button>
+      </div></div>
+    ${x.filas.length ? html`
+      <div class="kpis det-kpis">
+        <div class="kpi"><div class="l">De la primera llamada a publicar</div><div class="v">${x.conLlamadas ? U.durCorto(x.primera) : 'Sin datos'}</div>
+          <div class="d">${x.conLlamadas ? 'Mediana de ' + U.plural(x.conLlamadas, '1 falla', x.conLlamadas + ' fallas') : 'Ninguna falla tuvo llamadas antes'}</div></div>
+        <div class="kpi"><div class="l">Del aviso a publicar</div><div class="v">${x.conAviso ? U.durCorto(x.aviso) : 'Sin datos'}</div>
+          <div class="d">${x.conAviso ? 'Mediana de ' + U.plural(x.conAviso, '1 falla', x.conAviso + ' fallas') + ' con aviso antes' : 'El aviso no se activó antes de publicar'}</div></div>
+        <div class="kpi"><div class="l">Publicadas antes de que llamaran</div><div class="v">${U.pct(x.antes, x.filas.length)} %</div>
+          <div class="d">${x.antes} de ${U.plural(x.filas.length, '1 falla', x.filas.length + ' fallas')}</div></div>
+        <div class="kpi"><div class="l">Clientes que llamaron antes</div><div class="v">${U.n(x.clientes)}</div>
+          <div class="d">Se atendieron sin saber de la falla</div></div>
+      </div>
+      <div class="panel-cuerpo">
+        ${x.conLlamadas > 0 && html`<div class="leyenda"><span><i style="background:var(--chart-ink)"></i>Clientes llamando, sin aviso todavía</span><span><i style="background:var(--resuelta)"></i>Del aviso de posible falla a la publicación</span></div>`}
+        <div class="tabla-envoltura"><table class="tabla det-tabla">
+          <thead><tr><th>Falla</th><th class="det-nodos">Nodos</th><th>Publicada</th><th>Desde la primera llamada</th><th>Aviso de posible falla</th><th class="der">Antes de publicar</th></tr></thead>
+          <tbody>${lista.map((f) => { const t = f.deteccion, total = espera(f), deAviso = t.aviso ? f.publicadaEn - t.aviso : 0; return html`<tr key=${f.id}>
+            <td><b class="num">${U.numeroFalla(f)}</b><div class="sub">${cortoMotivo(f)}</div><div class="sub codigo det-nodos-movil">${nodos(f)}</div></td>
+            <td class="codigo det-nodos">${nodos(f)}</td>
+            <td class="num">${U.dia(f.publicadaEn)}, ${U.hora(f.publicadaEn)}</td>
+            <td>${t.primera ? html`<div class="det-linea" title=${'Primera llamada: ' + U.hora(t.primera) + (t.aviso ? '. Aviso: ' + U.hora(t.aviso) : '')}>
+                <span class="det-pista"><i style=${'width:' + pct(total - deAviso) + '%'}></i>${deAviso ? html`<i class="det-aviso" style=${'width:' + pct(deAviso) + '%'}></i>` : null}</span>
+                <b class="num">${U.durCorto(total)}</b></div>`
+              : html`<span class="det-ok"><${Ico} n="check" s=${15} />Nadie había llamado</span>`}</td>
+            <td>${t.aviso ? U.durCorto(deAviso) + ' antes de publicar' : t.llamadas ? html`<span class="sub">No se activó: nunca hubo ${CONFIG.alerta.clientesDistintos} clientes en ${CONFIG.alerta.minutos} min</span>` : ''}</td>
+            <td class="der">${t.llamadas ? html`${U.plural(t.llamadas, '1 llamada', t.llamadas + ' llamadas')}<div class="sub">${U.plural(t.clientes, '1 cliente', t.clientes + ' clientes')}</div>` : html`<span class="sub">Ninguna</span>`}</td>
+          </tr>`; })}</tbody></table></div>
+        ${x.filas.length > 8 && html`<button class="ver-tabla" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + x.filas.length + ' fallas'}</button>`}
+        <p class="sub det-nota">${nota}</p>
+      </div>`
+    : html`<div class="panel-cuerpo"><div class="vacio">${x.sinDato ? 'Las fallas de este periodo se publicaron antes de que Alertas midiera la detección.' : 'Sin fallas en este periodo.'}</div>
+        ${x.sinDato ? html`<p class="sub det-nota">${nota}</p>` : null}</div>`}
   </div>`;
 }
 
@@ -5581,7 +5836,7 @@ function AvisoCambios() {
   const quien = c.por ? c.por.nombre : 'Alguien';
   return html`<div class="aviso" role="alert">
     <span class="aviso-icono"><${Ico} n="refrescar" s=${17} /></span>
-    <p><b>${CONFIG.equipo} hizo una actualización.</b> ${U.conPunto(quien + ' ' + (c.texto || 'hizo cambios') + (c.en ? ' a las ' + U.hora(c.en) : ''))} Actualiza para ver los cambios.</p>
+    <p><b>${CONFIG.equipo} hizo una actualización.</b> ${U.conPunto(quien + ' ' + (c.texto || 'hizo cambios') + (c.en ? ' a ' + U.las(c.en) : ''))} Actualiza para ver los cambios.</p>
     <button class="btn btn-chico" onClick=${A.actualizar}>Actualizar</button>
   </div>`;
 }

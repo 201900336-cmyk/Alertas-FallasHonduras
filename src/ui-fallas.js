@@ -167,7 +167,7 @@ function ModalPosibleFalla({ nodo }) {
       ${!d.clientes.length ? html`<p class="sub">Ya no hay consultas de clientes de ${nodo} en los últimos ${d.minutos} minutos.</p>` : html`
         <div class="pf-datos">
           <div><b>${d.nClientes}</b><span>${U.plural(d.nClientes, 'cliente', 'clientes distintos')}</span></div>
-          <div><b>${U.dur(d.hasta - d.desde)}</b><span>${U.hora(d.desde) === U.hora(d.hasta) ? 'a las ' + U.hora(d.desde) : 'de ' + U.hora(d.desde) + ' a ' + U.hora(d.hasta)}</span></div>
+          <div><b>${U.dur(d.hasta - d.desde)}</b><span>${U.hora(d.desde) === U.hora(d.hasta) ? 'a ' + U.las(d.desde) : 'de ' + U.hora(d.desde) + ' a ' + U.hora(d.hasta)}</span></div>
           <div><b>${d.reportes}</b><span>${U.plural(d.reportes, 'reporte de asesor', 'reportes de asesores')}</span></div>
           <div><b>${porCC} · ${porTienda}</b><span>Call Center · Tiendas</span></div>
         </div>
@@ -194,10 +194,10 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const [nodos, setNodos] = useState(edicion ? edicion.nodos.slice() : semilla ? semilla.nodos.slice() : []);
   const [texto, setTexto] = useState('');
   const [desconocidos, setDesconocidos] = useState([]);
-  const [motivo, setMotivo] = useState(ini.motivo || '');
+  const [motivo, setMotivo] = useState(ini.motivo || (semilla && semilla.motivo) || '');
   const [motivoTexto, setMotivoTexto] = useState(ini.motivoTexto || '');
   const [clienteTexto, setClienteTexto] = useState(ini.clienteTexto || '');
-  const [inicio, setInicio] = useState(aLocal(ini.inicio || Date.now()));
+  const [inicio, setInicio] = useState(aLocal(ini.inicio || (semilla && semilla.inicio) || Date.now()));
   const [eta, setEta] = useState(ini.eta ? 'custom' : 'sin');
   const [etaCustom, setEtaCustom] = useState(ini.eta ? aLocal(ini.eta) : aLocal(Date.now() + 2 * U.HORA));
   const [numero, setNumero] = useState(ini.numero || '');
@@ -366,7 +366,9 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       <div class="paso">
         <div class="paso-cab"><span class="paso-num">2</span><div><h3>Motivo</h3><p>El asesor se lo explica al cliente con palabras sencillas.</p></div></div>
         <div class="motivos" role="group" aria-label="Motivo de la falla">
-          ${CONFIG.motivos.map((m) => html`<button type="button" class="motivo" aria-pressed=${motivo === m.id} onClick=${() => setMotivo(m.id)} key=${m.id}>
+          ${CONFIG.motivos.filter((m) => m.posible).map((m) => html`<button type="button" class="motivo motivo-posible" aria-pressed=${motivo === m.id} onClick=${() => setMotivo(m.id)} key=${m.id}>
+            <${Ico} n=${m.id} s=${20} /><span><b>${m.nombre}</b><small>Mientras el VOC la confirma. El asesor le dice al cliente que se está validando. Cuando la confirmen, edítala y ponle el motivo real.</small></span></button>`)}
+          ${CONFIG.motivos.filter((m) => !m.posible).map((m) => html`<button type="button" class="motivo" aria-pressed=${motivo === m.id} onClick=${() => setMotivo(m.id)} key=${m.id}>
             <${Ico} n=${m.id} s=${20} />${m.nombre}</button>`)}
         </div>
         ${motivo === 'OTRO' && html`<div class="fila-campos" style="margin-top:14px">
@@ -498,7 +500,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
   return html`<article class="panel falla-card" data-s=${f.estado}>
     <div class="falla-card-cab">
       <div><span class="id numero-falla">${U.numeroFalla(f)}</span><h3>${nombreMotivo(f)}</h3></div>
-      <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : 'RESUELTA'}>${activa ? 'Activa' : 'Resuelta'}</span></div>
+      <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : Model.descartada(f) ? 'SIN_NODO' : 'RESUELTA'}>${activa ? (Model.esPosible(f) ? 'En validación' : 'Activa') : Model.descartada(f) ? 'Descartada' : 'Resuelta'}</span></div>
     </div>
     <div class="lista-nodos" style="margin-top:0">${f.nodos.slice(0, 10).map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}${f.nodos.length > 10 && html`<span class="chip">y ${f.nodos.length - 10} más</span>`}</div>
     <div class="cifras">
@@ -508,6 +510,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     </div>
     <${BarraTec} hfc=${imp.hfc} gpon=${imp.gpon} leyenda=${true} />
     <dl class="meta">
+      ${activa && Model.esPosible(f) && html`<dt>VOC</dt><dd class="sin-numero">Si la confirma, usa Editar y elige el motivo real. Si no, Descartar.</dd>`}
       ${!f.numero && activa && html`<dt>N.º de falla</dt><dd class="sin-numero">Sin número todavía. Agrégalo con Editar.</dd>`}
       <dt>Inicio</dt><dd>${U.cuandoCorto(f.inicio, now)}</dd>
       ${activa && html`<dt>Estimada</dt><dd>${f.eta ? U.cuandoCorto(f.eta, now) + (f.eta < now ? ' (ya pasó)' : '') : 'Sin hora'}</dd>`}
@@ -519,7 +522,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
       ${f.notaCierre && html`<dt>Cierre</dt><dd>${f.notaCierre}</dd>`}
     </dl>
     <div class="acc">
-      ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />Cerrar falla</button>`}
+      ${activa && onCerrar && html`<button class="btn btn-peligro btn-chico" onClick=${() => onCerrar(f)}><${Ico} n="cerrar" s=${16} />${Model.esPosible(f) ? 'Descartar' : 'Cerrar falla'}</button>`}
       ${activa && onEditar && html`<button class="btn btn-borde btn-chico" onClick=${() => onEditar(f)}><${Ico} n="lapiz" s=${15} />Editar</button>`}
       ${!activa && Model.visible(f, now) && html`<button class="btn btn-borde btn-chico" onClick=${async () => { try { await A.reabrirFalla(f.id); tostada('Falla ' + U.numeroFalla(f) + ' reabierta'); } catch (e) { tostada(e.message); } }}>Reabrir</button>`}
       <button class="btn btn-borde btn-chico sms" disabled=${sms.ocupado} onClick=${sms.descargar}><${Ico} n="descargar" s=${15} />${sms.ocupado ? 'Preparando…' : 'Teléfonos para SMS'}</button>
@@ -543,19 +546,22 @@ function ModalHistorialFalla({ f, onCerrar }) {
 }
 
 function ModalCerrar({ f, onCerrar }) {
+  const posible = Model.esPosible(f);   // cerrar una posible falla sin confirmarla es descartarla
   const [hora, setHora] = useState(aLocal(Date.now()));
   const [nota, setNota] = useState('');
   const [ocupado, setOcupado] = useState(false);
   async function ok() {
     setOcupado(true);
-    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada('Falla ' + U.numeroFalla(f) + ' cerrada'); onCerrar(); }
+    try { await A.cerrarFalla(f.id, Math.min(deLocal(hora) || Date.now(), Date.now()), nota.trim()); tostada(posible ? 'Posible falla ' + U.numeroFalla(f) + ' descartada' : 'Falla ' + U.numeroFalla(f) + ' cerrada'); onCerrar(); }
     catch (e) { tostada(e.message); setOcupado(false); }
   }
-  return html`<${Modal} titulo=${'Cerrar falla ' + U.numeroFalla(f)} onCerrar=${onCerrar}
-      sub=${'Los asesores la verán como resuelta durante ' + CONFIG.horasVisibleTrasCierre + ' horas, y el guion le pedirá al cliente reiniciar su equipo.'}
-      pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-peligro" disabled=${ocupado} onClick=${ok}>Cerrar falla</button>`}>
-    <label class="campo"><span>Hora de solución</span><input class="input" type="datetime-local" value=${hora} onInput=${(e) => setHora(e.currentTarget.value)} /></label>
-    <label class="campo"><span>Nota de cierre</span><input class="input" value=${nota} onInput=${(e) => setNota(e.currentTarget.value)} placeholder="Ejemplo: Energía restablecida por la ENEE" /></label>
+  return html`<${Modal} titulo=${(posible ? 'Descartar la posible falla ' : 'Cerrar falla ') + U.numeroFalla(f)} onCerrar=${onCerrar}
+      sub=${posible
+        ? 'Sigue como posible falla general. Si el VOC la confirmó, cancela, edítala y ponle el motivo real antes de cerrarla. Si la cierras así, queda descartada: los asesores dejan de verla y no queda en el historial de los clientes.'
+        : 'Los asesores la verán como resuelta durante ' + CONFIG.horasVisibleTrasCierre + ' horas, y el guion le pedirá al cliente reiniciar su equipo.'}
+      pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-peligro" disabled=${ocupado} onClick=${ok}>${posible ? 'Descartar' : 'Cerrar falla'}</button>`}>
+    <label class="campo"><span>${posible ? 'Hora' : 'Hora de solución'}</span><input class="input" type="datetime-local" value=${hora} onInput=${(e) => setHora(e.currentTarget.value)} /></label>
+    <label class="campo"><span>Nota de cierre</span><input class="input" value=${nota} onInput=${(e) => setNota(e.currentTarget.value)} placeholder=${posible ? 'Ejemplo: El VOC no encontró falla en el nodo' : 'Ejemplo: Energía restablecida por la ENEE'} /></label>
   </${Modal}>`;
 }
 
@@ -607,7 +613,7 @@ function Historial() {
             <td class="der">${U.n(f.impacto.total)}</td>
             <td><${BarraTec} hfc=${f.impacto.hfc} gpon=${f.impacto.gpon} /></td>
             <td class="num">${U.dia(f.inicio)}, ${U.hora(f.inicio)}</td>
-            <td class="der">${f.estado === 'ACTIVA' ? html`<span class="marca-estado" data-s="FALLA">Activa</span>` : U.dur(f.cerradaEn - f.inicio)}</td>
+            <td class="der">${f.estado === 'ACTIVA' ? html`<span class="marca-estado" data-s="FALLA">${Model.esPosible(f) ? 'En validación' : 'Activa'}</span>` : Model.descartada(f) ? html`<span class="marca-estado" data-s="SIN_NODO">Descartada</span>` : U.dur(f.cerradaEn - f.inicio)}</td>
             <td>${f.publicadaPor.nombre}</td>
             <td>${f.cerradaPor ? f.cerradaPor.nombre : ''}</td>
             <td><button class="btn btn-fantasma btn-chico" onClick=${() => setVer(f)}>Ver</button></td>

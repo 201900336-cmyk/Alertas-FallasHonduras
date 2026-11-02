@@ -49,7 +49,9 @@ const U = (() => {
     if (d === -1) return 'mañana';
     return 'el ' + dia(ts);
   };
-  const cuando = (ts, now) => diaRel(ts, now) + ' a las ' + hora(ts);
+  /* "las 3:00 p. m." o "la 1:30 p. m." (la una lleva "la") */
+  const las = (ts) => { const h = hora(ts); return (/^1:/.test(h) ? 'la ' : 'las ') + h; };
+  const cuando = (ts, now) => diaRel(ts, now) + ' a ' + las(ts);
   const cuandoCorto = (ts, now) => (esHoy(ts, now) ? hora(ts) : dia(ts) + ', ' + hora(ts));
 
   const dur = (ms) => {
@@ -175,7 +177,7 @@ const U = (() => {
     return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
   };
 
-  return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
+  return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural };
 })();

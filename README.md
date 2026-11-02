@@ -145,9 +145,11 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 ## Día a día
 
 - **Asesores y tiendas**: escriben el contrato (6 a 8 dígitos) o el DNI (con o sin guiones). Alertas responde **Falla general** con el guion o **Sin falla general** para seguir el flujo normal. Si sospechan una falla que no está publicada, la reportan desde ahí. **Limpiar** (o la tecla Esc) borra la búsqueda.
+- **Nota del caso para Qflow**: debajo del guion sale un texto corto para la descripción del caso, según lo que encontró Alertas. Por ejemplo: «Cliente en falla general F1254585 (energía comercial), nodo GRA21, desde las 9:40 a. m.; solución estimada 3:00 p. m. Se le informó al cliente.» **Copiar nota del caso** lo deja listo para pegarlo en Qflow, así todos documentan igual. Los textos están en `src/config.js` (`notaQflow`).
 - **Mapa de fallas activas** (inicio de Consulta): con el nombre de cada departamento, y debajo la lista de departamentos afectados con sus clientes.
 - **Historial de fallas del cliente**: debajo del cliente y del guion. Muestra las fallas de su nodo desde que es cliente (90 días, 6 meses o 1 año): de cuándo a cuándo, cuánto duró cada una y las horas sin servicio en total. También dice cuántas veces lo consultaron en los últimos 7 días.
   - Con 3 o más fallas en 90 días lo marca como **Cliente reincidente** y el guion agrega una frase reconociéndolo.
+  - Marca en qué fallas llamó: **Llamó 2 veces** en una falla ya cerrada y, en la falla activa, **Ya había llamado 1 vez** si llamó antes por la misma falla (sin contar la llamada de ahora). Cuentan las consultas de Concentrix y Tiendas de los últimos 30 días (las búsquedas de Workforce no son llamadas del cliente), y varias búsquedas en menos de 10 minutos cuentan como una llamada.
   - Cada falla sale con su número de falla.
   - Sale de las fallas publicadas en Alertas para el nodo actual del cliente; si el cliente se cambió de nodo, no salen las de su nodo anterior.
 - **Workforce HN**: en **Fallas > Nueva falla** escribe los nodos (por ejemplo `NODO01, NODO02`), elige el motivo y la hora estimada, revisa a cuántos clientes afecta y **Publicar falla**. Puede editarla, cerrarla o reabrirla.
@@ -158,8 +160,16 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 - **Posibles fallas** (Workforce y Jefatura): cuando **5 clientes distintos** de un nodo sin falla publicada consultan en **60 minutos**, o 2 asesores lo reportan con **Reportar posible falla**, el nodo aparece en **Fallas > Posibles fallas**. Solo cuentan las búsquedas de Concentrix y Tiendas (las de Workforce revisando no suman, y un cliente que vuelve a llamar cuenta una vez). Con 3 o 4 clientes el nodo queda **en observación**.
   - **Aviso**: una barra arriba en cualquier vista y, con **Avisarme en el escritorio**, una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto). Cada posible falla se avisa una vez por PC, y otra vez si sigue después de 2 horas.
   - **Ver clientes y correo**: los clientes que consultaron (hora, contrato, nombre, nodo, tecnología, OLT, NAP/TAP, colonia, municipio, categoría y canal, con la tienda) y el correo listo para el VOC o el personal interno. **Copiar correo** lo deja para pegarlo en Outlook con Ctrl+V, con la tabla y su formato; también se puede copiar solo la tabla o el asunto.
-  - **Marcar como reportada**: el resto de Workforce ve quién la reportó y a qué hora, para que nadie mande el mismo correo dos veces (la marca dura 6 horas y se puede quitar). **Crear falla** abre Publicar falla con el nodo ya puesto, y al publicarla la posible falla desaparece.
-  - **Descartar** la oculta solo en esa PC hasta que vuelvan a consultar clientes de ese nodo.
+  - **Marcar como reportada**: el resto de Workforce ve quién la reportó y a qué hora, para que nadie mande el mismo correo dos veces (la marca dura 6 horas y se puede quitar).
+  - **Crear falla** abre Publicar falla con el nodo, el motivo **Posible falla general** y el inicio en la primera llamada ya puestos. Así se publica mientras el VOC la confirma: los asesores ven «Posible falla general» y le dicen al cliente que se está validando, en vez de mandarlo al soporte normal.
+    - Si el VOC **la confirma**: **Editar** y elegir el motivo real (y la hora estimada).
+    - Si **no hay falla**: **Descartar** en su tarjeta. Los asesores dejan de verla al instante (no queda como resuelta), no entra al historial de los clientes ni a las estadísticas, y el aviso no vuelve a salir con los mismos clientes: solo cuentan los que llamen después.
+    - Esto vale para cualquier falla cerrada: las consultas de antes del cierre ya quedaron explicadas por esa falla.
+  - **Descartar** el aviso (en la tarjeta de la posible falla, sin publicarla) lo oculta solo en esa PC hasta que vuelvan a consultar clientes de ese nodo.
+- **Estadísticas > Detección de fallas** (Workforce y Jefatura): cuánto pasó desde que los clientes empezaron a llamar hasta que se publicó cada falla. Sirve para medir cuánto ayuda el aviso de posibles fallas.
+  - **De la primera llamada a publicar** y **Del aviso a publicar** (medianas), cuántas se publicaron **antes de que llamaran** y cuántos clientes llamaron antes y se atendieron sin saber de la falla.
+  - Por falla, una barra: en gris, clientes llamando sin aviso todavía; en ámbar, desde el aviso de posible falla hasta la publicación. Se descarga en CSV.
+  - Cuenta las consultas de Concentrix y Tiendas en los nodos de la falla en las 4 horas antes de publicarla, sin pausas de más de 45 minutos entre una y otra ni antes de publicar. El servidor lo calcula y lo guarda al publicar: las fallas publicadas antes del 2 nov no tienen el dato.
 
 ## Avisar a los clientes por SMS (Notifícame)
 
@@ -249,7 +259,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 169 pruebas del servidor en un emulador de Apps Script
+npm test                           # 182 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

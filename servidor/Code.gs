@@ -57,8 +57,10 @@ const ALERTAS = {
     'aps1.pure.cloud': 'Asia (Mumbai)', 'apse1.pure.cloud': 'Asia (Singapur)', 'mypurecloud.jp': 'Asia (Tokio)',
     'apne2.pure.cloud': 'Asia (Seúl)', 'apne3.pure.cloud': 'Asia (Osaka)', 'mypurecloud.com.au': 'Australia (Sídney)'
   },
+  // VALIDACION: posible falla general que se publica mientras el VOC la confirma. Si se cierra sin
+  // cambiarle el motivo, queda descartada: los asesores dejan de verla y no entra al historial del cliente.
   MOTIVOS: {
-    ENERGIA: 'Falla de energía comercial', FIBRA: 'Corte de fibra óptica', EQUIPO: 'Reemplazo de equipo',
+    VALIDACION: 'Posible falla general', ENERGIA: 'Falla de energía comercial', FIBRA: 'Corte de fibra óptica', EQUIPO: 'Reemplazo de equipo',
     RUIDO: 'Limpieza de ruido', MANTENIMIENTO: 'Mantenimiento preventivo', OTRO: 'Otro motivo'
   }
 };
@@ -547,7 +549,7 @@ function fallasHistorial_(version) {
     if (keys.every((k) => partes[k] != null)) return JSON.parse(keys.map((k) => partes[k]).join(''));
   }
   const desde = Date.now() - ALERTAS.DIAS_HISTORIAL * 86400000;
-  const lista = leerFallas_().filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn || 0) >= desde)
+  const lista = leerFallas_().filter((f) => f.estado === 'ACTIVA' || ((f.cerradaEn || 0) >= desde && !descartada_(f)))
     .map((f) => ({ id: f.id, numero: f.numero, motivo: f.motivo, motivoTexto: f.motivoTexto, nodos: f.nodos, inicio: f.inicio, fin: f.estado === 'ACTIVA' ? null : f.cerradaEn }));
   const txt = JSON.stringify(lista), partes = {};
   let i = 0;
@@ -564,20 +566,25 @@ function accionContactos_(d, ses) {
   if (!c) throw fallo_('DATOS', 'Falta el contrato.');
   const h = hojaConsultas_();
   const ult = h ? h.getLastRow() : 0;
-  if (ult < 2) return { n7: 0, n30: 0, anterior: null };
+  if (ult < 2) return { n7: 0, n30: 0, anterior: null, veces: [] };
   const filas = h.getRange(2, 7, ult - 1, 1).createTextFinder(c).matchEntireCell(true).findAll()
     .map((r) => r.getRow()).sort((a, b) => b - a);           // de la más reciente a la más vieja
   const ahora = Date.now();
   let n7 = 0, anterior = null, actual = 0;
-  // Las fechas se leen una por una: con las 25 más recientes sobra para un cliente
+  // veces: las horas en que llamó (consultas de Concentrix y Tiendas, con la de ahora); la tarjeta marca en
+  // qué fallas llamó. Las búsquedas de Workforce HN y Jefatura no son llamadas del cliente.
+  const veces = [];
+  // Se leen una por una (fecha a acceso): con las 25 más recientes sobra para un cliente
   for (let i = 0; i < filas.length && i < 25; i++) {
-    const v = h.getRange(filas[i], 1).getValue();
+    const fila = h.getRange(filas[i], 1, 1, 4).getValues()[0];
+    const v = fila[0];
     const t = v && typeof v.getTime === 'function' ? v.getTime() : Date.parse(v) || 0;
+    if (t && !ACCESOS_INTERNOS_[String(fila[3] || '')]) veces.push(t);
     if (i === 0 && ahora - t < 120000) { actual = 1; continue; }   // la consulta que se está viendo ahora
     if (anterior === null) anterior = t;
     if (ahora - t <= 7 * 86400000) n7++;
   }
-  return { n7: n7, n30: filas.length - actual, anterior: anterior };
+  return { n7: n7, n30: filas.length - actual, anterior: anterior, veces: veces };
 }
 
 function accionReportar_(d, ses) {
@@ -624,17 +631,19 @@ function filaAFalla_(f, n) {
     inicio: d.inicio || 0, eta: d.eta || null, publicadaEn: d.publicadaEn || 0, publicadaPor: d.publicadaPor || { u: '', nombre: String(f[9] || '') },
     cerradaEn: d.cerradaEn || null, cerradaPor: d.cerradaPor || null, notaCierre: String(f[12] || ''), referencia: String(f[13] || ''),
     detalle: String(f[14] || ''), impacto: d.impacto || { total: Number(f[15]) || 0, hfc: Number(f[16]) || 0, gpon: Number(f[17]) || 0, corp: 0, deps: [], munis: [] },
-    numero: String(f[19] == null ? '' : f[19]), historial: d.historial || [], _fila: n
+    numero: String(f[19] == null ? '' : f[19]), historial: d.historial || [], deteccion: d.deteccion || null, _fila: n
   };
 }
+/* Una posible falla (VALIDACION) que se cerró sin confirmarla: el VOC no encontró falla */
+function descartada_(f) { return f.estado !== 'ACTIVA' && f.motivo === 'VALIDACION'; }
 function fallaAFila_(f) {
   const fecha = (ms) => (ms ? new Date(ms) : '');
-  return [f.id, f.estado === 'ACTIVA' ? 'Activa' : 'Resuelta', ALERTAS.MOTIVOS[f.motivo] || f.motivo, f.motivoTexto, f.clienteTexto,
+  return [f.id, f.estado === 'ACTIVA' ? 'Activa' : descartada_(f) ? 'Descartada' : 'Resuelta', ALERTAS.MOTIVOS[f.motivo] || f.motivo, f.motivoTexto, f.clienteTexto,
     f.nodos.join(', '), fecha(f.inicio), fecha(f.eta), fecha(f.publicadaEn), f.publicadaPor ? f.publicadaPor.nombre : '',
     fecha(f.cerradaEn), f.cerradaPor ? f.cerradaPor.nombre : '', f.notaCierre, f.referencia, f.detalle,
     f.impacto.total, f.impacto.hfc, f.impacto.gpon,
     JSON.stringify({ estado: f.estado, motivo: f.motivo, nodos: f.nodos, inicio: f.inicio, eta: f.eta, publicadaEn: f.publicadaEn,
-      publicadaPor: f.publicadaPor, cerradaEn: f.cerradaEn, cerradaPor: f.cerradaPor, impacto: f.impacto, historial: f.historial }),
+      publicadaPor: f.publicadaPor, cerradaEn: f.cerradaEn, cerradaPor: f.cerradaPor, impacto: f.impacto, historial: f.historial, deteccion: f.deteccion || null }),
     f.numero || ''];
 }
 /* La columna "Número de falla" se agregó después: si la hoja Fallas no la tiene, se le pone al final */
@@ -665,19 +674,20 @@ function fallaPublica_(f) {
   };
 }
 
-/* Las fallas que ven los asesores: activas y cerradas hace menos de 36 horas */
+/* Activas y cerradas en las últimas 48 horas (con las descartadas), en caché 10 minutos */
+function fallasRecientes_() {
+  const c = cache_().get('fallasRecientes');
+  if (c) return JSON.parse(c);
+  const corte = Date.now() - 48 * 3600000;
+  const recientes = leerFallas_().filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && f.cerradaEn >= corte)).map(sinFila_);
+  const txt = JSON.stringify(recientes);
+  if (txt.length < 95000) cache_().put('fallasRecientes', txt, 600);
+  return recientes;
+}
+/* Las fallas que ven los asesores: activas y cerradas hace menos de 36 horas (sin las descartadas) */
 function fallasVisibles_() {
   const ahora = Date.now();
-  let recientes;
-  const c = cache_().get('fallasRecientes');
-  if (c) recientes = JSON.parse(c);
-  else {
-    const corte = ahora - 48 * 3600000;
-    recientes = leerFallas_().filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && f.cerradaEn >= corte)).map(sinFila_);
-    const txt = JSON.stringify(recientes);
-    if (txt.length < 95000) cache_().put('fallasRecientes', txt, 600);
-  }
-  return recientes.filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && ahora - f.cerradaEn < ALERTAS.HORAS_VISIBLE * 3600000)).map(fallaPublica_);
+  return fallasRecientes_().filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && !descartada_(f) && ahora - f.cerradaEn < ALERTAS.HORAS_VISIBLE * 3600000)).map(fallaPublica_);
 }
 
 function accionFalla_(d, ses) {
@@ -697,6 +707,7 @@ function accionFalla_(d, ses) {
       });
       tipo = 'FALLA_PUBLICADA';
       texto = 'publicó la falla ' + nombreFalla_(f) + ' (' + nombreMotivo_(f) + ' en ' + lista_(f.nodos, 2) + ')';
+      try { f.deteccion = deteccionFalla_(f.nodos, ahora); } catch (err) { f.deteccion = null; }   // nunca frena la publicación
     } else {
       f = todas.filter((x) => x.id === String(d.id || ''))[0];
       if (!f) throw fallo_('DATOS', 'La falla ya no existe.');
@@ -1393,12 +1404,20 @@ const ACCESOS_INTERNOS_ = { 'Workforce HN': true, 'Jefatura': true };
 function consultasPosibleFalla_(filas, enFalla) {
   return filas.filter((f) => {
     const nodo = String(f[7] || ''), res = String(f[8] || '');
-    return nodo && !esVirtual_(nodo) && !(enFalla && enFalla[nodo]) && res !== 'FALLA' && res !== 'NO_ENCONTRADO' && !ACCESOS_INTERNOS_[String(f[3] || '')];
+    if (!nodo || esVirtual_(nodo) || res === 'FALLA' || res === 'NO_ENCONTRADO' || ACCESOS_INTERNOS_[String(f[3] || '')]) return false;
+    const x = enFalla && enFalla[nodo];
+    return !x || (x !== true && fechaMs_(f[0]) > x);
   });
 }
+/* Nodo -> true si tiene una falla activa, o la hora en que se cerró su última falla (resuelta o descartada):
+   las consultas de antes del cierre ya quedaron explicadas por esa falla. Así, al descartar una posible
+   falla, el aviso no vuelve a salir con los mismos clientes; solo cuentan los que llamen después. */
 function nodosEnFalla_() {
   const enFalla = {};
-  fallasVisibles_().forEach((f) => { if (f.estado === 'ACTIVA') f.nodos.forEach((n) => { enFalla[n] = true; }); });
+  fallasRecientes_().forEach((f) => f.nodos.forEach((n) => {
+    if (f.estado === 'ACTIVA') enFalla[n] = true;
+    else if (enFalla[n] !== true && f.cerradaEn) enFalla[n] = Math.max(enFalla[n] || 0, f.cerradaEn);
+  }));
   return enFalla;
 }
 function accionAlertas_() {
@@ -1442,6 +1461,43 @@ function alertasReportadas_() {
   return m;
 }
 
+/* Cómo se detectó una falla, al publicarla: la racha de consultas de clientes de sus nodos (Concentrix y
+   Tiendas) que llega hasta la publicación, hasta 4 horas atrás: sin pausas de más de 45 minutos entre una
+   consulta y otra, ni entre la última y la publicación. Consultas que se cortaron antes no cuentan.
+   primera: la primera consulta de la racha; aviso: cuando se juntaron 5 clientes distintos en 60 min
+   (o 2 reportes), si pasó; llamadas y clientes: cuántas consultas y clientes distintos hubo antes de publicar. */
+function deteccionFalla_(nodos, publicada) {
+  const enNodos = {};
+  nodos.forEach((n) => { enNodos[n] = true; });
+  const filas = consultasPosibleFalla_(leerConsultas_(publicada - 4 * 3600000, null), null)
+    .filter((f) => enNodos[String(f[7])])
+    .map((f) => ({ t: fechaMs_(f[0]), c: String(f[6] || ''), rep: String(f[5]) === 'reporte' }))
+    .filter((x) => x.t <= publicada)
+    .sort((a, b) => a.t - b.t);
+  // La racha llega hasta la publicación: sin pausas de más de 45 minutos entre una llamada y la siguiente,
+  // ni entre la última y la publicación (llamadas de un problema que ya había pasado no cuentan)
+  let ini = filas.length, ref = publicada;
+  for (let i = filas.length - 1; i >= 0; i--) {
+    if (ref - filas[i].t > 45 * 60000) break;
+    ini = i; ref = filas[i].t;
+  }
+  const racha = filas.slice(ini);
+  if (!racha.length) return { primera: null, aviso: null, llamadas: 0, clientes: 0 };
+  const distintos = {};
+  racha.forEach((x) => { if (x.c) distintos[x.c] = true; });
+  let aviso = null;
+  for (let i = 0; i < racha.length && aviso == null; i++) {
+    const vistos = {};
+    let n = 0, reportes = 0;
+    for (let j = i; j < racha.length && racha[j].t - racha[i].t <= ALERTAS.ALERTA_MIN * 60000; j++) {
+      if (racha[j].c && !vistos[racha[j].c]) { vistos[racha[j].c] = true; n++; }
+      if (racha[j].rep) reportes++;
+      if (n >= ALERTAS.ALERTA_CLIENTES || reportes >= ALERTAS.ALERTA_REPORTES) { aviso = racha[j].t; break; }
+    }
+  }
+  return { primera: racha[0].t, aviso: aviso, llamadas: racha.length, clientes: Object.keys(distintos).length };
+}
+
 /* Una posible falla: los clientes con sus datos de la base (para el correo) o la marca de reportada */
 function accionAlerta_(d, ses) {
   const nodo = String(d.nodo || '').toUpperCase().replace(/[^A-Z0-9_\- ]/g, '').slice(0, 40);
@@ -1465,7 +1521,9 @@ function accionAlerta_(d, ses) {
 }
 function detallePosibleFalla_(nodo) {
   const ahora = Date.now();
-  const filas = consultasPosibleFalla_(leerConsultas_(ahora - ALERTAS.ALERTA_MIN * 60000, null), null).filter((f) => String(f[7]) === nodo);
+  const enFalla = nodosEnFalla_();
+  const cierre = typeof enFalla[nodo] === 'number' ? enFalla[nodo] : 0;   // solo lo que llegó después de cerrar su última falla
+  const filas = consultasPosibleFalla_(leerConsultas_(ahora - ALERTAS.ALERTA_MIN * 60000, null), null).filter((f) => String(f[7]) === nodo && fechaMs_(f[0]) > cierre);
   const por = {};
   let reportes = 0, desde = null, hasta = null;
   filas.forEach((f) => {
@@ -1493,7 +1551,7 @@ function detallePosibleFalla_(nodo) {
   });
   return {
     nodo: nodo, ahora: ahora, minutos: ALERTAS.ALERTA_MIN, nClientes: Object.keys(por).length, reportes: reportes, consultas: filas.length,
-    desde: desde, hasta: hasta, clientes: clientes, reportada: alertasReportadas_()[nodo] || null, enFalla: !!nodosEnFalla_()[nodo]
+    desde: desde, hasta: hasta, clientes: clientes, reportada: alertasReportadas_()[nodo] || null, enFalla: enFalla[nodo] === true
   };
 }
 /* Datos de varios contratos con una sola búsqueda en la base. Si un contrato tiene varios

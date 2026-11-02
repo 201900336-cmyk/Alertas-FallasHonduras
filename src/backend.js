@@ -283,7 +283,8 @@ function BackendLocal() {
       const l = (await Store.leerLogs(ahora - 30 * U.DIA)).filter((x) => String(x.c) === String(contrato)).sort((a, b) => b.t - a.t);
       const actual = l.length && ahora - l[0].t < 120000 ? 1 : 0;
       const antes = l.slice(actual);
-      return { n7: antes.filter((x) => ahora - x.t <= 7 * U.DIA).length, n30: antes.length, anterior: antes.length ? antes[0].t : null };
+      return { n7: antes.filter((x) => ahora - x.t <= 7 * U.DIA).length, n30: antes.length, anterior: antes.length ? antes[0].t : null,
+        veces: l.slice(0, 25).filter((x) => !Model.esInterno(x.canal)).map((x) => x.t) };
     },
     async reportar(rec) {
       await log({ tipo: 'reporte', q: 'contrato', c: rec.contrato, n: rec.nodo, tec: rec.tecnologia, dep: rec.departamento, r: 'SIN_FALLA', f: null });
@@ -305,6 +306,7 @@ function BackendLocal() {
           publicadaEn: ahora, publicadaPor: por, cerradaEn: null, cerradaPor: null, notaCierre: '', impacto: resumir(Model.impacto(c.cat, x.nodos)),
           historial: [{ accion: 'PUBLICADA', en: ahora, por, detalle: U.plural(x.nodos.length, '1 nodo', x.nodos.length + ' nodos') }]
         };
+        f.deteccion = Model.deteccion(await Store.leerLogs(ahora - 4 * U.HORA), f.nodos, ahora);
         fallas.push(f);
         tipo = 'FALLA_PUBLICADA'; texto = 'publicó la falla ' + U.numeroFalla(f) + ' (' + nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 2) + ')';
       } else {
@@ -345,8 +347,10 @@ function BackendLocal() {
       const c = await indice();
       const ahora = Date.now();
       const fallas = await Store.leerFallas();
+      // Solo lo que llegó después de cerrar la última falla del nodo (resuelta o descartada)
+      const cierre = Math.max(0, ...fallas.filter((f) => f.cerradaEn && f.nodos.includes(nodo)).map((f) => f.cerradaEn));
       const logs = (await Store.leerLogs(ahora - CONFIG.alerta.minutos * U.MIN))
-        .filter((l) => l.n === nodo && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
+        .filter((l) => l.n === nodo && l.t > cierre && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !Model.esInterno(l.canal))
         .sort((a, b) => a.t - b.t);
       const por = new Map();
       let reportes = 0;

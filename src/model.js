@@ -318,7 +318,11 @@ const Model = (() => {
   }
 
   /* ---------- Fallas ---------- */
-  const visible = (f, now) => f.estado === 'ACTIVA' || (f.estado === 'CERRADA' && f.cerradaEn && now - f.cerradaEn < CONFIG.horasVisibleTrasCierre * U.HORA);
+  /* Posible falla general (motivo VALIDACION): se publica mientras el VOC la confirma. Si se cierra sin
+     ponerle el motivo real, queda descartada: no la ven los asesores ni entra al historial del cliente. */
+  const esPosible = (f) => !!f && f.motivo === 'VALIDACION';
+  const descartada = (f) => esPosible(f) && f.estado !== 'ACTIVA';
+  const visible = (f, now) => f.estado === 'ACTIVA' || (f.estado === 'CERRADA' && f.cerradaEn && !descartada(f) && now - f.cerradaEn < CONFIG.horasVisibleTrasCierre * U.HORA);
   function mapaFallas(fallas, now) {
     const visibles = fallas.filter((f) => visible(f, now));
     const porNodo = new Map();
@@ -354,7 +358,7 @@ const Model = (() => {
     const desde = now - 400 * U.DIA, out = {};
     nodos.forEach((n) => { out[n] = []; });
     fallas.forEach((f) => {
-      if (f.estado !== 'ACTIVA' && (f.cerradaEn || 0) < desde) return;
+      if (f.estado !== 'ACTIVA' && ((f.cerradaEn || 0) < desde || descartada(f))) return;
       f.nodos.forEach((n) => {
         if (!out[n]) return;
         const x = { id: f.id, motivo: f.motivo, motivoTexto: f.motivoTexto, inicio: f.inicio, fin: f.estado === 'ACTIVA' ? null : f.cerradaEn };
@@ -385,6 +389,8 @@ const Model = (() => {
       if (l.r === 'FALLA' || l.r === 'NO_ENCONTRADO' || esInterno(l.canal)) continue;
       const lst = mf.porNodo.get(l.n);
       if (lst && lst.some((f) => f.estado === 'ACTIVA')) continue;
+      // Lo de antes de cerrar su última falla (resuelta o descartada) ya quedó explicado por esa falla
+      if (lst && lst.some((f) => f.cerradaEn && l.t <= f.cerradaEn)) continue;
       const desc = descartadas && descartadas[l.n];
       if (desc && l.t <= desc) continue;
       let e = por.get(l.n);
@@ -401,6 +407,61 @@ const Model = (() => {
       })
       .filter((e) => e.nivel)
       .sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alerta' ? -1 : 1) || b.nClientes - a.nClientes || b.ultimo - a.ultimo);
+  }
+
+  /* ---------- Detección (igual que deteccionFalla_ del servidor) ----------
+     La racha de consultas de clientes de los nodos que llega hasta la publicación, hasta 4 horas atrás: sin
+     pausas de más de 45 minutos entre una y otra, ni entre la última y la publicación. Llamadas que se
+     cortaron antes (de otro problema ya pasado) no cuentan.
+     logs: [{ t, n, c, canal, r, tipo }] */
+  function deteccion(logs, nodos, publicada) {
+    const enNodos = new Set(nodos);
+    const filas = logs.filter((l) => enNodos.has(l.n) && l.t <= publicada && l.t >= publicada - 4 * U.HORA
+      && l.r !== 'FALLA' && l.r !== 'NO_ENCONTRADO' && !esInterno(l.canal)).sort((a, b) => a.t - b.t);
+    // La racha de llamadas que llega hasta la publicación: sin pausas de más de 45 minutos entre una
+    // llamada y la siguiente, ni entre la última y la publicación
+    let ini = filas.length, ref = publicada;
+    for (let i = filas.length - 1; i >= 0; i--) { if (ref - filas[i].t > 45 * U.MIN) break; ini = i; ref = filas[i].t; }
+    const racha = filas.slice(ini);
+    if (!racha.length) return { primera: null, aviso: null, llamadas: 0, clientes: 0 };
+    let aviso = null;
+    for (let i = 0; i < racha.length && aviso == null; i++) {
+      const vistos = new Set(); let reportes = 0;
+      for (let j = i; j < racha.length && racha[j].t - racha[i].t <= CONFIG.alerta.minutos * U.MIN; j++) {
+        if (racha[j].c) vistos.add(String(racha[j].c));
+        if (racha[j].tipo === 'reporte') reportes++;
+        if (vistos.size >= CONFIG.alerta.clientesDistintos || reportes >= CONFIG.alerta.reportes) { aviso = racha[j].t; break; }
+      }
+    }
+    return { primera: racha[0].t, aviso, llamadas: racha.length, clientes: new Set(racha.filter((x) => x.c).map((x) => String(x.c))).size };
+  }
+
+  /* Cuántas veces llamó un cliente durante una falla: sus consultas entre el inicio y el fin, contando
+     como una sola las que están a menos de 10 minutos (varias búsquedas en la misma llamada) */
+  function llamadasEn(veces, desde, hasta) {
+    let n = 0, ultima = -Infinity;
+    (veces || []).filter((t) => t >= desde && t <= hasta).sort((a, b) => a - b).forEach((t) => { if (t - ultima > 10 * U.MIN) { n++; ultima = t; } });
+    return n;
+  }
+
+  /* Nota para la descripción del caso en Qflow (plantillas en CONFIG.notaQflow) */
+  function notaQflow(v, rec, now) {
+    const f = v.falla;
+    const clave = v.tipo === 'FALLA' && esPosible(f) ? 'POSIBLE' : v.tipo;
+    const plantilla = CONFIG.notaQflow[clave];
+    if (!plantilla) return '';
+    const hora = (t) => U.hora(t).replace(/\u00a0/g, ' ');
+    // "las 3:00 p. m.", "la 1:30 p. m.", "ayer a las 9:15 a. m." o "el 30 oct a las 9:15 a. m."
+    const momento = (t) => { const h = hora(t), art = /^1:/.test(h) ? 'la ' : 'las '; return U.esHoy(t, now) ? art + h : U.diaRel(t, now) + ' a ' + art + h; };
+    const motivo = !f ? '' : f.motivo === 'OTRO' ? String(f.motivoTexto || 'otro motivo').replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ])/, (c) => c.toLowerCase())
+      : MOTIVO[f.motivo].nombre.replace(/^Falla de /, '').toLowerCase();
+    const datos = {
+      contrato: String(rec.contrato), nodo: rec.nodo, numero: f ? U.numeroFalla(f) : '', motivo,
+      inicio: f ? momento(f.inicio) : '',
+      eta: f && f.eta && f.eta > now ? 'solución estimada ' + U.cuandoCorto(f.eta, now).replace(/\u00a0/g, ' ') : 'sin hora estimada de solución',
+      cerrada: f && f.cerradaEn ? (U.esHoy(f.cerradaEn, now) ? 'hoy a ' : '') + momento(f.cerradaEn) : ''
+    };
+    return plantilla.replace(/\{(\w+)\}/g, (m, k) => (k in datos ? datos[k] : m)).replace(/\.\./g, '.');
   }
 
   /* ---------- Correo para reportar una posible falla (al VOC o al personal interno) ----------
@@ -435,7 +496,7 @@ const Model = (() => {
     const nodoTxt = d.nodo + (tec ? ' (' + tec + ')' : '');
 
     const asunto = 'Posible falla en nodo ' + d.nodo + (tec || muni ? ' (' + [tec, muni && U.lugar(muni)].filter(Boolean).join(', ') + ')' : '') + ' – ' + n + ' clientes en ' + lapso;
-    const cuando = hora(desde) === hora(hasta) ? 'A las ' + hora(desde) : 'De ' + hora(desde) + ' a ' + hora(hasta);
+    const cuando = hora(desde) === hora(hasta) ? (/^1:/.test(hora(desde)) ? 'A la ' : 'A las ') + hora(desde) : 'De ' + hora(desde) + ' a ' + hora(hasta);
     const p1 = ['Les reportamos una posible falla en el nodo ', { b: nodoTxt }, (lugar ? ', ' + lugar : '') + '. ' + cuando + ' se comunicaron con nosotros ',
       { b: n + ' clientes distintos' }, ' de este nodo' + canales + reportes + '.'];
     const p2 = [(info && info.total ? 'El nodo tiene ' + U.n(info.total) + ' clientes. ' : '') + 'Por ahora no tenemos una falla registrada en este nodo.'];
@@ -498,6 +559,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, esInterno, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

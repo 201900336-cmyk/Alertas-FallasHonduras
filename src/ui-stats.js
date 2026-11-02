@@ -64,6 +64,7 @@ function VistaStats() {
           <div class="panel-cuerpo"><${GraficaConsultas} serie=${d.serie} porHora=${per === 'hoy'} /></div></section>
         <section class="panel c-4"><div class="panel-cab"><h3>HFC frente a GPON</h3></div>
           <div class="panel-cuerpo"><${Comparativo} d=${d} /></div></section>
+        <section class="panel c-12"><${Deteccion} x=${d.det} /></section>
         <section class="panel c-7"><div class="panel-cab"><h3>Clientes afectados por departamento</h3><span class="der sub">Suma de clientes en las fallas del periodo</span></div>
           <div class="panel-cuerpo"><${MapaHonduras} valores=${d.porDep} fallas=${d.fallasPorDep} /></div></section>
         <section class="panel c-5"><div class="panel-cab"><h3>Motivos de las fallas</h3></div>
@@ -83,7 +84,9 @@ function VistaStats() {
 const claveDia = (t) => new Date(U.inicioDia(t) + 12 * U.HORA).toISOString().slice(0, 10);
 function calcular(s, c, desde, per) {
   const cat = s.cat, now = s.now;
-  const fallas = s.fallas.filter((f) => f.publicadaEn >= desde);
+  // Las posibles fallas que el VOC descartó no fueron fallas: no cuentan en las estadísticas
+  const delPeriodo = s.fallas.filter((f) => f.publicadaEn >= desde);
+  const fallas = delPeriodo.filter((f) => !Model.descartada(f));
   const cerradas = fallas.filter((f) => f.estado === 'CERRADA');
   const prom = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
   const mttr = prom(cerradas.map((f) => f.cerradaEn - f.inicio));
@@ -144,9 +147,22 @@ function calcular(s, c, desde, per) {
   bitacora.sort((a, b) => b.en - a.en);
   const equipo = [...eq.values()].map((e) => Object.assign(e, { tPubP: prom(e.tPub), durP: prom(e.dur) })).sort((a, b) => b.publicadas - a.publicadas);
 
+  // Detección: cuánto pasó desde la primera llamada del nodo hasta publicar la falla. El servidor lo
+  // calcula y lo guarda al publicarla; las fallas publicadas antes de este cambio no lo tienen.
+  const mediana = (a) => { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+  const conDato = fallas.filter((f) => f.deteccion).sort((a, b) => b.publicadaEn - a.publicadaEn);
+  const conLlamadas = conDato.filter((f) => f.deteccion.primera);
+  const conAviso = conDato.filter((f) => f.deteccion.aviso);
+  const det = {
+    filas: conDato, sinDato: fallas.length - conDato.length, descartadas: delPeriodo.length - fallas.length,
+    conLlamadas: conLlamadas.length, primera: mediana(conLlamadas.map((f) => f.publicadaEn - f.deteccion.primera)),
+    conAviso: conAviso.length, aviso: mediana(conAviso.map((f) => f.publicadaEn - f.deteccion.aviso)),
+    antes: conDato.length - conLlamadas.length, clientes: conDato.reduce((a, f) => a + (f.deteccion.clientes || 0), 0)
+  };
+
   return { consultas: c.consultas || 0, conFalla: c.conFalla || 0, clientesUnicos: c.clientesUnicos || 0, clientesAprox: !!c.clientesAprox, fallas, activas: s.fallas.filter((f) => f.estado === 'ACTIVA').length,
     afectados: afH + afG, afH, afG, mttr, tPub, serie, tec, motivos, porDep, fallasPorDep, reincidentes, topClientes, recurrentes,
-    canales: c.canales || {}, asesores: c.asesores || [], reportes: c.reportes || 0, equipo, bitacora };
+    canales: c.canales || {}, asesores: c.asesores || [], reportes: c.reportes || 0, equipo, bitacora, det };
 }
 
 /* ---------- Gráficas ---------- */
@@ -255,6 +271,65 @@ function MapaHonduras({ valores, fallas, vacio, apilado, nombres }) {
     ${tabla && html`<table class="tabla" style="margin-top:10px"><thead><tr><th>Departamento</th><th class="der">Clientes afectados</th><th class="der">Fallas</th></tr></thead>
       <tbody>${lista.map(([k, v]) => html`<tr key=${k}><td>${HN_MAPA.deps[k] ? HN_MAPA.deps[k].name : U.lugar(k)}</td><td class="der">${U.n(v)}</td><td class="der">${U.n(fallas[k] || 0)}</td></tr>`)}</tbody></table>`}
     ${tt.nodo}
+  </div>`;
+}
+
+/* ---------- Detección: de la primera llamada a la publicación ----------
+   Cada fila es una falla: la barra va desde que llamó el primer cliente hasta que se publicó; la parte
+   ámbar es desde el aviso de posible falla (5 clientes distintos o 2 avisos de asesores). */
+function Deteccion({ x }) {
+  const [todas, setTodas] = useState(false);
+  const lista = todas ? x.filas : x.filas.slice(0, 8);
+  const espera = (f) => (f.deteccion.primera ? f.publicadaEn - f.deteccion.primera : 0);
+  const max = Math.max(20 * U.MIN, ...lista.map(espera));
+  const pct = (ms) => Math.max(0, Math.min(100, (ms / max) * 100));
+  const nodos = (f) => f.nodos.slice(0, 3).join(', ') + (f.nodos.length > 3 ? ' +' + (f.nodos.length - 3) : '');
+  const fecha = (t) => new Date(t).toLocaleString('es-HN');
+  const minutos = (ms) => Math.round(ms / U.MIN);
+  const exportar = () => U.descargarCsv('deteccion-fallas.csv', [['Número de falla', 'Motivo', 'Nodos', 'Publicada', 'Primera llamada', 'Aviso de posible falla',
+    'Minutos desde la primera llamada', 'Minutos desde el aviso', 'Llamadas antes de publicar', 'Clientes antes de publicar']]
+    .concat(x.filas.map((f) => { const t = f.deteccion; return [U.numeroFalla(f), nombreMotivo(f), f.nodos.join(' '), fecha(f.publicadaEn), t.primera ? fecha(t.primera) : '',
+      t.aviso ? fecha(t.aviso) : '', t.primera ? minutos(f.publicadaEn - t.primera) : 0, t.aviso ? minutos(f.publicadaEn - t.aviso) : '', t.llamadas, t.clientes]; })));
+  const nota = 'Cuenta las consultas de Concentrix y Tiendas en los nodos de la falla en las 4 horas antes de publicarla, sin pausas de más de 45 minutos entre una y otra ni antes de publicar. '
+    + 'El aviso es el momento en que se juntaron ' + CONFIG.alerta.clientesDistintos + ' clientes distintos en ' + CONFIG.alerta.minutos + ' minutos o ' + CONFIG.alerta.reportes + ' avisos de asesores. '
+    + (x.sinDato ? U.plural(x.sinDato, '1 falla del periodo se publicó', x.sinDato + ' fallas del periodo se publicaron') + ' antes de que Alertas midiera esto y no ' + (x.sinDato === 1 ? 'tiene' : 'tienen') + ' el dato.' : '');
+  return html`<div class="deteccion">
+    <div class="panel-cab"><div><h3>Detección de fallas</h3><div class="sub">Cuánto pasó desde que los clientes empezaron a llamar hasta que se publicó la falla</div></div>
+      <div class="der">
+        ${x.descartadas ? html`<span class="chip">${U.plural(x.descartadas, '1 posible falla descartada', x.descartadas + ' posibles fallas descartadas')}</span>` : null}
+        <button class="btn btn-borde btn-chico" disabled=${!x.filas.length} onClick=${exportar}><${Ico} n="descargar" s=${15} />CSV</button>
+      </div></div>
+    ${x.filas.length ? html`
+      <div class="kpis det-kpis">
+        <div class="kpi"><div class="l">De la primera llamada a publicar</div><div class="v">${x.conLlamadas ? U.durCorto(x.primera) : 'Sin datos'}</div>
+          <div class="d">${x.conLlamadas ? 'Mediana de ' + U.plural(x.conLlamadas, '1 falla', x.conLlamadas + ' fallas') : 'Ninguna falla tuvo llamadas antes'}</div></div>
+        <div class="kpi"><div class="l">Del aviso a publicar</div><div class="v">${x.conAviso ? U.durCorto(x.aviso) : 'Sin datos'}</div>
+          <div class="d">${x.conAviso ? 'Mediana de ' + U.plural(x.conAviso, '1 falla', x.conAviso + ' fallas') + ' con aviso antes' : 'El aviso no se activó antes de publicar'}</div></div>
+        <div class="kpi"><div class="l">Publicadas antes de que llamaran</div><div class="v">${U.pct(x.antes, x.filas.length)} %</div>
+          <div class="d">${x.antes} de ${U.plural(x.filas.length, '1 falla', x.filas.length + ' fallas')}</div></div>
+        <div class="kpi"><div class="l">Clientes que llamaron antes</div><div class="v">${U.n(x.clientes)}</div>
+          <div class="d">Se atendieron sin saber de la falla</div></div>
+      </div>
+      <div class="panel-cuerpo">
+        ${x.conLlamadas > 0 && html`<div class="leyenda"><span><i style="background:var(--chart-ink)"></i>Clientes llamando, sin aviso todavía</span><span><i style="background:var(--resuelta)"></i>Del aviso de posible falla a la publicación</span></div>`}
+        <div class="tabla-envoltura"><table class="tabla det-tabla">
+          <thead><tr><th>Falla</th><th class="det-nodos">Nodos</th><th>Publicada</th><th>Desde la primera llamada</th><th>Aviso de posible falla</th><th class="der">Antes de publicar</th></tr></thead>
+          <tbody>${lista.map((f) => { const t = f.deteccion, total = espera(f), deAviso = t.aviso ? f.publicadaEn - t.aviso : 0; return html`<tr key=${f.id}>
+            <td><b class="num">${U.numeroFalla(f)}</b><div class="sub">${cortoMotivo(f)}</div><div class="sub codigo det-nodos-movil">${nodos(f)}</div></td>
+            <td class="codigo det-nodos">${nodos(f)}</td>
+            <td class="num">${U.dia(f.publicadaEn)}, ${U.hora(f.publicadaEn)}</td>
+            <td>${t.primera ? html`<div class="det-linea" title=${'Primera llamada: ' + U.hora(t.primera) + (t.aviso ? '. Aviso: ' + U.hora(t.aviso) : '')}>
+                <span class="det-pista"><i style=${'width:' + pct(total - deAviso) + '%'}></i>${deAviso ? html`<i class="det-aviso" style=${'width:' + pct(deAviso) + '%'}></i>` : null}</span>
+                <b class="num">${U.durCorto(total)}</b></div>`
+              : html`<span class="det-ok"><${Ico} n="check" s=${15} />Nadie había llamado</span>`}</td>
+            <td>${t.aviso ? U.durCorto(deAviso) + ' antes de publicar' : t.llamadas ? html`<span class="sub">No se activó: nunca hubo ${CONFIG.alerta.clientesDistintos} clientes en ${CONFIG.alerta.minutos} min</span>` : ''}</td>
+            <td class="der">${t.llamadas ? html`${U.plural(t.llamadas, '1 llamada', t.llamadas + ' llamadas')}<div class="sub">${U.plural(t.clientes, '1 cliente', t.clientes + ' clientes')}</div>` : html`<span class="sub">Ninguna</span>`}</td>
+          </tr>`; })}</tbody></table></div>
+        ${x.filas.length > 8 && html`<button class="ver-tabla" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + x.filas.length + ' fallas'}</button>`}
+        <p class="sub det-nota">${nota}</p>
+      </div>`
+    : html`<div class="panel-cuerpo"><div class="vacio">${x.sinDato ? 'Las fallas de este periodo se publicaron antes de que Alertas midiera la detección.' : 'Sin fallas en este periodo.'}</div>
+        ${x.sinDato ? html`<p class="sub det-nota">${nota}</p>` : null}</div>`}
   </div>`;
 }
 

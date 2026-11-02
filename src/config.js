@@ -45,7 +45,11 @@ const CONFIG = {
   },
 
   // "cliente" es la forma en que el asesor le explica el motivo al cliente.
+  // VALIDACION: posible falla general, para publicarla apenas llega el aviso de 5 clientes mientras el VOC
+  // la confirma. Al confirmarla se edita y se le pone el motivo real; si se cierra así, queda descartada.
   motivos: [
+    { id: 'VALIDACION', nombre: 'Posible falla general', corto: 'Posible falla', posible: true,
+      cliente: 'un posible inconveniente en la red de su zona que nuestro equipo técnico está validando' },
     { id: 'ENERGIA', nombre: 'Falla de energía comercial', corto: 'Energía comercial',
       cliente: 'una interrupción del suministro de energía eléctrica que afecta nuestros equipos en su zona' },
     { id: 'FIBRA', nombre: 'Corte de fibra óptica', corto: 'Corte de fibra',
@@ -77,8 +81,22 @@ const CONFIG = {
     SIN_FALLA: [
       'Si el cliente dice que sus vecinos tampoco tienen servicio, usa Reportar posible falla: Workforce HN recibe la alerta cuando varios clientes del mismo nodo llaman.'
     ],
-    SIN_NODO: []
-  }
-};
+    SIN_NODO: [],
+    POSIBLE: [
+      'Es una posible falla: Workforce HN la está validando con el VOC. Si se confirma, aquí verás el motivo y la hora estimada.',
+      'Si lo que reporta el cliente es distinto a lo de sus vecinos (por ejemplo, solo un equipo o una sola TV), sigue con el soporte normal.'
+    ]
+  },
+
+  // Nota corta para pegar en la descripción del caso en Qflow, según el resultado de la consulta. Así todos
+  // documentan igual. {nodo} {numero} {motivo} {inicio} {eta} {cerrada} {contrato} se reemplazan con los datos
+  // del cliente y la falla; {inicio} y {cerrada} ya traen "las" o el día ("ayer a las 3:00 p. m.").
+  notaQflow: {
+    FALLA: 'Cliente en falla general {numero} ({motivo}), nodo {nodo}, desde {inicio}; {eta}. Se le informó al cliente.',
+    POSIBLE: 'Cliente en posible falla general, nodo {nodo}, desde {inicio}; en validación con el VOC. Se le informó al cliente.',
+    RESUELTA: 'Cliente en falla general {numero} ({motivo}), nodo {nodo}, solucionada {cerrada}. Se le indicó reiniciar el equipo.',
+    SIN_FALLA: 'Sin falla general en el nodo {nodo}. Se continúa con el soporte normal.',
+    SIN_NODO: 'Nodo virtual ({nodo}): no se puede confirmar una falla general. Se continúa con el soporte normal.'
+  }};
 
 const MOTIVO = Object.fromEntries(CONFIG.motivos.map((m) => [m.id, m]));

@@ -181,6 +181,9 @@ function HistorialCliente({ rec, lista, now, rein }) {
   const per = PERIODOS_HIST.find((p) => p[0] === dias);
   const h = Model.historialCliente(lista, rec, now, dias);
   const c = useContactos(rec.contrato);
+  // Cuántas veces llamó durante cada falla (Concentrix y Tiendas). En la falla activa no cuenta la llamada de
+  // ahora (las consultas de los últimos 10 minutos): lo útil es saber si ya había llamado por esta falla.
+  const llamadas = (f) => (!c || !c.veces ? 0 : Model.llamadasEn(c.veces, f.inicio, f.fin || now - 10 * U.MIN));
   return html`<section class="panel historial-cliente" aria-label="Historial de fallas del cliente">
     <div class="panel-cab">
       <h3>Historial de fallas de este cliente</h3>
@@ -196,25 +199,32 @@ function HistorialCliente({ rec, lista, now, rein }) {
         <span>${U.plural(c && !c.error ? c.n7 : 2, 'consulta anterior', 'consultas anteriores')} en 7 días</span>
         ${c && !c.error && html`<small>${c.anterior ? 'La anterior: ' + fechaHist(c.anterior, now) : 'Sin consultas en los últimos 30 días'}</small>`}</div>
     </div>
-    ${h.total ? html`<ol class="hist-lista">${h.fallas.map((f) => html`<li key=${f.id}>
+    ${h.total ? html`<ol class="hist-lista">${h.fallas.map((f) => { const llamo = llamadas(f); return html`<li key=${f.id}>
         <span class="hist-punto" data-s=${f.fin ? 'RESUELTA' : 'FALLA'}></span>
         <div class="hist-motivo"><b>${nombreMotivo(f)}</b><span class="sub">Nodo ${rec.nodo}</span></div>
         <div class="num hist-fechas">${fechaHist(f.inicio, now)} → ${f.fin ? fechaHist(f.fin, now) : 'sigue activa'}</div>
         <div class="num hist-dur">${U.dur((f.fin || now) - f.inicio)}</div>
-        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">Activa</span>`}${f.numero && html`<span class="chip codigo">${U.numeroFalla(f)}</span>`}</div>
-      </li>`)}</ol>`
+        <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">${Model.esPosible(f) ? 'En validación' : 'Activa'}</span>`}${llamo > 0 && html`<span class="chip llamo" title=${f.fin ? 'Llamadas de este cliente durante la falla (varias búsquedas en la misma llamada cuentan una vez)' : 'Llamadas anteriores de este cliente durante esta falla, sin contar la de ahora'}>
+          <${Ico} n="telefono" s=${13} />${f.fin ? U.plural(llamo, 'Llamó 1 vez', 'Llamó ' + llamo + ' veces') : U.plural(llamo, 'Ya había llamado 1 vez', 'Ya había llamado ' + llamo + ' veces')}</span>`}${f.numero && html`<span class="chip codigo">${U.numeroFalla(f)}</span>`}</div>
+      </li>`; })}</ol>`
       : html`<div class="vacio hist-vacio"><b>Sin fallas ${per[2]}</b>Workforce HN no ha registrado fallas en su nodo en este periodo.</div>`}
-    <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}.</p>
+    <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}. "Llamó" cuenta sus llamadas al Call Center y visitas a Tiendas durante cada falla, en los últimos 30 días.</p>
   </section>`;
 }
 
 function Veredicto({ v, rec, now }) {
   const f = v.falla;
   let titulo = '', l1 = '', l2 = '', sello = '';
-  if (v.tipo === 'FALLA') {
+  if (v.tipo === 'FALLA' && Model.esPosible(f)) {
+    titulo = 'Posible falla general';
+    l1 = 'Workforce HN está validando con el equipo técnico una posible falla en el nodo ' + rec.nodo + '.';
+    l2 = 'Reportada desde ' + U.las(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
+      + (f.eta && f.eta > now ? U.conPunto('Solución estimada: ' + U.cuandoCorto(f.eta, now)) : 'Todavía sin confirmar ni hora estimada.');
+    sello = 'Posible falla, publicada ' + U.cuandoCorto(f.publicadaEn, now);
+  } else if (v.tipo === 'FALLA') {
     titulo = 'Falla general';
     l1 = nombreMotivo(f) + ' en el nodo ' + rec.nodo + '.';
-    l2 = 'Afectado desde las ' + U.hora(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
+    l2 = 'Afectado desde ' + U.las(f.inicio) + ' (' + U.hace(f.inicio, now) + '). '
       + (f.eta ? (f.eta > now ? U.conPunto('Solución estimada: ' + U.cuandoCorto(f.eta, now)) : 'La hora estimada (' + U.hora(f.eta) + ') ya pasó; Workforce HN sigue dando seguimiento.') : 'Aún sin hora estimada de solución.');
     sello = 'Falla ' + U.numeroFalla(f) + ', publicada ' + U.cuandoCorto(f.publicadaEn, now);
   } else if (v.tipo === 'RESUELTA') {
@@ -281,9 +291,22 @@ function partesGuion(v, rec, modo, now, rein) {
   const nombre = empresa ? '' : U.primerNombre(rec.nombre);
   const M = (x) => ({ v: x });
   const motivo = f ? clienteMotivo(f) : '';
+  if (v.tipo === 'FALLA' && Model.esPosible(f)) {
+    if (modo === 'chat') {
+      return ['Hola', nombre ? ', ' : '', nombre ? M(nombre) : '', '. Validamos su contrato ', M(String(rec.contrato)),
+        ': varios clientes de su zona nos reportaron el mismo inconveniente y nuestro equipo técnico ya está validando ', M('una posible falla general'),
+        '. Lamentamos las molestias.', rein ? ' Sabemos que no es la primera vez que le pasa en los últimos meses.' : '', '\n\n',
+        'Cuando se solucione, su servicio se restablecerá de forma automática. ¡Gracias por su paciencia!'];
+    }
+    return ['Le comento, ', nombre ? M(nombre) : 'estimado cliente', ', que validando su contrato vemos que varios clientes de su zona nos han reportado el mismo inconveniente, y nuestro equipo técnico ya está validando ',
+      M('una posible falla general'), ' en la red que da servicio a su zona. Lamentamos mucho las molestias.',
+      rein ? ' Sabemos que no es la primera vez que su servicio se ve afectado en los últimos meses y entendemos su molestia.' : '', '\n\n',
+      'En cuanto se confirme y se solucione, su servicio se restablecerá de forma automática, sin que tenga que hacer nada.\n\n',
+      'Le agradecemos mucho su paciencia y comprensión.'];
+  }
   if (v.tipo === 'FALLA') {
     const etaOk = f.eta && f.eta > now;
-    const etaTxt = etaOk ? (U.esHoy(f.eta, now) ? 'alrededor de las ' + U.hora(f.eta) : U.diaRel(f.eta, now) + ' alrededor de las ' + U.hora(f.eta)) : '';
+    const etaTxt = etaOk ? (U.esHoy(f.eta, now) ? 'alrededor de ' + U.las(f.eta) : U.diaRel(f.eta, now) + ' alrededor de ' + U.las(f.eta)) : '';
     if (modo === 'chat') {
       return ['Hola', nombre ? ', ' : '', nombre ? M(nombre) : '', '. Validamos su contrato ', M(String(rec.contrato)),
         ' y su servicio se encuentra dentro de una afectación general por ', M(motivo), '. Lamentamos mucho las molestias.',
@@ -319,7 +342,9 @@ function Guion({ rec, v, now, rein }) {
   const [modo, setModoEstado] = useState(leerLS('alertas-modo-guion', 'llamada'));
   const setModo = (m) => { guardarLS('alertas-modo-guion', m); setModoEstado(m); };
   const [reportado, setReportado] = useState(false);
-  const recos = CONFIG.recomendaciones[v.tipo] || [];
+  const recos = (v.tipo === 'FALLA' && Model.esPosible(v.falla) ? CONFIG.recomendaciones.POSIBLE : CONFIG.recomendaciones[v.tipo]) || [];
+  const nota = Model.notaQflow(v, rec, now);
+  const [notaCopiada, setNotaCopiada] = useState('');
   const conGuion = v.tipo === 'FALLA' || v.tipo === 'RESUELTA';
   const partes = conGuion ? partesGuion(v, rec, modo, now, rein) : [];
   const texto = partes.map((p) => (typeof p === 'string' ? p : p.v)).join('');
@@ -347,6 +372,12 @@ function Guion({ rec, v, now, rein }) {
           <button class="btn btn-borde" disabled=${reportado} onClick=${reportar}><${Ico} n="bandera" s=${16} />${reportado ? 'Aviso enviado' : 'Reportar posible falla en ' + rec.nodo}</button>
         </div>`}`}
     ${recos.length > 0 && html`<ul class="recos">${recos.map((r) => html`<li><${Ico} n="derecha" s=${16} /><span>${r}</span></li>`)}</ul>`}
+    ${nota && html`<div class="nota-qflow">
+      <div class="nota-qflow-cab"><span>Nota del caso para Qflow</span>
+        <button class="btn btn-borde btn-chico" onClick=${async () => { if (await U.copiar(nota)) { setNotaCopiada(nota); tostada('Nota copiada: pégala en la descripción del caso en Qflow'); } }}>
+          <${Ico} n=${notaCopiada === nota ? 'check' : 'copiar'} s=${15} />${notaCopiada === nota ? 'Nota copiada' : 'Copiar nota del caso'}</button></div>
+      <p>${nota}</p>
+    </div>`}
   </aside>`;
 }
 
@@ -422,7 +453,7 @@ function FallaItem({ f, now }) {
     <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
     <div class="nodos">${U.listaNatural(f.nodos, 3)}</div>
     <div class="m">
-      ${activa ? html`<span>Desde las ${U.hora(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
+      ${activa ? html`<span>Desde ${U.las(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
         : html`<span>Resuelta ${U.cuandoCorto(f.cerradaEn, now)}</span><span>Se oculta en ${U.dur(restante)}</span>`}
       <span class="impacto-linea"><span><b class="num">${U.n(imp.total)}</b> clientes</span>
         ${imp.hfc > 0 && html`<span class="tec" data-t="HFC">HFC${imp.gpon > 0 ? ' ' + U.n(imp.hfc) : ''}</span>`}

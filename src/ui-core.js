@@ -151,7 +151,13 @@ const A = {
     }));
     return r;
   },
-  crearFallaCon(nodo) { G.set({ alertaAbierta: null, semillaFalla: { nodos: [nodo], k: Date.now() } }); ir('fallas'); window.scrollTo({ top: 0 }); },
+  // Desde una posible falla se publica como "Posible falla general" mientras el VOC la confirma; el inicio
+  // de la afectación es la primera llamada de los clientes de ese nodo
+  crearFallaCon(nodo) {
+    const a = (G.s.alertas || []).find((x) => x.nodo === nodo);
+    G.set({ alertaAbierta: null, semillaFalla: { nodos: [nodo], motivo: 'VALIDACION', inicio: a && a.primero ? a.primero : null, k: Date.now() } });
+    ir('fallas'); window.scrollTo({ top: 0 });
+  },
 
   /* Consulta del asesor (el servidor la registra en la bitácora) */
   buscar: (q) => Backend.buscar(q),
@@ -277,6 +283,7 @@ const ICONOS = {
   copiar: '<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  VALIDACION: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/><path d="M11 7.8v3.6"/><path d="M11 14.2h.01"/>',
   ENERGIA: '<path d="M13 3 5 13.5h6L10 21l8-10.5h-6L13 3z"/>',
   FIBRA: '<circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.2 8.6 20 18M8.2 15.4 20 6"/>',
   EQUIPO: '<path d="M4 8h13l-3.5-3.5"/><path d="M20 16H7l3.5 3.5"/>',

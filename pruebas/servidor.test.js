@@ -353,6 +353,44 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   contratosDe(nodoRep).slice(0, 2).forEach((c) => g.post({ accion: 'reportar', token: tAgente, datos: { contrato: c, nodo: nodoRep } }));
   pa = deNodo(posibles(), nodoRep);
   ok(pa && pa.nivel === 'alerta' && pa.reportes === 2, 'dos reportes de asesores en un nodo también son posible falla', pa);
+
+  /* Posible falla general: se publica mientras el VOC la confirma; si se descarta, desaparece para los asesores */
+  console.log('\n7b. Posible falla general, detección y llamadas del cliente');
+  const pausa = () => { const fin = Date.now() + 5; while (Date.now() < fin) { /* que pase el tiempo */ } };
+  g.post({ accion: 'buscar', token: tWf, datos: { q: cAlerta[5] } });
+  g.post({ accion: 'buscar', token: tAgente, datos: { q: cAlerta[5] } });
+  rc = g.post({ accion: 'contactos', token: tAgente, datos: { contrato: cAlerta[5] } });
+  ok(rc.ok && rc.datos.veces.length === 1 && rc.datos.n30 === 1, 'las llamadas del cliente (para "Llamó") no cuentan las búsquedas de Workforce', rc.datos);
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'publicar', falla: { nodos: [nodoAlerta], motivo: 'VALIDACION' } } });
+  const fPos = r.ok ? r.datos.falla : {};
+  ok(r.ok && fPos.motivo === 'VALIDACION' && fPos.estado === 'ACTIVA', 'se publica una posible falla general (' + nodoAlerta + ')', r);
+  const dt = fPos.deteccion || {};
+  ok(dt.llamadas >= 7 && dt.clientes >= 6 && dt.primera && dt.aviso && dt.primera <= dt.aviso && dt.aviso <= fPos.publicadaEn,
+    'al publicarla guarda la detección: ' + dt.llamadas + ' llamadas de ' + dt.clientes + ' clientes antes, con la hora del aviso (sin contar a Workforce)', dt);
+  const filaPos = () => hFallas.getRange(1, 1, hFallas.getLastRow(), 1).getValues().findIndex((x) => x[0] === fPos.id) + 1;
+  ok(hFallas.getRange(filaPos(), 2).getValue() === 'Activa' && hFallas.getRange(filaPos(), 3).getValue() === 'Posible falla general'
+    && JSON.parse(hFallas.getRange(filaPos(), 19).getValue()).deteccion.llamadas === dt.llamadas, 'en la hoja Fallas: Activa, Posible falla general y la detección guardada');
+  r = g.post({ accion: 'buscar', token: tAgente, datos: { q: cAlerta[1] } });
+  ok(r.ok && r.datos.fallas.some((f) => f.id === fPos.id && f.motivo === 'VALIDACION') && r.datos.historial[nodoAlerta].some((x) => x.id === fPos.id),
+    'el asesor la ve al consultar a un cliente del nodo (y en su historial)', r.datos && r.datos.fallas);
+  ok(!deNodo(posibles(), nodoAlerta), 'con la falla publicada, el nodo sale de las posibles fallas');
+  r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: fPos.id, nota: 'El VOC no encontró falla en el nodo' } });
+  ok(r.ok && r.datos.falla.estado === 'CERRADA' && hFallas.getRange(filaPos(), 2).getValue() === 'Descartada', 'cerrarla sin cambiarle el motivo la deja Descartada', r.datos && r.datos.falla);
+  pausa();
+  r = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: bv } });
+  ok(r.ok && !r.datos.fallas.some((f) => f.id === fPos.id), 'los asesores dejan de verla de inmediato (no queda como resuelta)', r.datos && r.datos.fallas.map((f) => f.id));
+  r = g.post({ accion: 'buscar', token: tAgente, datos: { q: cAlerta[1] } });
+  ok(r.ok && !r.datos.fallas.some((f) => f.id === fPos.id) && !r.datos.historial[nodoAlerta].some((x) => x.id === fPos.id), 'ni en la búsqueda ni en el historial del cliente', r.datos && r.datos.historial);
+  r = g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: bv } });
+  ok(r.ok && r.datos.fallas.some((f) => f.id === fPos.id && f.estado === 'CERRADA' && f.motivo === 'VALIDACION'), 'Workforce la conserva en su historial');
+  ok(!deNodo(posibles(), nodoAlerta), 'descartada, el aviso no vuelve a salir con los mismos clientes');
+  pausa();
+  // Ya llamó uno (cAlerta[1], la búsqueda de arriba); llaman 4 más
+  cAlerta.slice(2, 6).forEach((c) => g.post({ accion: 'buscar', token: tAgente, datos: { q: c } }));
+  pa = deNodo(posibles(), nodoAlerta);
+  ok(pa && pa.nivel === 'alerta' && pa.nClientes === 5, 'si después de descartarla llaman 5 clientes, vuelve a avisar (solo cuenta lo nuevo)', pa);
+  r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'detalle', nodo: nodoAlerta } });
+  ok(r.ok && r.datos.clientes.length === 5 && !r.datos.enFalla, 'y el correo trae solo esos 5 clientes', r.datos && r.datos.clientes && r.datos.clientes.length);
   g.ejecutar('ALERTAS.LIMITE_CONSULTAS_HORA = 3');
   const tLim = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-agente' } }).datos.token;
   g.cache.remove('limite:karla.zelaya@concentrix.com:' + Math.floor(Date.now() / 3600000));
