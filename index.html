@@ -2656,6 +2656,14 @@ function BackendRemoto() {
       if (j.codigo === 'SESION' && accion !== 'login') { ses = null; guardarSesionEn(CLAVE, null); if (alExpirarFn) alExpirarFn(j.error); }
       throw Object.assign(errorAlertas(j.codigo || 'SERVIDOR', j.error || 'Error del servidor.'), { reintentar: j.codigo === 'OCUPADO' });
     }
+    /* Toda acción responde con datos. Sin datos es la respuesta de "el servidor está funcionando" (doGet):
+       a veces la solicitud termina abierta como una visita normal a la dirección y no trae lo que se pidió.
+       Las consultas se repiten solas; si era un cambio, se avisa para revisar si se guardó. */
+    if (!('datos' in j) || j.datos == null) {
+      const repetir = REINTENTABLES[accion] || accion === 'login';
+      throw Object.assign(errorAlertas('SERVIDOR', repetir ? 'El servidor no devolvió la respuesta. Intenta de nuevo.'
+        : 'No llegó la respuesta del servidor. Actualiza la página para revisar si el cambio se guardó.'), { reintentar: true });
+    }
     return j.datos;
   }
   function guardar(d) { ses = { token: d.token, usuario: d.usuario, expira: d.expira }; guardarSesionEn(CLAVE, ses); return d.usuario; }
@@ -2715,6 +2723,7 @@ function BackendRemoto() {
     estado: () => llamar('estado', {}, 20000),
     async buscar(q) {
       const r = await llamar('buscar', { q });
+      if (!r || !Array.isArray(r.filas)) throw errorAlertas('SERVIDOR', 'La respuesta del servidor llegó incompleta. Intenta de nuevo.');
       return Object.assign({}, r, { filas: r.filas.map(Model.registroRemoto) });
     },
     reportar: (rec) => llamar('reportar', { contrato: rec.contrato, nodo: rec.nodo }),

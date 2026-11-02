@@ -221,7 +221,7 @@ Alertas está pensado para unas **300 personas de Concentrix y 200 de Tiendas** 
 | Ingresos con Genesys o contraseña | unos cientos al día | casi nada |
 
 - Apps Script atiende hasta **30 ejecuciones al mismo tiempo** por cuenta (gratuita o Workspace). En el pico, Alertas usa alrededor de 5: queda margen de sobra.
-- Si en algún momento Google rechaza una solicitud por estar saturado, la página la **reintenta sola** (hasta dos veces) antes de mostrar un error.
+- Si en algún momento Google rechaza una solicitud por estar saturado, o la respuesta llega sin los datos (como la de "el servidor está funcionando"), la página la **reintenta sola** (hasta dos veces) antes de mostrar un error. Si eso pasa con un cambio (publicar, editar, cerrar), no se repite solo: avisa que actualices para revisar si se guardó.
 - Una búsqueda tarda **1 a 2 segundos** (lo que tarda Apps Script en responder).
 - **La bitácora** guarda el detalle de 30 días (con un tope de 600 mil filas) y un resumen por día para las estadísticas de 7, 30 y 90 días. Así el archivo de consultas se mantiene lejos del límite de 10 millones de celdas de Google, aun con 25 mil consultas diarias. En las estadísticas de varios días, los clientes distintos son una estimación (≈) con un error típico de alrededor de 2 %.
 - La base admite hasta unos **300 mil servicios**: en una carga completa conviven la vieja y la nueva en el mismo archivo. Las cargas por cambios escriben solo unos cientos o miles de filas, en un par de envíos.

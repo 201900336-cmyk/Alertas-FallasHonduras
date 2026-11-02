@@ -132,7 +132,7 @@ with sync_playwright() as p:
     ok('Sin fallas' in a.locator('.historial-cliente').inner_text(), 'un cliente sin fallas en su nodo: el historial lo dice')
     a.click('button.limpiar'); a.wait_for_selector('.mini-kpis', timeout=5000)
     ok(a.locator('.buscador-caja input').input_value() == '' and a.locator('.veredicto').count() == 0, 'Limpiar borra el contrato y el resultado')
-    for i, modo in enumerate(('html', '503')):
+    for i, modo in enumerate(('html', '503', 'get')):
         c_otro = http(f'/test/contrato?nodo={ejemplos[2]}&n={5 + i}')['contrato']   # otro contrato: el repetido sale de la memoria de la página
         a.keyboard.press('Escape'); a.fill('.buscador-caja input', ''); a.wait_for_timeout(200)
         http(f'/test/ocupado?n=2&modo={modo}')

@@ -25,6 +25,7 @@ hu.appendRow(['gerente.fijo@claro.com.hn', 'Gerencia Fijo', 'jefatura', 'SÍ', '
 
 let proximo = { name: 'Karla Zelaya', email: 'karla.zelaya@concentrix.com' };
 let ocupado = { n: 0, modo: 'html' };   // /test/ocupado: las próximas n llamadas fallan como cuando Apps Script está saturado
+                                         // (modo get: la respuesta llega como la de doGet, sin datos)
 const codigos = new Map();
 
 /* Base inicial cargada por la API (la misma ruta que usa la página) */
@@ -58,6 +59,14 @@ const servidor = http.createServer((req, res) => {
     if (ocupado.n > 0) {
       ocupado.n--;
       if (ocupado.modo === '503') { res.writeHead(503, { 'Access-Control-Allow-Origin': '*' }); res.end('Service Unavailable'); return; }
+      if (ocupado.modo === 'get') {
+        // La acción sí se ejecuta, pero el navegador termina abriendo /exec con GET y recibe lo de doGet
+        cuerpo().then((b) => {
+          C.doPost({ postData: { contents: b, type: req.headers['content-type'] } });
+          res.writeHead(302, { Location: '/exec', 'Access-Control-Allow-Origin': '*' }); res.end();
+        });
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'text/html', 'Access-Control-Allow-Origin': '*' });
       res.end('<!DOCTYPE html><html><body><div>Lo sentimos, se produjo un error en el servidor. Espera un poco y vuelve a intentarlo.</div></body></html>'); return;
     }
