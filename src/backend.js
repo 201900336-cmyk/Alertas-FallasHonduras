@@ -435,7 +435,7 @@ function BackendLocal() {
         }
         if (d.tipo != null && d.tipo !== tipo) throw errorAlertas('DATOS', tipo === 'FALLA' ? 'La falla sigue activa: el aviso que corresponde es el de falla.' : 'La falla ya se cerró: el aviso que corresponde es el de servicio restablecido.');
         if (tipo === 'RESTABLECIDO' && Model.descartada(f)) throw errorAlertas('DATOS', 'La posible falla se descartó: no hay servicio restablecido que avisar.');
-        const mensaje = String(d.mensaje || '').replace(/ /g, ' ').replace(/[ \t]+/g, ' ').trim();
+        const mensaje = String(d.mensaje || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
         if (!mensaje) throw errorAlertas('DATOS', 'Escribe el mensaje.');
         if (mensaje.length > 459) throw errorAlertas('DATOS', 'El mensaje es muy largo: máximo 459 caracteres.');
         if (m && m.tipo === tipo && m.mensaje === mensaje && d.dudosos !== true) return Object.assign(avance(m), { reanudado: true });

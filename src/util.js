@@ -72,24 +72,31 @@ const U = (() => {
     return m ? h + ' h ' + m + ' m' : h + ' h';
   };
   /* SMS: con solo caracteres GSM-7 cada SMS admite 160 (153 por parte si son varias); con cualquier otro
-     (por ejemplo á, í, ó, ú) pasa a UCS-2 y admite 70 (67 por parte). Los de la tabla extendida cuentan doble. */
+     pasa a UCS-2 y admite 70 (67 por parte). Los de la tabla extendida cuentan doble.
+     Notifícame quita las tildes que no están en GSM-7 (á, í, ó, ú…) y manda el SMS en GSM-7: la prueba del
+     2 nov llegó como "la conexion con Notificame funciona (señal 1/2)". Por eso esas tildes no cambian el largo
+     (se cuentan ya sin tilde, en "sinTilde"); la ñ, la é y la / sí llegan. Lo demás (comillas curvas, emojis…)
+     sigue como "raros": no se sabe cómo llega y obligaría a UCS-2. */
   const GSM7 = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
   const GSM7_EXT = '^{}\\[~]|€';
+  const TILDES = { á: 'a', í: 'i', ó: 'o', ú: 'u', Á: 'A', Í: 'I', Ó: 'O', Ú: 'U', ê: 'e', â: 'a', ô: 'o', î: 'i', û: 'u', ç: 'c', ï: 'i', ë: 'e' };
   function partesSms(texto) {
     let n = 0;
-    const raros = [];
+    const raros = [], sinTilde = [];
     for (const ch of String(texto)) {
-      if (GSM7.indexOf(ch) >= 0) n++;
-      else if (GSM7_EXT.indexOf(ch) >= 0) n += 2;
+      const c = TILDES[ch] || ch;
+      if (c !== ch && sinTilde.indexOf(ch) < 0) sinTilde.push(ch);
+      if (GSM7.indexOf(c) >= 0) n++;
+      else if (GSM7_EXT.indexOf(c) >= 0) n += 2;
       else if (raros.indexOf(ch) < 0) raros.push(ch);
     }
-    if (!raros.length) return { gsm: true, caracteres: n, partes: n <= 160 ? 1 : Math.ceil(n / 153), limite: 160, raros };
-    const u = String(texto).length;
-    return { gsm: false, caracteres: u, partes: u <= 70 ? 1 : Math.ceil(u / 67), limite: 70, raros };
+    if (!raros.length) return { gsm: true, caracteres: n, partes: n <= 160 ? 1 : Math.ceil(n / 153), limite: 160, raros, sinTilde };
+    const u = String(texto).length;            // en UCS-2 un emoji ocupa dos
+    return { gsm: false, caracteres: u, partes: u <= 70 ? 1 : Math.ceil(u / 67), limite: 70, raros, sinTilde };
   }
-  /* Cambia lo que no cabe en GSM-7 por su forma simple (á→a, “ ”→", …→...) para que cada SMS admita 160 */
-  const SIN_TILDE = { á: 'a', í: 'i', ó: 'o', ú: 'u', Á: 'A', Í: 'I', Ó: 'O', Ú: 'U', ê: 'e', â: 'a', ô: 'o', ç: 'c', ï: 'i', '“': '"', '”': '"', '‘': "'", '’': "'", '–': '-', '—': '-', '…': '...', '\u00a0': ' ', '\u202f': ' ' };
-  const sinTildesSms = (t) => String(t).replace(/[áíóúÁÍÓÚêâôçï“”‘’–—…\u00a0\u202f]/g, (c) => SIN_TILDE[c] || c);
+  /* Cambia lo que no cabe en GSM-7 por su forma simple (á→a, “ ”→", …→...): así se ve tal como le llega al cliente */
+  const SIN_TILDE = Object.assign({ '“': '"', '”': '"', '‘': "'", '’': "'", '–': '-', '—': '-', '…': '...', '\u00a0': ' ', '\u202f': ' ' }, TILDES);
+  const sinTildesSms = (t) => String(t).replace(/[áíóúÁÍÓÚêâôîûçïë“”‘’–—…\u00a0\u202f]/g, (c) => SIN_TILDE[c] || c);
 
   /* Agrega punto final solo si hace falta (las horas ya terminan en "p. m.") */
   const conPunto = (s) => (/[.!?]$/.test(String(s).trim()) ? String(s) : s + '.');

@@ -564,6 +564,10 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     && clas(200, { status: 'ERROR' }) === 'Error' && clas(200, { errors: ['x'] }) === 'Error' && clas(200, { success: false }) === 'Error' && clas(400, { error: 'x' }) === 'Error'
     && clas(403, { code: 42900 }) === 'Pendiente' && clas(429, {}) === 'Pendiente' && clas(401, {}) === 'Pendiente',
     'cada respuesta se entiende como en el SDK de Notifícame: enviado solo si lo confirma (message_id o status); si no, en duda');
+  const detalleDe = (codigo, datos) => g.ejecutar('clasificarSms_(' + JSON.stringify({ codigo, datos }) + ').detalle');
+  ok(detalleDe(200, { message_id: '77', status: 'ERROR', delivery_status: 'UNDELIVERABLE', message: 'Claro informa: hay una falla', error_count: 1, total_recipients: 1 }) === 'Notifícame lo marcó ERROR (UNDELIVERABLE)'
+    && detalleDe(200, { message_id: '78', status: 'PENDING', message: 'Claro informa', sent_count: 0, error_count: 0, total_recipients: 1 }) === '78',
+    'con la respuesta real de Notifícame (message_id, status, message…): el motivo de un error no es el texto del SMS, y un enviado guarda su message_id');
   ok(g.ejecutar("sinNumeros_('Número 9999-8888, +504 3333 2222 y 50411112222 no válidos; código 40010')") === 'Número …, … y … no válidos; código 40010',
     'a la página no llegan números de teléfono, tampoco con guiones o espacios');
 

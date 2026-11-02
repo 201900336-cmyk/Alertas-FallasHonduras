@@ -190,7 +190,7 @@ La key y la secret quedan en las Propiedades del script: no están en GitHub ni 
 2. La ventana dice a cuántos clientes les llega, de cuántos tiene la falla (con celular, solo fijo o sin teléfono), y trae el mensaje ya escrito:
    - **Aviso de falla**: «Claro informa: hay una falla en la red de su zona que afecta su servicio. Ya trabajamos para restablecerlo antes de las 3:00 p. m. Disculpe las molestias.» La hora sale de la solución estimada; si no tiene, no la menciona. En una posible falla, el mensaje dice que se está revisando.
    - **Servicio restablecido**: «Claro informa: el servicio en su zona ya fue restablecido. Si sigue sin servicio, apague su equipo 30 segundos y vuelva a encenderlo. Gracias.»
-   - Se puede cambiar. El contador dice cuántos caracteres y cuántos SMS por cliente usa: con tildes en á, í, ó, ú cada SMS admite 70 caracteres en vez de 160, y **Quitar tildes** lo arregla. Los mensajes sugeridos están en `src/config.js` (`sms`).
+   - Se puede cambiar. El contador dice cuántos caracteres y cuántos SMS por cliente usa (160 caracteres por SMS, 153 por parte si son varias). Notifícame quita las tildes de á, í, ó, ú: el cliente ve «conexion» en vez de «conexión», y la ñ, la é y la / sí llegan (probado el 2 nov). Por eso esas tildes no cambian el largo, y **Verlo así** muestra el mensaje como le llega. Comillas curvas o emojis puede que no lleguen bien y harían que cada SMS admita 70 caracteres: **Cambiarlos** los arregla. Los mensajes sugeridos están en `src/config.js` (`sms`).
 3. **Enviar a N clientes**, confirmar, y la barra muestra el avance. Se puede **Detener**.
 4. Al terminar dice cuántos salieron, cuántos no (con el motivo que dio Notifícame) y cuántos quedaron en duda. **Reintentar los que fallaron** vuelve a mandar solo a los que fallaron.
 
@@ -304,7 +304,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 260 pruebas del servidor en un emulador de Apps Script
+npm test                           # 261 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

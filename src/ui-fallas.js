@@ -559,7 +559,7 @@ const TIPO_SMS = { FALLA: 'Aviso de falla', RESTABLECIDO: 'Servicio restablecido
 const extraSms = (x) => [x.errores ? U.n(x.errores) + ' con error' : '', x.dudosos ? U.n(x.dudosos) + ' en duda' : ''].filter(Boolean).join(', ');
 const lineaSms = (x, now) => TIPO_SMS[x.tipo] + ' a ' + U.n(x.enviados) + ' ' + U.plural(x.enviados, 'cliente', 'clientes')
   + (extraSms(x) ? ' (' + extraSms(x) + ')' : '') + ', ' + x.por + ', ' + U.cuandoCorto(x.en, now);
-const normalSms = (t) => String(t || '').replace(/ /g, ' ').replace(/[ \t]+/g, ' ').trim();
+const normalSms = (t) => String(t || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
 function ModalSms({ f, onCerrar }) {
   const s = useG();
   const now = s.now;
@@ -652,8 +652,10 @@ function ModalSms({ f, onCerrar }) {
         <span>${U.n(p.caracteres)} ${U.plural(p.caracteres, 'carácter', 'caracteres')} · ${p.partes === 1 ? '1 SMS por cliente' : p.partes + ' SMS por cliente'}${largo ? ' · demasiado largo (máximo 459)' : ''}</span>
         ${editado && fase !== 'enviando' && html`<button type="button" class="ver-tabla" onClick=${() => { setTexto(Model.textoSms(f, tipo, now)); setEditado(false); }}>Volver al mensaje sugerido</button>`}
       </div>
-      ${!p.gsm && fase !== 'enviando' && html`<div class="aviso-linea"><${Ico} n="info" s=${16} /><span>Tiene ${p.raros.map((c) => (c === ' ' ? 'espacio especial' : c)).join(' ')}: con eso cada SMS admite 70 caracteres en vez de 160.
-        <button type="button" onClick=${() => { setTexto(U.sinTildesSms(texto)); setEditado(true); }}>Quitar tildes</button></span></div>`}
+      ${!p.gsm && fase !== 'enviando' && html`<div class="aviso-linea"><${Ico} n="info" s=${16} /><span>Tiene ${p.raros.map((c) => (c === '\u00a0' ? 'espacio especial' : c)).join(' ')}: puede que no le llegue bien al cliente, y con eso cada SMS admite 70 caracteres en vez de 160.
+        <button type="button" onClick=${() => { setTexto(U.sinTildesSms(texto)); setEditado(true); }}>Cambiarlos</button></span></div>`}
+      ${p.gsm && p.sinTilde.length > 0 && fase !== 'enviando' && html`<div class="aviso-linea"><${Ico} n="info" s=${16} /><span>El cliente lo verá sin esas tildes: Notifícame cambia ${p.sinTilde.join(', ')} por ${U.sinTildesSms(p.sinTilde.join(', '))} (la ñ sí llega).
+        <button type="button" onClick=${() => { setTexto(U.sinTildesSms(texto)); setEditado(true); }}>Verlo así</button></span></div>`}
       ${(fase === 'enviando' || fase === 'fin') && av && !av.nada && html`<div class="sms-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow=${pct}><i style=${'width:' + pct + '%'}></i></div>`}
       ${fase === 'fin' && html`<div class=${'sms-resultado' + (error ? ' con-error' : '')}>
         ${av && av.nada ? html`<b>${av.paraManana ? 'Ya se usó el límite diario de SMS.' : 'A todos ya les había llegado este aviso.'}</b>${av.paraManana ? html`<span>Los ${U.n(av.paraManana)} que faltan se pueden mandar mañana.</span>` : null}`

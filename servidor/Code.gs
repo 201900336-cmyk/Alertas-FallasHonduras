@@ -1250,6 +1250,15 @@ function errorNotificame_(x) {
   return (txt || 'Notifícame respondió con el código ' + x.codigo).slice(0, 200);
 }
 const idMensaje_ = (d) => String((d && (d.message_id || d.id || (d.data && (d.data.message_id || d.data.id)))) || '');
+/* Motivo de un envío que Notifícame aceptó (2xx) pero marcó con error. Ahí "message" es el texto del SMS
+   (la respuesta trae message_id, short_code, type, direction, status, sent_from, id, message, sent_count,
+   error_count, total_recipients y msisdn), así que el motivo sale de error, errors o status. */
+function motivoEnvio_(d) {
+  const e = d.error && typeof d.error === 'object' ? d.error.message || d.error.description || JSON.stringify(d.error) : d.error;
+  const e0 = Array.isArray(d.errors) && d.errors.length ? d.errors[0] : '';
+  const es = e0 && typeof e0 === 'object' ? e0.message || e0.description || JSON.stringify(e0) : e0;
+  return String(e || es || 'Notifícame lo marcó ' + (d.status || 'con error') + (d.delivery_status ? ' (' + d.delivery_status + ')' : '')).trim().slice(0, 200);
+}
 // Lo que llega a la página nunca lleva un número de teléfono (tampoco con guiones o espacios: 9999-8888, +504 9999 8888)
 const sinNumeros_ = (t) => String(t || '').replace(/\+?\d(?:[\s-]?\d){6,}/g, '…');
 /* Qué pasó con un SMS según lo que respondió Notifícame. Si no salió por el límite de Notifícame ("espera")
@@ -1266,7 +1275,7 @@ function clasificarSms_(x) {
     const malo = (typeof d.error === 'string' && d.error) || (d.error && typeof d.error === 'object') || (Array.isArray(d.errors) && d.errors.length)
       || d.success === false || d.ok === false || /^(ERROR|FAIL|FAILED|FAILURE|REJECTED|INVALID|DENIED)/i.test(st) || Number(d.code) >= 40000
       || (Number(d.error_count) > 0 && Number(d.error_count) >= (Number(d.total_recipients) || 1));
-    if (malo) return { estado: 'Error', detalle: errorNotificame_(x) };
+    if (malo) return { estado: 'Error', detalle: motivoEnvio_(d) };
     const id = idMensaje_(d);
     const bueno = id || SMS_EN_CAMINO.test(st) || d.success === true || d.ok === true || Number(d.sent_count) > 0 || Number(d.sms_sent) > 0;
     return bueno ? { estado: 'Enviado', detalle: id || st || 'Aceptado' }
