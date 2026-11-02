@@ -721,6 +721,59 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g2.post({ accion: 'cargar', token: tw2, datos: { baseVersion: -1 } });
   ok(r.ok && r.datos.fallas.length === fViejas.length + 1 && r.datos.fallas.filter((f) => f.numero === 'F1254585').length === 1, 'las fallas viejas y la nueva conviven bien');
 
+  /* ---------- Bloquear las pestañas: solo el dueño ---------- */
+  console.log('\n13. Bloquear todas las pestañas (solo el dueño)');
+  const DESC = g2.ejecutar('BLOQUEO_DESC');
+  const pestanas = () => [g2.E.activo, g2.SpreadsheetApp.openById(g2.E.props.get('CONSULTAS_ID'))].flatMap((l) => l.getSheets());
+  const deAlertas = (h) => h.getProtections('SHEET').filter((p) => p.getDescription() === DESC);
+  const conBloqueo = () => pestanas().filter((h) => deAlertas(h).length > 0);
+  const mensaje = () => (g2.E.alertas[g2.E.alertas.length - 1] || [])[1] || '';
+  const OTRO = 'ariel.velasquez@claro.com.hn';
+  g2.E.ahora = null;
+  g2.E.usuario = OTRO;
+  C2.bloquearPestanas();
+  ok(conBloqueo().length === 0 && /Solo el dueño/.test(mensaje()), 'alguien que no es el dueño del archivo no puede bloquearlas', mensaje());
+  g2.E.usuario = null;
+  const manual = g2.E.activo.getSheetByName('Usuarios').protect().setDescription('Protección puesta a mano');
+  C2.bloquearPestanas();
+  const todas = pestanas().length;
+  ok(conBloqueo().length === todas && /pestañas bloqueadas/.test(mensaje()), `el dueño bloquea de una vez las ${todas} pestañas de los dos archivos (base interna y consultas)`, mensaje());
+  ok(pestanas().every((h) => deAlertas(h).every((p) => p.getEditors().length === 1 && p.getEditors()[0].getEmail() === g2.E.dueno)), 'cada bloqueo deja solo al dueño como editor');
+  C2.bloquearPestanas();
+  ok(pestanas().every((h) => deAlertas(h).length === 1), 'bloquear otra vez no duplica las protecciones');
+  g2.E.usuario = OTRO;
+  let errEd = null;
+  try { g2.E.activo.getSheetByName('Cargas').appendRow(['x']); } catch (e) { errEd = e.message; }
+  ok(errEd && /protected/.test(errEd), 'con el bloqueo, otra persona con acceso al archivo ya no puede editar las pestañas', errEd);
+  C2.desbloquearPestanas();
+  ok(conBloqueo().length === todas && /Solo el dueño/.test(mensaje()), 'ni desbloquearlas', mensaje());
+  g2.E.usuario = null;
+  // Alertas corre con la cuenta del dueño: sigue funcionando igual
+  const tw3 = entrar2('w'), ta3 = entrar2('a1');
+  r = g2.post({ accion: 'buscar', token: ta3, datos: { q: String(ixc.C.contrato[0]) } });
+  ok(r.ok && r.datos.estado === 'ok', 'con las pestañas bloqueadas, las búsquedas siguen funcionando (y se anotan en la bitácora)', r);
+  r = g2.post({ accion: 'falla', token: tw3, datos: { op: 'publicar', falla: { nodos: [nodoF], motivo: 'FIBRA' } } });
+  ok(r.ok, 'Workforce sigue publicando fallas', r);
+  let x3 = g2.post({ accion: 'base', token: tw3, datos: { op: 'iniciar', total: bc.filas, columnas: Model.columnasCarga(bc), archivo: 'chica2.xlsx' } });
+  for (let d0 = 0; d0 < bc.filas; d0 += x3.datos.filasPorLote) g2.post({ accion: 'base', token: tw3, datos: { op: 'lote', id: x3.datos.id, desde: d0, filas: Model.filasCarga(bc, d0, Math.min(bc.filas, d0 + x3.datos.filasPorLote)) } });
+  x3 = g2.post({ accion: 'base', token: tw3, datos: { op: 'finalizar', id: x3.datos.id, catalogo: catc } });
+  ok(x3.ok && deAlertas(g2.E.activo.getSheetByName('Base')).length === 1, 'una carga completa funciona y la Base nueva queda bloqueada también', x3);
+  g2.E.activo.deleteSheet(g2.E.activo.getSheetByName('Tiendas')); g2.cache.remove('tiendas');
+  r = g2.post({ accion: 'config' });
+  const tNueva = g2.E.activo.getSheetByName('Tiendas');
+  ok(r.ok && tNueva && deAlertas(tNueva).length === 1, 'y una pestaña que Alertas vuelve a crear (Tiendas) queda bloqueada sola', r.ok);
+  C2.desbloquearPestanas();
+  ok(conBloqueo().length === 0 && /desbloqueadas/.test(mensaje()) && g2.E.activo.getSheetByName('Usuarios').getProtections('SHEET').includes(manual),
+    'el dueño las desbloquea todas de una vez (una protección puesta a mano se queda)', mensaje());
+  g2.E.usuario = OTRO;
+  let errEd2 = null;
+  try { g2.E.activo.getSheetByName('Cargas').getRange(1, 20).setValue('x'); g2.E.activo.getSheetByName('Cargas').getRange(1, 20).setValue(''); } catch (e) { errEd2 = e.message; }
+  g2.E.usuario = null;
+  ok(!errEd2, 'desbloqueadas, quien tenga permiso de edición puede volver a editarlas', errEd2);
+  g2.E.activo.deleteSheet(g2.E.activo.getSheetByName('Tiendas')); g2.cache.remove('tiendas');
+  g2.post({ accion: 'config' });
+  ok(deAlertas(g2.E.activo.getSheetByName('Tiendas')).length === 0, 'sin el bloqueo, las pestañas nuevas ya no se bloquean');
+
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);
   process.exit(fallos ? 1 : 0);

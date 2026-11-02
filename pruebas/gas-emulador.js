@@ -29,10 +29,32 @@ function crearEntorno(opciones = {}) {
       clientId: opciones.clientId || 'a1b2c3d4-0000-1111-2222-333344445555'
     },
     dueno: opciones.dueno || 'dueno.alertas@gmail.com', activo: null, urlServicio: opciones.url || 'https://script.google.com/macros/s/PRUEBA/exec',
-    ahora: null
+    ahora: null,
+    usuario: null    // quién ejecuta (un menú del archivo); null = el dueño, como la aplicación web
   };
   let idSeq = 1;
   const ahora = () => (E.ahora != null ? E.ahora : Date.now());
+  const usuarioActual = () => String(E.usuario || E.dueno).toLowerCase();
+  const esDuenoActual = () => usuarioActual() === String(E.dueno).toLowerCase();
+  const usuario = (correo) => ({ getEmail: () => correo });
+  const correoDe = (u) => String(typeof u === 'string' ? u : u.getEmail()).toLowerCase();
+  /* Protección de una pestaña, como en Google: sus editores son el dueño y quien la crea; el dueño y quien
+     ejecuta no se pueden quitar; solo un editor la cambia o la quita, y nadie más puede editar la pestaña. */
+  class Proteccion {
+    constructor(hoja) { Object.assign(this, { hoja, desc: '', editores: new Set([String(E.dueno).toLowerCase(), usuarioActual()]), soloAviso: false, dominio: false }); }
+    canEdit() { return esDuenoActual() || this.editores.has(usuarioActual()); }
+    revisar() { if (!this.canEdit()) throw new Error('You do not have permission to perform that action.'); }
+    setDescription(d) { this.revisar(); this.desc = String(d); return this; }
+    getDescription() { return this.desc; }
+    getEditors() { return [...this.editores].map(usuario); }
+    addEditor(u) { this.revisar(); this.editores.add(correoDe(u)); return this; }
+    removeEditors(lista) { this.revisar(); lista.forEach((u) => { const c = correoDe(u); if (c !== String(E.dueno).toLowerCase() && c !== usuarioActual()) this.editores.delete(c); }); return this; }
+    canDomainEdit() { return this.dominio; }
+    setDomainEdit(b) { this.revisar(); this.dominio = !!b; return this; }
+    setWarningOnly(b) { this.revisar(); this.soloAviso = !!b; return this; }
+    isWarningOnly() { return this.soloAviso; }
+    remove() { this.revisar(); this.hoja.protecciones = this.hoja.protecciones.filter((p) => p !== this); }
+  }
   /* El Date del script: el mismo constructor dentro y fuera, para que instanceof funcione */
   const FechaS = class extends Date { constructor(...a) { if (a.length) super(...a); else super(ahora()); } static now() { return ahora(); } };
 
@@ -100,6 +122,7 @@ function crearEntorno(opciones = {}) {
     getValue() { return this.getValues()[0][0]; }
     setValues(vals) {
       if (!Array.isArray(vals) || vals.length !== this.nr) throw new Error('The number of rows in the data does not match the number of rows in the range. The data has ' + (vals && vals.length) + ' but the range has ' + this.nr + '.');
+      this.hoja.revisarEdicion();
       E.cuota.escriturasHoja++;
       for (let i = 0; i < this.nr; i++) {
         if (!Array.isArray(vals[i]) || vals[i].length !== this.nc) throw new Error('The number of columns in the data does not match the number of columns in the range. The data has ' + (vals[i] && vals[i].length) + ' but the range has ' + this.nc + '.');
@@ -113,13 +136,18 @@ function crearEntorno(opciones = {}) {
     setValue(v) { return this.setValues([[v]]); }
     setNumberFormat(f) { this.hoja.formatos.push({ r1: this.r, c1: this.c, r2: this.r + this.nr - 1, c2: this.c + this.nc - 1, f }); return this; }
     setFontWeight() { return this; }
-    clear() { for (let i = 0; i < this.nr; i++) { const f = this.hoja.filas[this.r - 1 + i]; if (f) for (let j = 0; j < this.nc; j++) f[this.c - 1 + j] = undefined; } return this; }
+    clear() { this.hoja.revisarEdicion(); for (let i = 0; i < this.nr; i++) { const f = this.hoja.filas[this.r - 1 + i]; if (f) for (let j = 0; j < this.nc; j++) f[this.c - 1 + j] = undefined; } return this; }
     clearContent() { return this.clear(); }
     createTextFinder(t) { return new TextFinder(this, t); }
   }
 
   class Hoja {
-    constructor(libro, nombre) { Object.assign(this, { libro, nombre, filas: [], maxRows: 1000, maxCols: 26, formatos: [], oculta: false, congeladas: 0, id: idSeq++ }); }
+    constructor(libro, nombre) { Object.assign(this, { libro, nombre, filas: [], maxRows: 1000, maxCols: 26, formatos: [], oculta: false, congeladas: 0, id: idSeq++, protecciones: [] }); }
+    protect() { const p = new Proteccion(this); this.protecciones.push(p); return p; }
+    getProtections(tipo) { return tipo === 'SHEET' ? this.protecciones.slice() : []; }
+    revisarEdicion() {
+      if (this.protecciones.some((p) => !p.soloAviso && !p.canEdit())) throw new Error('You are trying to edit a protected cell or object. Please contact the spreadsheet owner to remove protection if you need to edit.');
+    }
     formato(r, c) {
       for (let k = this.formatos.length - 1; k >= 0; k--) { const f = this.formatos[k]; if (r >= f.r1 && r <= f.r2 && c >= f.c1 && c <= f.c2) return f.f; }
       return null;
@@ -165,12 +193,14 @@ function crearEntorno(opciones = {}) {
       return { getRanges: () => rangos.slice(), clearContent() { E.cuota.escriturasHoja++; rangos.forEach((r) => r.clear()); return this; } };
     }
     insertRowsAfter(pos, n) {
+      this.revisarEdicion();
       this.libro.revisarCeldas(n * this.maxCols);
       if (pos < this.filas.length) this.filas = this.filas.slice(0, pos).concat(new Array(n), this.filas.slice(pos));
       this.maxRows += n;
       return this;
     }
     deleteRows(pos, n) {
+      this.revisarEdicion();
       if (pos < 1 || pos + n - 1 > this.maxRows) throw new Error('Those rows are out of bounds.');
       if (n >= this.maxRows) throw new Error('You can\'t delete all the rows on the sheet.');
       if (this.congeladas && this.maxRows - n <= this.congeladas) throw new Error('Sorry, it is not possible to delete all non-frozen rows.');
@@ -195,7 +225,7 @@ function crearEntorno(opciones = {}) {
       new Rango(this, r, 1, 1, arr.length).setValues([arr]);
       return this;
     }
-    clear() { this.filas = []; this.formatos = []; return this; }
+    clear() { this.revisarEdicion(); this.filas = []; this.formatos = []; return this; }
     setFrozenRows(n) { this.congeladas = n; }
     hideSheet() { this.oculta = true; return this; }
   }
@@ -213,7 +243,8 @@ function crearEntorno(opciones = {}) {
       this.revisarCeldas(1000 * 26);
       const h = new Hoja(this, n); this.hojas.push(h); return h;
     }
-    deleteSheet(h) { if (this.hojas.length === 1) throw new Error('You can\'t remove all the sheets in a document.'); this.hojas = this.hojas.filter((x) => x !== h); }
+    getOwner() { return usuario(E.dueno); }
+    deleteSheet(h) { h.revisarEdicion(); if (this.hojas.length === 1) throw new Error('You can\'t remove all the sheets in a document.'); this.hojas = this.hojas.filter((x) => x !== h); }
     setSpreadsheetTimeZone(z) { this.zona = z; }
     getSpreadsheetTimeZone() { return this.zona; }
   }
@@ -230,6 +261,8 @@ function crearEntorno(opciones = {}) {
   const SpreadsheetApp = {
     openById(id) { const l = E.libros.get(id); if (!l) throw new Error('Unexpected error while getting the method or property openById on object SpreadsheetApp.'); return l; },
     getActiveSpreadsheet() { return E.activo; },
+    getActive() { return E.activo; },
+    ProtectionType: { SHEET: 'SHEET', RANGE: 'RANGE' },
     create(nombre) { return nuevoLibro(nombre); },
     getUi() { return ui; }
   };
@@ -314,7 +347,7 @@ function crearEntorno(opciones = {}) {
     createTextOutput(s) { return { contenido: s, setMimeType() { return this; }, getContent() { return this.contenido; } }; }
   };
   const HtmlService = { createHtmlOutput(h) { const o = { contenido: h, setWidth: () => o, setHeight: () => o }; return o; } };
-  const Session = { getEffectiveUser: () => ({ getEmail: () => E.dueno }), getScriptTimeZone: () => 'America/Tegucigalpa' };
+  const Session = { getEffectiveUser: () => usuario(E.usuario || E.dueno), getActiveUser: () => usuario(E.usuario || E.dueno), getScriptTimeZone: () => 'America/Tegucigalpa' };
   const ScriptApp = {
     getProjectTriggers: () => E.triggers.map((t) => ({ getHandlerFunction: () => t.fn, _t: t })),
     deleteTrigger(x) { E.triggers = E.triggers.filter((t) => t !== (x && x._t)); },

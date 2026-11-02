@@ -254,7 +254,7 @@ function tiendas_() {
   return lista;
 }
 function crearHojaTiendas_(ss) {
-  const h = ss.insertSheet(ALERTAS.HOJAS.tiendas);
+  const h = protegerSiBloqueado_(ss.insertSheet(ALERTAS.HOJAS.tiendas));
   h.getRange(1, 1).setValue(COL_TIENDAS[0]).setFontWeight('bold');
   h.setFrozenRows(1);
   h.getRange(2, 1, TIENDAS_INICIALES.length, 1).setNumberFormat('@').setValues(TIENDAS_INICIALES.map((t) => [t]));
@@ -1005,7 +1005,7 @@ function baseIniciar_(d, ses) {
     const ss = libro_();
     const vieja = ss.getSheetByName(ALERTAS.HOJAS.nueva);
     if (vieja) ss.deleteSheet(vieja);
-    const h = ss.insertSheet(ALERTAS.HOJAS.nueva);
+    const h = protegerSiBloqueado_(ss.insertSheet(ALERTAS.HOJAS.nueva));   // al terminar pasa a ser la Base
     const nc = columnas.length, nr = total + 1;
     if (h.getMaxColumns() > nc) h.deleteColumns(nc + 1, h.getMaxColumns() - nc);
     if (h.getMaxRows() < nr) h.insertRowsAfter(h.getMaxRows(), nr - h.getMaxRows());
@@ -1068,7 +1068,7 @@ function baseFinalizar_(d, ses) {
 /* Lo que se hace al terminar cualquier carga: catálogo por nodo, resumen, registro en Cargas y aviso a todos */
 function cerrarCarga_(ss, txt, cat, info, comp) {
   let hc = ss.getSheetByName(ALERTAS.HOJAS.catalogo);
-  if (!hc) { hc = ss.insertSheet(ALERTAS.HOJAS.catalogo); hc.hideSheet(); }
+  if (!hc) { hc = protegerSiBloqueado_(ss.insertSheet(ALERTAS.HOJAS.catalogo)); hc.hideSheet(); }
   hc.clear();
   const piezas = [];
   for (let p = 0; p < txt.length; p += 45000) piezas.push([txt.slice(p, p + 45000)]);
@@ -1345,7 +1345,7 @@ function resumenDelDia_(dia, filas, tecDe, reloj) {
 function hojaEn_(libro, nombre, encabezado) {
   let h = libro.getSheetByName(nombre);
   if (!h) {
-    h = libro.insertSheet(nombre);
+    h = protegerSiBloqueado_(libro.insertSheet(nombre));
     h.getRange(1, 1, 1, encabezado.length).setValues([encabezado]).setFontWeight('bold');
     h.setFrozenRows(1);
     if (h.getMaxColumns() > encabezado.length) h.deleteColumns(encabezado.length + 1, h.getMaxColumns() - encabezado.length);
@@ -1734,6 +1734,9 @@ function onOpen() {
     .addItem('Ver dirección del servidor', 'verDireccion')
     .addItem('Cerrar todas las sesiones', 'cerrarSesiones')
     .addItem('Resumir y limpiar la bitácora de consultas', 'limpiarConsultasMenu')
+    .addSeparator()
+    .addItem('Bloquear todas las pestañas', 'bloquearPestanas')
+    .addItem('Desbloquear todas las pestañas', 'desbloquearPestanas')
     .addToUi();
 }
 
@@ -1745,6 +1748,56 @@ function onEdit(e) {
     if (hoja && hoja.getName() === ALERTAS.HOJAS.usuarios) CacheService.getScriptCache().remove('usuarios');
     if (hoja && hoja.getName() === ALERTAS.HOJAS.tiendas) CacheService.getScriptCache().remove('tiendas');
   } catch (err) { /* una edición nunca debe fallar por esto */ }
+}
+
+/* ----- Bloquear las pestañas: solo el dueño del archivo las puede editar -----
+   Protege todas las pestañas de los dos archivos (la base interna y el de consultas) con una protección de
+   Google que solo deja editar al dueño. Alertas sigue funcionando igual porque corre con la cuenta del dueño.
+   Mientras el bloqueo esté puesto, las pestañas que Alertas cree después (por ejemplo, la Base nueva de una
+   carga completa) se bloquean solas. Solo el dueño puede ponerlo o quitarlo. */
+const BLOQUEO_DESC = 'Alertas: pestaña bloqueada, solo la edita el dueño';
+function esDueno_() {
+  try {
+    const dueno = SpreadsheetApp.getActiveSpreadsheet().getOwner();
+    const yo = Session.getEffectiveUser().getEmail();
+    return !!(dueno && yo && String(dueno.getEmail()).toLowerCase() === String(yo).toLowerCase());
+  } catch (err) { return false; }
+}
+function librosAlertas_() {
+  const libros = [SpreadsheetApp.getActiveSpreadsheet()];
+  try { const c = libroConsultas_(); if (c.getId() !== libros[0].getId()) libros.push(c); } catch (err) { /* todavía sin archivo de consultas */ }
+  return libros;
+}
+function protegerHoja_(h) {
+  const ya = h.getProtections(SpreadsheetApp.ProtectionType.SHEET).filter((p) => p.getDescription() === BLOQUEO_DESC)[0];
+  const p = ya || h.protect().setDescription(BLOQUEO_DESC);
+  p.removeEditors(p.getEditors());   // Google deja siempre al dueño
+  if (p.canDomainEdit()) p.setDomainEdit(false);
+  return p;
+}
+function protegerSiBloqueado_(h) {
+  try { if (h && props_().getProperty('BLOQUEO_PESTANAS')) protegerHoja_(h); } catch (err) { /* nunca frena a Alertas */ }
+  return h;
+}
+function bloquearPestanas() {
+  const ui = SpreadsheetApp.getUi();
+  if (!esDueno_()) { ui.alert('Bloquear las pestañas', 'Solo el dueño del archivo puede bloquear o desbloquear las pestañas.', ui.ButtonSet.OK); return; }
+  let n = 0;
+  librosAlertas_().forEach((libro) => libro.getSheets().forEach((h) => { protegerHoja_(h); n++; }));
+  props_().setProperty('BLOQUEO_PESTANAS', JSON.stringify({ por: Session.getEffectiveUser().getEmail(), en: Date.now() }));
+  ui.alert('Pestañas bloqueadas', n + ' pestañas bloqueadas, en la base interna y en el archivo de consultas. Solo tú puedes editarlas: si compartes el archivo, los demás pueden verlas pero no cambiarlas.\n\n'
+    + 'Alertas sigue funcionando igual, y las pestañas que cree después (por ejemplo, al subir la base completa) también quedan bloqueadas.\n\n'
+    + 'Para quitarlo: Alertas > Desbloquear todas las pestañas.', ui.ButtonSet.OK);
+}
+function desbloquearPestanas() {
+  const ui = SpreadsheetApp.getUi();
+  if (!esDueno_()) { ui.alert('Desbloquear las pestañas', 'Solo el dueño del archivo puede bloquear o desbloquear las pestañas.', ui.ButtonSet.OK); return; }
+  let n = 0;
+  librosAlertas_().forEach((libro) => libro.getSheets().forEach((h) => h.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach((p) => {
+    if (p.getDescription() === BLOQUEO_DESC) { p.remove(); n++; }    // las protecciones que pusiste a mano no se tocan
+  })));
+  props_().deleteProperty('BLOQUEO_PESTANAS');
+  ui.alert('Pestañas desbloqueadas', n ? n + ' pestañas desbloqueadas. Quien tenga permiso de edición en el archivo puede volver a editarlas.' : 'No había pestañas bloqueadas.', ui.ButtonSet.OK);
 }
 
 function limpiarConsultasMenu() {
@@ -1765,7 +1818,7 @@ function configurar() {
 
   const crear = (nombre, encabezado, oculta) => {
     let h = ss.getSheetByName(nombre);
-    if (!h) h = ss.insertSheet(nombre);
+    if (!h) h = protegerSiBloqueado_(ss.insertSheet(nombre));
     if (encabezado && h.getLastRow() === 0) {
       h.getRange(1, 1, 1, encabezado.length).setValues([encabezado]).setFontWeight('bold');
       h.setFrozenRows(1);
@@ -1796,7 +1849,7 @@ function configurar() {
   if (!ok) {
     const sc = SpreadsheetApp.create('Alertas - Consultas');
     sc.setSpreadsheetTimeZone(ALERTAS.ZONA);
-    const h = sc.getSheets()[0];
+    const h = protegerSiBloqueado_(sc.getSheets()[0]);
     h.setName(ALERTAS.HOJAS.consultas);
     h.getRange(1, 1, 1, COL_CONSULTAS.length).setValues([COL_CONSULTAS]).setFontWeight('bold');
     h.setFrozenRows(1);

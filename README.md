@@ -217,6 +217,10 @@ Cada descarga queda anotada en la hoja **Descargas SMS** del Sheet (quién, cuá
 - **Posibles fallas**: la lista y el detalle (con los nombres de los clientes) solo los reciben Workforce y Jefatura, sin teléfonos ni DNI. El correo se copia en la PC de quien lo va a enviar; Alertas no manda correos solo.
 - **Teléfonos**: solo Workforce y Jefatura descargan los celulares, solo de los nodos de una falla, y cada descarga queda anotada en **Descargas SMS**. El archivo tiene datos personales: después de subirlo a Notifícame, conviene borrarlo de la computadora.
 - **Alertas > Cerrar todas las sesiones** obliga a todos a volver a entrar (por ejemplo, si una contraseña se filtró).
+- **Alertas > Bloquear todas las pestañas** protege de una vez todas las pestañas de los dos archivos (la base interna y el de consultas) para que solo el dueño del archivo pueda editarlas. Si el archivo se comparte con alguien, esa persona puede verlas pero no cambiarlas.
+  - Alertas sigue funcionando igual, porque corre con la cuenta del dueño, y las pestañas que cree después (por ejemplo, la Base nueva al subir la base completa) quedan bloqueadas solas.
+  - **Alertas > Desbloquear todas las pestañas** las libera de una vez. Las protecciones que pongas a mano no se tocan.
+  - Solo el dueño del archivo puede bloquear o desbloquear. Google siempre deja editar al dueño.
 
 > La base tiene datos personales de clientes de Claro. Lo recomendable es que el Sheet esté en una cuenta corporativa de Google Workspace y que el área de seguridad de la información apruebe el uso antes de abrirlo a todos los asesores.
 
@@ -259,7 +263,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 182 pruebas del servidor en un emulador de Apps Script
+npm test                           # 195 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente
