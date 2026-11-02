@@ -56,8 +56,8 @@ const Demo = (() => {
     ['wilmer.funes@concentrix.com', 'Wilmer Funes', 'Concentrix', ''], ['suyapa.matute@concentrix.com', 'Suyapa Matute', 'Concentrix', ''],
     ['iris.carias@concentrix.com', 'Iris Carías', 'Concentrix', ''], ['allan.ponce@concentrix.com', 'Allan Ponce', 'Concentrix', ''],
     ['melissa.valladares@concentrix.com', 'Melissa Valladares', 'Concentrix', ''],
-    ['tiendas:pedro mejia@multiplaza', 'Pedro Mejía', 'Tiendas', 'Multiplaza'], ['tiendas:rosa flores@city mall sps', 'Rosa Flores', 'Tiendas', 'City Mall SPS'],
-    ['tiendas:kevin paz@mega mall', 'Kevin Paz', 'Tiendas', 'Mega Mall']
+    ['tiendas:pedro mejia@cac mall multiplaza tgu', 'Pedro Mejía', 'Tiendas', 'CAC Mall Multiplaza TGU'], ['tiendas:rosa flores@cac city mall sps', 'Rosa Flores', 'Tiendas', 'CAC City Mall SPS'],
+    ['tiendas:kevin paz@cac megamall sps', 'Kevin Paz', 'Tiendas', 'CAC Megamall SPS']
   ];
 
   function generar(now) {

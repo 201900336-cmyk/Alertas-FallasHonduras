@@ -32,12 +32,12 @@ Navegador (GitHub Pages)             Google (privado)                           
 | Acceso | Cómo entra | Qué ve |
 |---|---|---|
 | **Concentrix** (CC N1 y Redes Sociales) | Botón **Entrar con Genesys** | Consulta, mapa de fallas y guion |
-| **Tiendas** | Usuario genérico y contraseña, más su tienda y su nombre | Lo mismo que Concentrix |
+| **Tiendas** | Usuario genérico y contraseña, más su tienda (de una lista) y su nombre | Lo mismo que Concentrix |
 | **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas (con la descarga de celulares para SMS), Base y Estadísticas |
 | **Jefatura** | Genesys, con su correo en la hoja **Usuarios** | Todo lo de Workforce |
 | Acceso temporal de Workforce | Usuario y contraseña (para cuando Genesys falle) | Lo mismo que Workforce |
 
-Tiendas pide la tienda y el nombre de la persona para que cada consulta quede a nombre de alguien, aunque la cuenta sea compartida.
+Tiendas pide la tienda y el nombre de la persona para que cada consulta quede a nombre de alguien, aunque la cuenta sea compartida. El usuario genérico ya aparece escrito. La tienda se elige de una lista desplegable: al escribir parte del nombre (por ejemplo "multi") aparecen las que coinciden, sin importar tildes ni mayúsculas, y hay que elegir una; un nombre que no está en la lista no deja entrar. Cada PC recuerda su tienda.
 
 ---
 
@@ -52,9 +52,9 @@ Necesitas: la cuenta de Google donde vivirá el Sheet, tu repositorio de GitHub 
 3. Vuelve a la hoja y recárgala. Aparece el menú **Alertas**.
 4. **Alertas > 1. Configurar por primera vez.** Google te pedirá autorizar el script. Es tu propio script: si sale "Google no verificó esta app", entra a **Configuración avanzada > Ir a…**.
 
-Esto crea las hojas **Base**, **Fallas**, **Usuarios** y **Cargas** (más una oculta, **Catalogo**), y un segundo archivo, **Alertas - Consultas**, en tu Drive, con las hojas **Consultas**, **Resumen** y **Resumen_asesores**. También programa un mantenimiento que corre solo cada hora: arma el resumen de cada día y borra el detalle de más de 30 días. La hoja **Descargas SMS** aparece sola con la primera descarga de teléfonos.
+Esto crea las hojas **Base**, **Fallas**, **Usuarios**, **Cargas** y **Tiendas** (más una oculta, **Catalogo**), y un segundo archivo, **Alertas - Consultas**, en tu Drive, con las hojas **Consultas**, **Resumen** y **Resumen_asesores**. También programa un mantenimiento que corre solo cada hora: arma el resumen de cada día y borra el detalle de más de 30 días. La hoja **Descargas SMS** aparece sola con la primera descarga de teléfonos.
 
-> Solo la hoja **Usuarios** se edita a mano. Las demás las escribe Alertas.
+> Solo las hojas **Usuarios** y **Tiendas** se editan a mano. Las demás las escribe Alertas.
 
 ### Paso 2. Publicar el servidor
 
@@ -112,6 +112,8 @@ Luego, en el Sheet: **Alertas > 2. Conectar Genesys**.
 - Si quieres, crea un acceso temporal de **Workforce** para cuando Genesys no esté disponible.
 - Al cambiar una contraseña, se cierran las sesiones abiertas con la anterior y se quita cualquier bloqueo de la cuenta.
 - Como la contraseña de Tiendas la conocen cientos de personas, conviene cambiarla cada mes y cada vez que alguien deja de trabajar en tiendas.
+
+**Hoja Tiendas.** Las tiendas que aparecen en la lista al entrar, una por fila en la columna A, escritas como deben verse (empieza con las 38 CAC). Para agregar una tienda, escríbela en una fila nueva; para quitarla, borra su nombre. Aplica de inmediato (si borras la fila completa, en unos 5 minutos). Si un servidor que ya funcionaba no tiene la hoja, Alertas la crea sola la primera vez que alguien abre la página. Si la hoja queda vacía, se usa la lista inicial.
 
 ### Paso 6. La primera base
 
@@ -241,7 +243,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 144 pruebas del servidor en un emulador de Apps Script
+npm test                           # 153 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

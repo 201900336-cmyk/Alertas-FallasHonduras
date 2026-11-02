@@ -18,6 +18,19 @@ const CONFIG = {
   // varios clientes distintos en poco tiempo.
   alerta: { minutos: 60, clientesDistintos: 3 },
 
+  // Tiendas que se eligen al entrar con la cuenta de Tiendas. La lista que vale es la hoja Tiendas
+  // de la base interna (el servidor la manda al abrir la página); esta solo se usa si el servidor
+  // todavía no la manda y en la demostración.
+  tiendas: [
+    'CAC Castaños', 'CAC Comayagua', 'CAC Mall El Dorado', 'CAC Mall Multiplaza TGU', 'CAC Plaza Miraflores', 'CAC Siguatepeque',
+    'CAC Catacamas', 'CAC Centro TGU', 'CAC Danli', 'CAC Juticalpa', 'CAC Mall Premier', 'CAC Metromall', 'CAC Peatonal',
+    'CAC Choluteca Centro', 'CAC City Mall TGU', 'CAC Mall Cascadas', 'CAC San Lorenzo', 'CAC Unimall Choluteca', 'CAC Ventu TGU',
+    'CAC Ceiba Centro', 'CAC Ceiba Mall Megaplaza', 'CAC Olanchito', 'CAC Roatan', 'CAC Tela Centro', 'CAC Tocoa Centro',
+    'CAC City Mall SPS', 'CAC La Entrada Copan', 'CAC Mall Multiplaza SPS', 'CAC Santa Barbara', 'CAC Santa Rosa de Copan',
+    'CAC Terminal de buses', 'CAC Villanueva', 'CAC Centro SPS', 'CAC Galerias del Valle', 'CAC Megamall SPS', 'CAC Paseo Proceres',
+    'CAC Progreso', 'CAC Puerto Cortes'
+  ],
+
   // Cada cuántos segundos se revisa si hubo una actualización de Workforce (una vez por minuto
   // alcanza y, con cientos de páginas abiertas, le quita mucha carga al servidor).
   segundosRevision: 60,

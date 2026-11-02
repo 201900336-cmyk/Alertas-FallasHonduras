@@ -44,7 +44,7 @@ const ALERTAS = {
   MAX_CAMBIOS: 20000,            // filas nuevas o cambiadas que se suben en una carga por cambios; si son más, va completa
   ALERTA_MIN: 60, ALERTA_CLIENTES: 3, ALERTA_REPORTES: 2,
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS' },
+  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', tiendas: 'Tiendas' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura' },
   ESCRIBEN: ['workforce', 'jefatura'],
   REGIONES: {
@@ -75,6 +75,17 @@ const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo',
 const COL_RESUMEN = ['Día', 'Consultas', 'Con falla', 'Sin resultado', 'Reportes', 'Datos (no editar)'];
 const COL_RESUMEN_AS = ['Día', 'Usuario', 'Nombre', 'Canal', 'Consultas', 'Con falla', 'Sin resultado'];
 const COL_DESCARGAS = ['Fecha', 'Usuario', 'Nombre', 'Fallas', 'Nodos', 'Clientes', 'Números en el archivo'];
+const COL_TIENDAS = ['Tienda (una por fila: así aparece en la lista al entrar)'];
+/* Tiendas con las que se crea la hoja Tiendas. Después se agregan o quitan en la hoja, sin tocar el código. */
+const TIENDAS_INICIALES = [
+  'CAC Castaños', 'CAC Comayagua', 'CAC Mall El Dorado', 'CAC Mall Multiplaza TGU', 'CAC Plaza Miraflores', 'CAC Siguatepeque',
+  'CAC Catacamas', 'CAC Centro TGU', 'CAC Danli', 'CAC Juticalpa', 'CAC Mall Premier', 'CAC Metromall', 'CAC Peatonal',
+  'CAC Choluteca Centro', 'CAC City Mall TGU', 'CAC Mall Cascadas', 'CAC San Lorenzo', 'CAC Unimall Choluteca', 'CAC Ventu TGU',
+  'CAC Ceiba Centro', 'CAC Ceiba Mall Megaplaza', 'CAC Olanchito', 'CAC Roatan', 'CAC Tela Centro', 'CAC Tocoa Centro',
+  'CAC City Mall SPS', 'CAC La Entrada Copan', 'CAC Mall Multiplaza SPS', 'CAC Santa Barbara', 'CAC Santa Rosa de Copan',
+  'CAC Terminal de buses', 'CAC Villanueva', 'CAC Centro SPS', 'CAC Galerias del Valle', 'CAC Megamall SPS', 'CAC Paseo Proceres',
+  'CAC Progreso', 'CAC Puerto Cortes'
+];
 
 const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
@@ -199,8 +210,51 @@ function accionConfig_() {
     app: 'Alertas',
     genesys: { region: g.region || '', clientId: g.clientId || '', activo: !!(g.region && g.clientId) },
     tiendas: roles.indexOf('tiendas') >= 0,
-    temporal: roles.some((r) => r !== 'tiendas')
+    temporal: roles.some((r) => r !== 'tiendas'),
+    listaTiendas: tiendas_()
   };
+}
+
+/* Las tiendas que se eligen al entrar con la cuenta de Tiendas: la hoja Tiendas, una por fila.
+   Se guarda en caché (la página la pide cada vez que se abre) y se renueva al editar una celda de la
+   hoja; si se borra una fila completa (eso Google no lo avisa), a más tardar en 5 minutos.
+   Si la hoja no existe, se crea con la lista inicial. Nunca falla: sin base interna configurada,
+   o si la hoja no se pudo leer en ese momento, se usa la lista inicial y se reintenta en la próxima visita. */
+const normTienda_ = (t) => String(t == null ? '' : t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+function tiendas_() {
+  const c = cache_().get('tiendas');
+  if (c) return JSON.parse(c);
+  let lista = null;
+  try {
+    const ss = libro_();
+    let h = ss.getSheetByName(ALERTAS.HOJAS.tiendas);
+    if (!h) {
+      const lock = LockService.getScriptLock();
+      if (lock.tryLock(5000)) {
+        try { h = ss.getSheetByName(ALERTAS.HOJAS.tiendas) || crearHojaTiendas_(ss); } finally { lock.releaseLock(); }
+      }
+    }
+    if (h) {
+      const vistas = {};
+      lista = h.getLastRow() < 2 ? [] : h.getRange(2, 1, h.getLastRow() - 1, 1).getValues().map((f) => texto_(f[0], 60)).filter((t) => {
+        const k = normTienda_(t);
+        if (!k || vistas[k]) return false;
+        vistas[k] = true;
+        return true;
+      });
+    }
+  } catch (err) { lista = null; }
+  if (!lista) return TIENDAS_INICIALES.slice();
+  if (!lista.length) lista = TIENDAS_INICIALES.slice();   // una hoja vacía nunca deja a las tiendas sin poder entrar
+  cache_().put('tiendas', JSON.stringify(lista), 300);
+  return lista;
+}
+function crearHojaTiendas_(ss) {
+  const h = ss.insertSheet(ALERTAS.HOJAS.tiendas);
+  h.getRange(1, 1).setValue(COL_TIENDAS[0]).setFontWeight('bold');
+  h.setFrozenRows(1);
+  h.getRange(2, 1, TIENDAS_INICIALES.length, 1).setNumberFormat('@').setValues(TIENDAS_INICIALES.map((t) => [t]));
+  return h;
 }
 
 function accionLogin_(d) {
@@ -289,7 +343,7 @@ function loginClave_(d) {
      los errores de una persona solo la bloquean a ella. La cuenta completa se bloquea solo si
      llegan muchísimos intentos fallidos juntos (alguien probando contraseñas). */
   const cache = cache_();
-  const kp = 'fallidos:' + usuario + ':' + nombre.toLowerCase() + '@' + tienda.toLowerCase();
+  const kp = 'fallidos:' + usuario + ':' + nombre.toLowerCase() + '@' + normTienda_(tienda);
   const kc = 'fallidos-cuenta:' + usuario;
   const topeCuenta = c && c.rol === 'tiendas' ? ALERTAS.INTENTOS_CUENTA_TIENDAS : ALERTAS.INTENTOS_CUENTA;
   const malosCuenta = Number(cache.get(kc) || 0), malosPersona = Number(cache.get(kp) || 0);
@@ -302,9 +356,15 @@ function loginClave_(d) {
     throw fallo_('ACCESO', 'Usuario o contraseña incorrectos.');
   }
   cache.remove(kp);
-  if (c.rol === 'tiendas' && tienda.length < 2) throw fallo_('DATOS', 'Escribe la tienda desde donde atiendes.');
-  const id = usuario + ':' + nombre.toLowerCase() + (tienda ? '@' + tienda.toLowerCase() : '');
-  return emitirSesion_({ u: id, n: nombre, r: c.rol, t: c.rol === 'tiendas' ? tienda : '', o: 'clave', a: usuario });
+  // La tienda tiene que ser una de la lista (se guarda con el nombre exacto de la hoja Tiendas)
+  let suTienda = '';
+  if (c.rol === 'tiendas') {
+    const k = normTienda_(tienda);
+    suTienda = (k && tiendas_().filter((t) => normTienda_(t) === k)[0]) || '';
+    if (!suTienda) throw fallo_('DATOS', tienda ? 'Elige tu tienda de la lista.' : 'Elige la tienda desde donde atiendes.');
+  }
+  const id = usuario + ':' + nombre.toLowerCase() + (suTienda ? '@' + suTienda.toLowerCase() : '');
+  return emitirSesion_({ u: id, n: nombre, r: c.rol, t: suTienda, o: 'clave', a: usuario });
 }
 
 function emitirSesion_(p) {
@@ -1500,6 +1560,7 @@ function onEdit(e) {
   try {
     const hoja = e && e.range && e.range.getSheet();
     if (hoja && hoja.getName() === ALERTAS.HOJAS.usuarios) CacheService.getScriptCache().remove('usuarios');
+    if (hoja && hoja.getName() === ALERTAS.HOJAS.tiendas) CacheService.getScriptCache().remove('tiendas');
   } catch (err) { /* una edición nunca debe fallar por esto */ }
 }
 
@@ -1541,6 +1602,8 @@ function configurar() {
     if (yo) hu.appendRow([yo.toLowerCase(), 'Dueño de Alertas', 'jefatura', 'SÍ', 'Agregado al configurar']);
   }
   crear(ALERTAS.HOJAS.cargas, COL_CARGAS);
+  if (!ss.getSheetByName(ALERTAS.HOJAS.tiendas)) crearHojaTiendas_(ss);
+  cache_().remove('tiendas');
   crear(ALERTAS.HOJAS.catalogo, null, true);
 
   // Bitácora de consultas en un archivo aparte, también privado
