@@ -42,19 +42,23 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(hTiendas && hTiendas.getLastRow() === 39 && hTiendas.getRange(2, 1).getValue() === 'CAC Castaños', 'configurar crea la hoja Tiendas con las 38 tiendas', hTiendas && hTiendas.getLastRow());
   C.guardarGenesys({ region: 'mypurecloud.com', clientId: 'a1b2c3d4-0000-1111-2222-333344445555', rolPorDefecto: 'concentrix' });
   C.guardarCuenta('tiendas', 'tiendas', 'ClaroTiendas2026');
-  C.guardarCuenta('workforce.temporal', 'workforce', 'Workforce2026!');
+  // No hay accesos temporales (por privacidad): solo Tiendas entra con contraseña
+  const errTemp = ['workforce', 'jefatura', 'supervisor', 'concentrix'].map((rol) => { try { C.guardarCuenta(rol + '.temporal', rol, 'ClaveTemporal2026'); return null; } catch (e) { return e.message; } });
+  ok(errTemp.every((e) => /Solo Tiendas entra con contraseña/.test(e || '')), 'no se pueden crear accesos temporales de Workforce, Jefatura, supervisor ni Concentrix', errTemp);
   let errorCorta = null; try { C.guardarCuenta('x.tienda', 'tiendas', 'corta'); } catch (e) { errorCorta = e.message; }
   ok(/10 caracteres/.test(errorCorta), 'rechaza contraseñas cortas');
   const props = JSON.stringify([...g.E.props.values()]);
-  ok(!props.includes('ClaroTiendas2026') && !props.includes('Workforce2026!'), 'la contraseña no queda guardada en texto en ninguna parte');
+  ok(!props.includes('ClaroTiendas2026') && Object.keys(JSON.parse(g.E.props.get('CUENTAS'))).join() === 'tiendas', 'la contraseña no queda guardada en texto en ninguna parte, y la única cuenta con contraseña es la de Tiendas');
   g.E.activo.getSheetByName('Usuarios').appendRow(['ana.lopez@claro.com.hn', 'Ana López', 'workforce', 'SÍ', '']);
+  g.E.activo.getSheetByName('Usuarios').appendRow(['mario.rivera@claro.com.hn', 'Mario Rivera', 'workforce', 'SÍ', '']);
   g.E.activo.getSheetByName('Usuarios').appendRow(['ex.empleado@claro.com.hn', 'Ex Empleado', 'workforce', 'NO', '']);
   g.E.genesys.tokens.set('tok-agente', { name: 'Karla Zelaya', email: 'karla.zelaya@concentrix.com' });
   g.E.genesys.tokens.set('tok-wf', { name: 'Ana Lopez', email: 'Ana.Lopez@claro.com.hn' });
+  g.E.genesys.tokens.set('tok-wf2', { name: 'Mario Rivera', email: 'mario.rivera@claro.com.hn' });
   g.E.genesys.tokens.set('tok-ex', { name: 'Ex', email: 'ex.empleado@claro.com.hn' });
 
   const cfg = g.post({ accion: 'config' });
-  ok(cfg.ok && cfg.datos.genesys.activo && cfg.datos.tiendas && cfg.datos.temporal, 'config pública indica Genesys, Tiendas y acceso temporal', cfg);
+  ok(cfg.ok && cfg.datos.genesys.activo && cfg.datos.tiendas && cfg.datos.temporal === undefined, 'config pública indica Genesys y Tiendas (no hay acceso temporal)', cfg);
   ok(!JSON.stringify(cfg).includes('hash') && !JSON.stringify(cfg).includes('sal'), 'config no expone hashes');
   ok(cfg.datos.listaTiendas.length === 38 && cfg.datos.listaTiendas.includes('CAC Mall Multiplaza TGU') && cfg.datos.listaTiendas.includes('CAC Puerto Cortes'), 'config manda la lista de tiendas de la hoja Tiendas', cfg.datos.listaTiendas);
 
@@ -116,9 +120,21 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && JSON.parse(g.E.props.get('GENESYS')).orgId === ORG, 'con un token de Alertas la vuelve a tomar sola', r);
   let errOrg = null; try { C.guardarGenesys({ region: 'mypurecloud.com', clientId: 'a1b2c3d4-0000-1111-2222-333344445555', orgId: 'x y' }); } catch (e) { errOrg = e.message; }
   ok(/organización/.test(errOrg || ''), 'rechaza un ID de organización mal escrito');
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'workforce.temporal', clave: 'Workforce2026!', nombre: 'Mario Rivera' } });
-  ok(r.ok && r.datos.usuario.rol === 'workforce', 'acceso temporal de Workforce funciona', r);
-  const tWfTemp = r.datos.token;
+  r = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-wf2' } });
+  ok(r.ok && r.datos.usuario.rol === 'workforce' && r.datos.usuario.nombre === 'Mario Rivera', 'otra persona de Workforce entra con Genesys', r);
+  const tWf2 = r.datos.token;
+  // Un acceso temporal que haya quedado de antes de la 3.2: no deja entrar, su sesión no vale y al abrir el diálogo se borra
+  const temporalViejo = () => g.ejecutar("(() => { const c = JSON.parse(props_().getProperty('CUENTAS')); const sal = 'sal-de-prueba'; c['workforce.temporal'] = { rol: 'workforce', sal: sal,"
+    + " iter: ALERTAS.ITERACIONES_CLAVE, hash: hashClave_('ClaveTemporal2026', sal, ALERTAS.ITERACIONES_CLAVE), creada: Date.now() - 60000 }; props_().setProperty('CUENTAS', JSON.stringify(c)); limpiarCfg_(); })()");
+  temporalViejo();
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'workforce.temporal', clave: 'ClaveTemporal2026', nombre: 'Mario Rivera' } });
+  ok(!r.ok && r.codigo === 'ACCESO' && /incorrectos/.test(r.error), 'un acceso temporal que quedó de antes ya no deja entrar, aunque la contraseña sea la correcta', r);
+  const tViejo = g.ejecutar("emitirSesion_({ u: 'workforce.temporal:mario rivera', n: 'Mario Rivera', r: 'workforce', t: '', o: 'clave', a: 'workforce.temporal' }).token");
+  r = g.post({ accion: 'estado', token: tViejo });
+  ok(!r.ok && r.codigo === 'SESION', 'y una sesión abierta con él deja de valer al instante', r);
+  const listaCuentas = C.listarCuentas();
+  ok(listaCuentas.length === 1 && listaCuentas[0].usuario === 'tiendas' && Object.keys(JSON.parse(g.E.props.get('CUENTAS'))).join() === 'tiendas',
+    'al abrir el diálogo de la contraseña de Tiendas, el acceso temporal que quedó se borra', listaCuentas);
 
   r = g.post({ accion: 'estado', token: tAgente + 'x' });
   ok(!r.ok && r.codigo === 'SESION', 'token alterado se rechaza', r);
@@ -371,9 +387,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   // Reportada: la ve todo Workforce y se puede quitar
   r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'reportada', nodo: nodoAlerta } });
   ok(r.ok && r.datos.reportada && r.datos.reportada.por === 'Ana López', 'Workforce marca la posible falla como reportada', r);
-  pa = deNodo(posibles(tWfTemp), nodoAlerta);
+  pa = deNodo(posibles(tWf2), nodoAlerta);
   ok(pa && pa.reportada && pa.reportada.por === 'Ana López', 'el resto de Workforce ve quién ya la reportó', pa);
-  g.post({ accion: 'alerta', token: tWfTemp, datos: { op: 'quitar', nodo: nodoAlerta } });
+  g.post({ accion: 'alerta', token: tWf2, datos: { op: 'quitar', nodo: nodoAlerta } });
   pa = deNodo(posibles(), nodoAlerta);
   ok(pa && !pa.reportada, 'la marca se puede quitar', pa);
   const marcas = JSON.parse(g.E.props.get('ALERTAS_REPORTADAS') || '{}');
@@ -443,9 +459,8 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-sup2' } });
   ok(r.ok && r.datos.usuario.rol === 'supervisor', 'el rol se reconoce aunque lo escriban con mayúscula', r);
   const tSup2 = r.datos.token;
-  C.guardarCuenta('supervision.temporal', 'supervisor', 'SupervisionPrueba2026');
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'supervision.temporal', clave: 'SupervisionPrueba2026', nombre: 'Marta Díaz' } });
-  ok(r.ok && r.datos.usuario.rol === 'supervisor', 'y hay acceso temporal para supervisores', r);
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'sofia.mejia', clave: 'ClaveTemporal2026', nombre: 'Sofía Mejía' } });
+  ok(!r.ok && r.codigo === 'ACCESO', 'los supervisores entran solo con Genesys (no hay acceso con contraseña)', r);
   r = g.post({ accion: 'cargar', token: tSup, datos: { baseVersion: -1 } });
   const paraSup = JSON.stringify(r.ok ? r.datos.fallas : '');
   ok(r.ok && r.datos.catalogo && paraSup.includes(f1.id) && !paraSup.includes('NOC #9150') && !paraSup.includes('historial') && !r.datos.cargas,
@@ -489,7 +504,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'reportada', nodo: nodoAlerta, a: 'WF' } });
   ok(r.ok && r.datos.reportada.a === 'VOC' && r.datos.reportada.por === 'Ana López', 'Workforce al marcarla la deja reportada al VOC, encima del aviso del supervisor', r.datos);
   g.post({ accion: 'alerta', token: tSup2, datos: { op: 'reportada', nodo: nodoAlerta, a: 'WF' } });
-  r = g.post({ accion: 'alerta', token: tWfTemp, datos: { op: 'quitar', nodo: nodoAlerta } });
+  r = g.post({ accion: 'alerta', token: tWf2, datos: { op: 'quitar', nodo: nodoAlerta } });
   ok(r.ok && !deNodo(posibles(), nodoAlerta).reportada, 'y cualquiera de Workforce quita la marca de quien sea', r);
   // Al quitarle el rol en Usuarios, pierde las posibles fallas al instante
   const filaLuis = hu.getLastRow();
@@ -517,8 +532,8 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok, 'al cambiar la contraseña, la cuenta se desbloquea', r);
   const tTienda3 = r.datos.token;
   for (let k = 0; k < 20; k++) g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'workforce.temporal', clave: 'adivina' + k, nombre: 'Intruso ' + k } });
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'workforce.temporal', clave: 'Workforce2026!', nombre: 'Mario Rivera' } });
-  ok(!r.ok && r.codigo === 'LIMITE', 'el acceso temporal de Workforce se bloquea antes: con 20 intentos', r);
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaveTiendasNueva2026', nombre: 'Otra Persona', tienda: 'CAC Mall Premier' } });
+  ok(r.ok, 'intentos con un usuario que no existe no bloquean la cuenta de Tiendas', r);
 
   /* ---------- Estadísticas ---------- */
   console.log('\n8. Estadísticas');
@@ -566,7 +581,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     b2.tieneTelefono = true;
   }
   t1 = Date.now();
-  r = await subir(b2, tWfTemp, catJson, 'semana 2.xlsx');
+  r = await subir(b2, tWf2, catJson, 'semana 2.xlsx');
   ok(r.ok && r.datos.comparacion && r.datos.comparacion.bajas >= recorte - 5 && r.datos.comparacion.cambiosNodo >= 1,
     `compara con la anterior: ${JSON.stringify(r.datos && r.datos.comparacion)} (${((Date.now() - t1) / 1000).toFixed(1)} s)`, r);
   ok(g.E.activo.getSheetByName('Base').getLastRow() === b2.filas + 1, 'la base anterior se borró y quedó la nueva');
@@ -732,7 +747,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     `iniciar aparta los ${espera.size} celulares en Envíos SMS (Pendiente) antes de mandar nada`, r.datos);
   ok(lease(f1.id) && lease(f1.id).envio === env1.envio, 'el envío en curso queda en Propiedades del script (no en la caché, que Google puede borrar)');
   ok(hEnv().getRange(1, 10).getValue() === 'Control' && hEnv().getMaxColumns() >= 10, 'a una pestaña Envíos SMS de antes se le agrega sola la columna Control');
-  r = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
+  r = sms(tWf2, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   ok(!r.ok && r.codigo === 'OCUPADO' && /Ana López está enviando/.test(r.error), 'mientras tanto, otra persona de Workforce no puede mandar a la misma falla', r);
   r = sms(tWf, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   ok(r.ok && r.datos.reanudado && r.datos.envio === env1.envio && hEnv().getLastRow() === filasAntes0 + espera.size, 'si la misma persona vuelve con el mismo mensaje (recargó la página), sigue el mismo envío', r.datos);
@@ -752,7 +767,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const antesRep = N.enviados.length;
   r = sms(tWf, { op: 'lote', id: f1.id, envio: env1.envio, paso: 0 });
   ok(r.ok && N.enviados.length === antesRep && r.datos.enviados === av1.enviados && r.datos.pasos === av1.pasos, 'si la página repite un grupo que ya se hizo (se cortó la respuesta), no se manda otra vez', r.datos);
-  r = sms(tWfTemp, { op: 'lote', id: f1.id, envio: env1.envio, paso: av1.pasos });
+  r = sms(tWf2, { op: 'lote', id: f1.id, envio: env1.envio, paso: av1.pasos });
   ok(!r.ok && r.codigo === 'PERMISO', 'otra persona no puede mover un envío ajeno', r);
   r = sms(tWf, { op: 'terminar', id: f1.id, envio: env1.envio });
   const fs1 = r.ok && r.datos.falla;
@@ -770,11 +785,11 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = sms(tWf, { op: 'resumen', id: f1.id });
   ok(r.ok && r.datos.configurado && r.datos.ya === espera.size - 5 && r.datos.enDuda === 2 && r.datos.faltan === 3 && r.datos.envios.length === 1 && !r.datos.enCurso,
     'el resumen sabe a cuántos ya les llegó y cuántos quedaron en duda: faltan los 3 con error', r.datos);
-  r = sms(tWfTemp, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
+  r = sms(tWf2, { op: 'iniciar', id: f1.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   const env2 = r.ok ? r.datos : {};
   ok(r.ok && env2.total === 3 && env2.ya === espera.size - 5 && env2.enDuda === 2, 'otra vez solo va a los 3 con error (ya lo puede mandar otra persona); a los que quedaron en duda no se les reenvía', r.datos);
-  const av2 = mandarTodo(tWfTemp, f1.id, env2);
-  r = sms(tWfTemp, { op: 'terminar', id: f1.id, envio: env2.envio });
+  const av2 = mandarTodo(tWf2, f1.id, env2);
+  r = sms(tWf2, { op: 'terminar', id: f1.id, envio: env2.envio });
   const unaVez = new Set(N.enviados.filter((e) => e.id.indexOf('AL-' + f1.id + '-F-') === 0).map((e) => e.msisdn));
   ok(av2.enviados === 3 && repetidos() === 0 && unaVez.size === espera.size && r.ok && r.datos.falla.sms.length === 2, 'con eso le llegó a todos, una sola vez a cada uno', [av2, unaVez.size]);
 
@@ -821,8 +836,8 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     'si la conexión se cae a medio grupo, los 22 quedan en duda (5 sí habían salido) y el envío sigue', sx4.datos);
   const dentro = {};
   N.durante = () => {
-    dentro.otro = sms(tWfTemp, { op: 'iniciar', id: fR.id, tipo: 'FALLA', aprobado: 'POSTES' });
-    dentro.resumen = sms(tWfTemp, { op: 'resumen', id: fR.id });
+    dentro.otro = sms(tWf2, { op: 'iniciar', id: fR.id, tipo: 'FALLA', aprobado: 'POSTES' });
+    dentro.resumen = sms(tWf2, { op: 'resumen', id: fR.id });
     dentro.repetido = sms(tWf, { op: 'lote', id: fR.id, envio: env3.envio, paso: sx4.datos.pasos });
     dentro.terminar = sms(tWf, { op: 'terminar', id: fR.id, envio: env3.envio });
     g.E.ahora = Date.now() + 5 * 60000;                       // pasan 5 minutos y el grupo sigue sin terminar
@@ -938,12 +953,12 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const f3 = r.ok ? r.datos.falla : {};
   g.ejecutar("(() => { const orig = agregarFilas_; globalThis.__fallarFilas = 1; agregarFilas_ = function () { if (globalThis.__fallarFilas > 0) { globalThis.__fallarFilas--; throw new Error('Hoja no disponible'); } return orig.apply(null, arguments); }; })()");
   const filasAntesF = hEnv().getLastRow();
-  r = sms(tWfTemp, { op: 'iniciar', id: f3.id, tipo: 'FALLA', aprobado: 'FIBRA' });
+  r = sms(tWf2, { op: 'iniciar', id: f3.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   ok(!r.ok && !lease(f3.id) && hEnv().getLastRow() === filasAntesF, 'si no se pueden apartar las filas, no queda un envío a medias que trabe la falla', r);
-  r = sms(tWfTemp, { op: 'iniciar', id: f3.id, tipo: 'FALLA', aprobado: 'FIBRA' });
+  r = sms(tWf2, { op: 'iniciar', id: f3.id, tipo: 'FALLA', aprobado: 'FIBRA' });
   const env7 = r.ok ? r.datos : {};
   ok(r.ok && env7.total >= 150 && lease(f2.id) && lease(f3.id) && lease(f3.id).n === 'Mario Rivera', 'otra persona manda a otra falla al mismo tiempo (' + env7.total + ' celulares)', r);
-  const sy1 = sms(tWfTemp, { op: 'lote', id: f3.id, envio: env7.envio, paso: 0 });
+  const sy1 = sms(tWf2, { op: 'lote', id: f3.id, envio: env7.envio, paso: 0 });
   const sy2 = sms(tWf, { op: 'lote', id: f2.id, envio: env6.envio, paso: lease(f2.id).pasos });
   const hEnvios = hEnv();
   const viejos = 5, hace41 = new Date(Date.now() - 41 * 86400000), hace3h = new Date(Date.now() - 3 * 3600000);
@@ -957,7 +972,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(mant.smsBorrados === viejos && hEnvios.getLastRow() === filasAntes - viejos && lease(f2.id) && lease(f3.id), 'el mantenimiento borra los envíos de más de 40 días (y no cierra los que van en curso)', mant);
   ok(mant.smsHuerfanos === 2 && contar(filasDe('SHUERFANO')).Cancelado === 1 && contar(filasDe('SHUERFANO')).Dudoso === 1 && contar(filasDe('SHUERFANO')).Enviado === 1,
     'y libera las filas que quedaron apartadas sin envío: Pendiente pasa a Cancelado y Enviando a Dudoso', mant);
-  const sy3 = sy1.ok ? sms(tWfTemp, { op: 'lote', id: f3.id, envio: env7.envio, paso: sy1.datos.pasos }) : sy1;
+  const sy3 = sy1.ok ? sms(tWf2, { op: 'lote', id: f3.id, envio: env7.envio, paso: sy1.datos.pasos }) : sy1;
   const sy4 = sy2.ok ? sms(tWf, { op: 'lote', id: f2.id, envio: env6.envio, paso: sy2.datos.pasos }) : sy2;
   const idsDe = (f) => N.enviados.filter((e) => e.id.indexOf('AL-' + f.id + '-F-') === 0).length;
   const e5 = contar(filasDe(env5.envio)), e6 = contar(filasDe(env6.envio)), e7 = contar(filasDe(env7.envio));
@@ -965,8 +980,8 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     && e5.Enviado === 50 && e5.Cancelado === env5.total - 50 && repetidos() === 0,
     'cada envío anota solo sus filas, aunque se intercalen y se borren filas de arriba', [e5, e6, e7, sy3.datos && sy3.datos.enviados, sy4.datos && sy4.datos.enviados]);
   g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f3.id, cerradaEn: Date.now() - 60000, nota: 'Prueba de SMS' } });
-  r = sms(tWfTemp, { op: 'lote', id: f3.id, envio: env7.envio, paso: sy3.datos.pasos });
-  r2 = sms(tWfTemp, { op: 'terminar', id: f3.id, envio: env7.envio });
+  r = sms(tWf2, { op: 'lote', id: f3.id, envio: env7.envio, paso: sy3.datos.pasos });
+  r2 = sms(tWf2, { op: 'terminar', id: f3.id, envio: env7.envio });
   ok(!r.ok && r.codigo === 'DATOS' && /se cerró mientras se enviaba/.test(r.error) && idsDe(f3) === sy3.datos.enviados && r2.ok && /se detuvo antes de terminar/.test(r2.datos.falla.historial.slice(-1)[0].detalle),
     'si cierran la falla a medio envío, el aviso de falla se detiene solo (no sale para los que faltaban)', [r, r2.datos && r2.datos.falla && r2.datos.falla.historial.slice(-1)]);
   const l9 = lease(f2.id);
@@ -1141,10 +1156,10 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.agregadas === 0 && r.datos.quitadas === plan5.quitar.length && igual(filasHoja(), comoHoja(filas5)),
     `si se cortó a medias, al repetir termina sin duplicar filas (${plan4.quitar.length} que salen, ${plan5.agregar.length} ya agregadas)`, r.datos || r);
 
-  r = g.post({ accion: 'base', token: tWfTemp, datos: { op: 'iniciar', total: 10, columnas: cols3, archivo: 'otra.xlsx' } });
+  r = g.post({ accion: 'base', token: tWf2, datos: { op: 'iniciar', total: 10, columnas: cols3, archivo: 'otra.xlsx' } });
   const rOcupado = porCambios(filas5, tWf, cols3, 'x');
   ok(r.ok && !rOcupado.ok && rOcupado.codigo === 'OCUPADO' && /Mario Rivera/.test(rOcupado.error), 'si otra persona está subiendo la base completa, espera', rOcupado);
-  g.post({ accion: 'base', token: tWfTemp, datos: { op: 'cancelar', id: r.datos.id } });
+  g.post({ accion: 'base', token: tWf2, datos: { op: 'cancelar', id: r.datos.id } });
 
   /* ---------- Carga por cambios con dos bases reales seguidas ---------- */
   if (process.argv[3]) {
@@ -1170,7 +1185,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const antes = hc.getLastRow();
   ok(g.E.triggers.filter((t) => t.fn === 'limpiarConsultas' && t.horas === 1).length === 1, 'el mantenimiento queda programado cada hora');
   g.E.ahora = Date.now() + 31 * 86400000;
+  temporalViejo();
   const rMant = C.limpiarConsultas();
+  ok(rMant && rMant.temporales === 1 && Object.keys(JSON.parse(g.E.props.get('CUENTAS'))).join() === 'tiendas', 'el mantenimiento también borra un acceso temporal que haya quedado de antes', rMant && rMant.temporales);
   const bvMant = g.post({ accion: 'estado', token: g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-wf' } }).datos.token }).datos.baseVersion;
   ok(rMant && rMant.celulares && rMant.celulares.listo && String(g.E.activo.getSheetByName('Celulares').getRange(1, 4).getValue()) === 'base ' + bvMant,
     'el mantenimiento deja el índice de celulares al día con la base actual' + (rMant && rMant.celulares && rMant.celulares.armado ? ' (lo armó)' : ''), rMant && rMant.celulares);

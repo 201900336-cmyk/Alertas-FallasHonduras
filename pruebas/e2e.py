@@ -273,13 +273,13 @@ with sync_playwright() as p:
        'esta PC recuerda la tienda y el usuario de Tiendas', t.locator('.selector-tienda input').input_value())
     t.screenshot(path=OUT + 'e06b_sesion_vencida.png')
 
-    print('7. Acceso temporal de Workforce')
+    print('7. Otra persona de Workforce entra con Genesys (no hay acceso temporal)')
+    http('/test/genesys?correo=mario.rivera@claro.com.hn&nombre=Mario%20Rivera')
     x = pagina(); x.goto(APP); x.wait_for_selector('text=Entrar con Genesys')
-    x.click('.acceso-titulo button:has-text("Temporal")')
-    ok(x.locator('.selector-tienda').count() == 0, 'el acceso temporal no pide tienda')
-    x.fill('input[autocomplete=username]', 'workforce.temporal'); x.fill('input[type=password]', 'Workforce2026!'); x.fill('input[autocomplete=name]', 'Mario Rivera')
-    x.click('form button[type=submit]'); x.wait_for_selector('.nav', timeout=15000)
-    ok('Workforce' in x.locator('.usuario-txt').inner_text(), 'entra como Workforce con la clave temporal')
+    ok(x.locator('button:has-text("Temporal")').count() == 0 and x.locator('text=Acceso temporal').count() == 0 and 'Tiendas' in x.locator('form.acceso-bloque h3').inner_text(),
+       'la entrada solo ofrece Genesys y Tiendas: no hay acceso temporal')
+    x.click('text=Entrar con Genesys'); x.wait_for_selector('.nav', timeout=15000)
+    ok('Mario Rivera' in x.locator('.usuario-txt').inner_text() and 'Workforce' in x.locator('.usuario-txt').inner_text(), 'Mario Rivera entra con Genesys como Workforce', x.locator('.usuario-txt').inner_text())
     x.evaluate("() => ir('fallas')"); x.wait_for_selector(f'.pf-tarjeta:has-text("{nodoPF}")', timeout=20000)
     ok('Reportada al VOC por Ana López' in x.locator('.pf-tarjeta', has_text=nodoPF).inner_text(), 'el resto de Workforce ve que Ana López ya reportó la posible falla')
     x.locator('.pf-tarjeta', has_text=nodoPF).locator('button:has-text("Crear falla")').click()
@@ -328,7 +328,7 @@ with sync_playwright() as p:
     # Aviso de escritorio de la falla resuelta
     s.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))'); s.wait_for_timeout(300)
     av = [v for v in s.evaluate('() => window.__avisos') if v['t'] == 'Falla resuelta: F1254585']
-    ok(len(av) == 1 and av[0]['b'].startswith('Falla de energía comercial en ') and 'Servicio restablecido hoy a las' in av[0]['b'] and 'la cerró Mario Rivera' in av[0]['b'],
+    ok(len(av) == 1 and av[0]['b'].startswith('Falla de energía comercial en ') and re.search(r'Servicio restablecido hoy a las? \d', av[0]['b']) and 'la cerró Mario Rivera' in av[0]['b'],
        'al cerrar una falla, a la supervisora le llega "Falla resuelta: F1254585": ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
     a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
     a.fill('.buscador-caja input', c_falla); a.keyboard.press('Enter'); a.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)

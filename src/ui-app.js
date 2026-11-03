@@ -198,11 +198,11 @@ function CabezaBloque({ ico, titulo, sub }) {
   </div>`;
 }
 
-/* Acceso real: Genesys para Concentrix, los supervisores, Workforce y Jefatura; usuario genérico para Tiendas */
+/* Acceso real: Genesys para Concentrix, los supervisores, Workforce y Jefatura; usuario genérico para Tiendas.
+   No hay accesos temporales con contraseña (por privacidad): solo Tiendas entra con usuario y contraseña. */
 function Acceso() {
   const s = useG();
   const cfg = s.config || { genesys: {} };
-  const [modo, setModo] = useState('tiendas');
   const [usuario, setUsuario] = useState(leerLS('alertas-usuario-tiendas', RT.usuarioTiendas || 'tiendas'));
   const [clave, setClave] = useState('');
   const listaTiendas = (cfg.listaTiendas && cfg.listaTiendas.length) ? cfg.listaTiendas : CONFIG.tiendas;
@@ -210,8 +210,7 @@ function Acceso() {
   const [nombre, setNombre] = useState(leerLS('alertas-nombre', ''));
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
-  const esTienda = modo === 'tiendas';
-  const listo = usuario.trim() && clave && nombre.trim().length >= 3 && (!esTienda || !!tienda);
+  const listo = usuario.trim() && clave && nombre.trim().length >= 3 && !!tienda;
 
   async function genesys() {
     setError(''); setOcupado(true);
@@ -222,9 +221,9 @@ function Acceso() {
     if (!listo || ocupado) return;
     setError(''); setOcupado(true);
     try {
-      const u = await Backend.conClave({ usuario: usuario.trim(), clave, nombre: nombre.trim(), tienda: esTienda ? tienda : '' });
+      const u = await Backend.conClave({ usuario: usuario.trim(), clave, nombre: nombre.trim(), tienda });
       guardarLS('alertas-nombre', nombre.trim());
-      if (esTienda) { guardarLS('alertas-tienda', u.tienda || tienda); guardarLS('alertas-usuario-tiendas', usuario.trim()); }
+      guardarLS('alertas-tienda', u.tienda || tienda); guardarLS('alertas-usuario-tiendas', usuario.trim());
       setClave('');
       await A.entrar(u);
     } catch (err) { setError(err.message); setOcupado(false); }
@@ -239,24 +238,19 @@ function Acceso() {
         <section class="acceso-bloque">
           <${CabezaBloque} ico="auricular" titulo="Concentrix, supervisores, Workforce HN y Jefatura" sub="Con tu usuario de Genesys." />
           <button class="btn btn-primario btn-grande" style="width:100%" disabled=${ocupado || !cfg.genesys.activo} onClick=${genesys}>Entrar con Genesys</button>
-          ${!cfg.genesys.activo && html`<p class="sub">Genesys todavía no está conectado.${cfg.temporal ? ' Mientras tanto, quien tenga una cuenta temporal puede usar el acceso temporal.' : ''}</p>`}
+          ${!cfg.genesys.activo && html`<p class="sub">Genesys todavía no está conectado.</p>`}
         </section>
         <div class="acceso-o" aria-hidden="true"><span>o</span></div>
         <form class="acceso-bloque" onSubmit=${entrar}>
           <div class="acceso-titulo">
-            <${CabezaBloque} ico=${esTienda ? 'tienda' : 'reloj'} titulo=${esTienda ? 'Tiendas' : 'Acceso temporal'}
-              sub=${esTienda ? 'Con el usuario de tiendas.' : 'Con tu cuenta temporal.'} />
-            ${cfg.temporal && html`<div class="seg" role="group" aria-label="Tipo de acceso">
-              <button type="button" aria-pressed=${esTienda} onClick=${() => { setModo('tiendas'); setUsuario(leerLS('alertas-usuario-tiendas', RT.usuarioTiendas || 'tiendas')); }}>Tiendas</button>
-              <button type="button" aria-pressed=${!esTienda} onClick=${() => { setModo('temporal'); setUsuario(''); }}>Temporal</button>
-            </div>`}
+            <${CabezaBloque} ico="tienda" titulo="Tiendas" sub="Con el usuario de tiendas." />
           </div>
-          ${!cfg.tiendas && esTienda && html`<p class="sub">El acceso de Tiendas todavía no tiene contraseña configurada.</p>`}
+          ${!cfg.tiendas && html`<p class="sub">El acceso de Tiendas todavía no tiene contraseña configurada.</p>`}
           <div class="fila-campos">
             <label class="campo"><span>Usuario</span><input class="input" value=${usuario} onInput=${(e) => setUsuario(e.currentTarget.value)} autocomplete="username" autocapitalize="none" /></label>
             <label class="campo"><span>Contraseña</span><input class="input" type="password" value=${clave} onInput=${(e) => setClave(e.currentTarget.value)} autocomplete="current-password" /></label>
           </div>
-          ${esTienda && html`<${SelectorTienda} valor=${tienda} onCambio=${setTienda} lista=${listaTiendas} />`}
+          <${SelectorTienda} valor=${tienda} onCambio=${setTienda} lista=${listaTiendas} />
           <label class="campo"><span>Tu nombre</span><input class="input" value=${nombre} onInput=${(e) => setNombre(e.currentTarget.value)} autocomplete="name" placeholder="Ejemplo: Karla Zelaya" /></label>
           <button class="btn btn-borde btn-grande" type="submit" disabled=${!listo || ocupado}>${ocupado ? 'Entrando…' : 'Entrar'}</button>
         </form>

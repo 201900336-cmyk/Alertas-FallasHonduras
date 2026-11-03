@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.1',                // se ve en la pestaña INICIO
+  VERSION: '3.2',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -34,7 +34,6 @@ const ALERTAS = {
   LIMITE_TIENDAS_HORA: 8000,     // para toda la cuenta compartida de Tiendas (unas 200 personas)
   INTENTOS_PERSONA: 5,           // contraseñas equivocadas de una misma persona antes de bloquearla 15 minutos
   INTENTOS_CUENTA_TIENDAS: 100,  // de todas las personas juntas, antes de bloquear la cuenta de Tiendas 15 minutos
-  INTENTOS_CUENTA: 20,           // lo mismo para las demás cuentas con contraseña (acceso temporal)
   DIAS_DETALLE: 30,              // días de detalle de cada consulta (quién consultó qué)
   MAX_FILAS_DETALLE: 600000,     // tope de filas de detalle: el archivo admite 10 millones de celdas
   DIAS_RESUMEN: 120,             // días de resumen diario para las estadísticas
@@ -239,7 +238,6 @@ function accionConfig_() {
     app: 'Alertas',
     genesys: { region: g.region || '', clientId: g.clientId || '', activo: !!(g.region && g.clientId) },
     tiendas: roles.indexOf('tiendas') >= 0,
-    temporal: roles.some((r) => r !== 'tiendas'),
     listaTiendas: tiendas_()
   };
 }
@@ -400,7 +398,10 @@ function loginClave_(d) {
   const tienda = texto_(d.tienda, 60);
   if (!usuario || !clave) throw fallo_('DATOS', 'Escribe el usuario y la contraseña.');
   if (nombre.length < 3) throw fallo_('DATOS', 'Escribe tu nombre.');
-  const c = (cfg_().CUENTAS || {})[usuario];
+  // Solo la cuenta de Tiendas entra con contraseña: no hay accesos temporales (por privacidad, desde la 3.2).
+  // Una cuenta temporal que haya quedado de antes cuenta como usuario o contraseña incorrectos.
+  const c0 = (cfg_().CUENTAS || {})[usuario];
+  const c = c0 && c0.rol === 'tiendas' ? c0 : null;
 
   /* Bloqueos por contraseñas equivocadas. La cuenta de Tiendas la comparten cientos de personas:
      los errores de una persona solo la bloquean a ella. La cuenta completa se bloquea solo si
@@ -408,7 +409,7 @@ function loginClave_(d) {
   const cache = cache_();
   const kp = 'fallidos:' + usuario + ':' + nombre.toLowerCase() + '@' + normTienda_(tienda);
   const kc = 'fallidos-cuenta:' + usuario;
-  const topeCuenta = c && c.rol === 'tiendas' ? ALERTAS.INTENTOS_CUENTA_TIENDAS : ALERTAS.INTENTOS_CUENTA;
+  const topeCuenta = ALERTAS.INTENTOS_CUENTA_TIENDAS;
   const malosCuenta = Number(cache.get(kc) || 0), malosPersona = Number(cache.get(kp) || 0);
   if (malosCuenta >= topeCuenta) throw fallo_('LIMITE', 'Hay demasiados intentos fallidos con esta cuenta. Espera 15 minutos o avisa a Workforce HN.');
   if (malosPersona >= ALERTAS.INTENTOS_PERSONA) throw fallo_('LIMITE', 'Demasiados intentos fallidos. Espera 15 minutos.');
@@ -420,14 +421,11 @@ function loginClave_(d) {
   }
   cache.remove(kp);
   // La tienda tiene que ser una de la lista (se guarda con el nombre exacto de la hoja Tiendas)
-  let suTienda = '';
-  if (c.rol === 'tiendas') {
-    const k = normTienda_(tienda);
-    suTienda = (k && tiendas_().filter((t) => normTienda_(t) === k)[0]) || '';
-    if (!suTienda) throw fallo_('DATOS', tienda ? 'Elige tu tienda de la lista.' : 'Elige la tienda desde donde atiendes.');
-  }
-  const id = usuario + ':' + nombre.toLowerCase() + (suTienda ? '@' + suTienda.toLowerCase() : '');
-  return emitirSesion_({ u: id, n: nombre, r: c.rol, t: suTienda, o: 'clave', a: usuario });
+  const k = normTienda_(tienda);
+  const suTienda = (k && tiendas_().filter((t) => normTienda_(t) === k)[0]) || '';
+  if (!suTienda) throw fallo_('DATOS', tienda ? 'Elige tu tienda de la lista.' : 'Elige la tienda desde donde atiendes.');
+  const id = usuario + ':' + nombre.toLowerCase() + '@' + suTienda.toLowerCase();
+  return emitirSesion_({ u: id, n: nombre, r: 'tiendas', t: suTienda, o: 'clave', a: usuario });
 }
 
 function emitirSesion_(p) {
@@ -452,9 +450,10 @@ function leerSesion_(token) {
   try { p = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(partes[0])).getDataAsString('UTF-8')); } catch (e) { return null; }
   if (!p || !p.e || Date.now() > p.e || !ALERTAS.ROLES[p.r]) return null;
   if (p.o === 'clave') {
-    // Si la cuenta se quitó o se le cambió la contraseña, las sesiones anteriores dejan de valer
+    // Solo Tiendas entra con contraseña: la sesión de un acceso temporal de antes de la 3.2 ya no vale.
+    // Si la cuenta se quitó o se le cambió la contraseña, las sesiones anteriores dejan de valer.
     const c = (cfg_().CUENTAS || {})[p.a];
-    if (!c || c.rol !== p.r || (c.creada || 0) > p.i) return null;
+    if (p.r !== 'tiendas' || !c || c.rol !== 'tiendas' || (c.creada || 0) > p.i) return null;
   }
   if (p.o === 'genesys') {
     // Bloquear a alguien en la hoja Usuarios corta también la sesión que ya tenía abierta
@@ -2533,7 +2532,11 @@ function limpiarConsultas() {
     // 6. El índice de celulares por nodo, si la base cambió y nadie lo pidió todavía (así Enviar SMS no espera)
     let celulares = null;
     try { celulares = prepararIndiceCelulares_(); } catch (err) { console.error('No se pudo armar el índice de celulares: ' + (err && err.message)); }
-    return { resumidoHasta: resumido, borradas: borradas, smsBorrados: smsBorrados, smsHuerfanos: smsHuerfanos, celulares: celulares };
+
+    // 7. Accesos temporales que hayan quedado de antes de la 3.2: se borran (solo Tiendas tiene contraseña)
+    let temporales = 0;
+    try { temporales = quitarCuentasTemporales_(); } catch (err) { console.error('No se pudieron borrar los accesos temporales: ' + (err && err.message)); }
+    return { resumidoHasta: resumido, borradas: borradas, smsBorrados: smsBorrados, smsHuerfanos: smsHuerfanos, celulares: celulares, temporales: temporales };
   } finally { lock.releaseLock(); }
 }
 
@@ -2545,7 +2548,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Alertas')
     .addItem('1. Configurar por primera vez', 'configurar')
     .addItem('2. Conectar Genesys', 'dialogoGenesys')
-    .addItem('3. Contraseñas de acceso', 'dialogoClaves')
+    .addItem('3. Contraseña de Tiendas', 'dialogoClaves')
     .addItem('4. Conectar Notifícame (SMS)', 'dialogoNotificame')
     .addItem('5. Números de control (SMS)', 'dialogoControlSms')
     .addSeparator()
@@ -2920,17 +2923,17 @@ function guardarControlSms(d) {
   return { texto: texto, lista: lista };
 }
 
-/* ----- Contraseñas (Tiendas y accesos temporales) ----- */
+/* ----- Contraseña de Tiendas -----
+   Solo la cuenta genérica de Tiendas entra con contraseña. Desde la 3.2 no hay accesos temporales (por
+   privacidad): Workforce, Jefatura, los supervisores y Concentrix entran solo con Genesys. */
 
 function dialogoClaves() {
   const html = estiloDialogo_() +
     '<p>La contraseña se guarda cifrada en el servidor. No aparece en el código de GitHub ni en la página.</p>' +
+    '<p class="nota">Solo Tiendas entra con contraseña. Workforce, Jefatura, los supervisores y Concentrix entran con Genesys: no hay accesos temporales.</p>' +
     '<div id="lista">Cargando…</div>' +
-    '<h3>Crear o cambiar una contraseña</h3>' +
-    '<label>Acceso<select id="rol"><option value="tiendas">Tiendas (usuario genérico)</option>' +
-    '<option value="workforce">Workforce HN, temporal mientras se conecta Genesys</option>' +
-    '<option value="jefatura">Jefatura, temporal</option><option value="supervisor">Supervisor de Call Center, temporal</option><option value="concentrix">Concentrix, temporal</option></select></label>' +
-    '<label>Usuario<input id="usuario" value="tiendas" autocomplete="off"></label>' +
+    '<h3>Crear o cambiar la contraseña de Tiendas</h3>' +
+    '<label>Usuario de Tiendas<input id="usuario" value="tiendas" autocomplete="off"></label>' +
     '<label>Contraseña (mínimo 10 caracteres)<input id="c1" type="password" autocomplete="new-password"></label>' +
     '<label>Repite la contraseña<input id="c2" type="password" autocomplete="new-password"></label>' +
     '<div class="acc"><button onclick="google.script.host.close()">Cerrar</button><button class="pri" onclick="guardar()">Guardar contraseña</button></div><p id="msg"></p>' +
@@ -2941,24 +2944,39 @@ function dialogoClaves() {
     'function msg(t){document.getElementById("msg").textContent=t;}' +
     'function guardar(){var c1=document.getElementById("c1").value,c2=document.getElementById("c2").value;if(c1!==c2){msg("Las contraseñas no coinciden.");return;}' +
     'google.script.run.withSuccessHandler(function(){msg("Contraseña guardada. Las sesiones anteriores de esa cuenta se cerraron.");document.getElementById("c1").value="";document.getElementById("c2").value="";cargar();})' +
-    '.withFailureHandler(function(e){msg(e.message);}).guardarCuenta(document.getElementById("usuario").value,document.getElementById("rol").value,c1);}' +
+    '.withFailureHandler(function(e){msg(e.message);}).guardarCuenta(document.getElementById("usuario").value,"tiendas",c1);}' +
     'function quitar(u){google.script.run.withSuccessHandler(cargar).quitarCuenta(u);}' +
-    'document.getElementById("rol").onchange=function(){document.getElementById("usuario").value=this.value==="tiendas"?"tiendas":this.value+".temporal";};' +
     'cargar();</script>';
-  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(520).setHeight(560), 'Contraseñas de acceso');
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(520).setHeight(500), 'Contraseña de Tiendas');
 }
+/* La lista del diálogo. Al abrirlo, si quedó algún acceso temporal de antes de la 3.2, se borra. */
 function listarCuentas() {
+  quitarCuentasTemporales_();
   const cuentas = JSON.parse(props_().getProperty('CUENTAS') || '{}');
   return Object.keys(cuentas).map((u) => ({
-    usuario: u, acceso: ALERTAS.ROLES[cuentas[u].rol] + (cuentas[u].rol === 'tiendas' ? '' : ' (temporal)'),
+    usuario: u, acceso: ALERTAS.ROLES[cuentas[u].rol],
     fecha: Utilities.formatDate(new Date(cuentas[u].creada), ALERTAS.ZONA, 'dd/MM/yyyy HH:mm')
   }));
+}
+/* Borra las cuentas con contraseña que no son de Tiendas (los accesos temporales de antes de la 3.2, que ya no
+   dejan entrar ni valen sus sesiones). Devuelve cuántas borró. */
+function quitarCuentasTemporales_() {
+  const raw = props_().getProperty('CUENTAS');
+  if (!raw) return 0;
+  const cuentas = JSON.parse(raw);
+  const otras = Object.keys(cuentas).filter((u) => !cuentas[u] || cuentas[u].rol !== 'tiendas');
+  if (!otras.length) return 0;
+  otras.forEach((u) => { delete cuentas[u]; });
+  props_().setProperty('CUENTAS', JSON.stringify(cuentas));
+  limpiarCfg_();
+  return otras.length;
 }
 function guardarCuenta(usuario, rol, clave) {
   usuario = String(usuario || '').trim().toLowerCase();
   if (!/^[a-z0-9._-]{3,40}$/.test(usuario)) throw new Error('El usuario solo puede tener letras, números, punto, guion o guion bajo (3 a 40).');
-  if (!ALERTAS.ROLES[rol]) throw new Error('Acceso no válido.');
+  if (rol !== 'tiendas') throw new Error('Solo Tiendas entra con contraseña. Workforce, Jefatura, los supervisores y Concentrix entran con Genesys (no hay accesos temporales).');
   if (String(clave || '').length < 10) throw new Error('La contraseña debe tener al menos 10 caracteres.');
+  quitarCuentasTemporales_();
   const sal = Utilities.getUuid();
   const cuentas = JSON.parse(props_().getProperty('CUENTAS') || '{}');
   cuentas[usuario] = { rol: rol, sal: sal, iter: ALERTAS.ITERACIONES_CLAVE, hash: hashClave_(String(clave), sal, ALERTAS.ITERACIONES_CLAVE), creada: Date.now() };

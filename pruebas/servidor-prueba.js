@@ -20,9 +20,9 @@ const C = g.contexto;
 C.configurar();
 C.guardarGenesys({ region: 'mypurecloud.com', clientId: CLIENT_ID, rolPorDefecto: 'concentrix' });
 C.guardarCuenta('tiendas', 'tiendas', 'ClaroTiendas2026');
-C.guardarCuenta('workforce.temporal', 'workforce', 'Workforce2026!');
 const hu = g.E.activo.getSheetByName('Usuarios');
 hu.appendRow(['ana.lopez@claro.com.hn', 'Ana López', 'workforce', 'SÍ', '']);
+hu.appendRow(['mario.rivera@claro.com.hn', 'Mario Rivera', 'workforce', 'SÍ', '']);
 hu.appendRow(['gerente.fijo@claro.com.hn', 'Gerencia Fijo', 'jefatura', 'SÍ', '']);
 hu.appendRow(['sofia.mejia@concentrix.com', 'Sofía Mejía', 'supervisor', 'SÍ', '']);
 

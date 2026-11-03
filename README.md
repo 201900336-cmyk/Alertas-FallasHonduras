@@ -38,7 +38,6 @@ Navegador (GitHub Pages)             Google (privado)                           
 | **Supervisor** (de Call Center) | Genesys, con su correo en la hoja **Usuarios** y el rol `supervisor` | Lo mismo que Concentrix, más las posibles fallas: las reporta al VOC o le avisa a Workforce. No crea fallas |
 | **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas (con el envío de SMS por Notifícame), Base y Estadísticas |
 | **Jefatura** | Genesys, con su correo en la hoja **Usuarios** | Todo lo de Workforce |
-| Acceso temporal | Usuario y contraseña (para cuando Genesys falle), de Workforce, Jefatura, supervisor o Concentrix | Lo mismo que su rol |
 
 Tiendas pide la tienda y el nombre de la persona para que cada consulta quede a nombre de alguien, aunque la cuenta sea compartida. El usuario genérico ya aparece escrito. La tienda se elige de una lista desplegable: al escribir parte del nombre (por ejemplo "multi") aparecen las que coinciden, sin importar tildes ni mayúsculas, y hay que elegir una; un nombre que no está en la lista no deja entrar. Cada PC recuerda su tienda.
 
@@ -111,10 +110,10 @@ Luego, en el Sheet: **Alertas > 2. Conectar Genesys**.
 - Para quitarle el acceso a alguien, pon **NO** en Activo (o el rol `bloqueado`). Aplica de inmediato, aunque ya tenga Alertas abierto. Sirve también para bloquear a un asesor de Concentrix.
 - Si las pestañas están ocultas, primero **Alertas > Mostrar las pestañas**, y al terminar **Alertas > Ocultar y proteger las pestañas**.
 
-**Alertas > 3. Contraseñas de acceso.**
+**Alertas > 3. Contraseña de Tiendas.**
 
 - Crea la cuenta **tiendas** con rol **Tiendas** y una contraseña de al menos 10 caracteres. Compártela con las tiendas por un canal interno.
-- Si quieres, crea un acceso temporal de **Workforce** para cuando Genesys no esté disponible.
+- Es la única cuenta con contraseña. Por privacidad **no hay accesos temporales**: Workforce, Jefatura, los supervisores y Concentrix entran solo con Genesys. Si quedó alguna cuenta temporal de antes, Alertas la borra sola (al abrir este diálogo o en el mantenimiento de cada hora) y ya no deja entrar con ella.
 - Al cambiar una contraseña, se cierran las sesiones abiertas con la anterior y se quita cualquier bloqueo de la cuenta.
 - Como la contraseña de Tiendas la conocen cientos de personas, conviene cambiarla cada mes y cada vez que alguien deja de trabajar en tiendas.
 
@@ -286,7 +285,8 @@ Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-0
 - **Genesys**: el servidor valida cada ingreso con Genesys y exige que el token sea de la organización de Claro y del cliente OAuth de Alertas. Así nadie puede entrar con una cuenta de otra organización de Genesys aunque use el correo de alguien de Workforce.
 - **Sesiones firmadas** (HMAC-SHA256) que vencen a las 12 horas. Los permisos se revisan contra la hoja Usuarios en cada acción de Workforce.
 - **Límites**: 400 búsquedas por hora por persona y 8,000 por hora para toda la cuenta de Tiendas.
-- **Contraseñas equivocadas**: cinco errores bloquean 15 minutos solo a esa persona (por nombre y tienda), no a las demás tiendas. Si llegan 100 intentos fallidos en 15 minutos (alguien probando contraseñas), se bloquea la cuenta de Tiendas; cambiar la contraseña la desbloquea. Para el acceso temporal de Workforce el tope es 20.
+- **Contraseñas equivocadas**: cinco errores bloquean 15 minutos solo a esa persona (por nombre y tienda), no a las demás tiendas. Si llegan 100 intentos fallidos en 15 minutos (alguien probando contraseñas), se bloquea la cuenta de Tiendas; cambiar la contraseña la desbloquea.
+- **Sin accesos temporales**: la única cuenta con usuario y contraseña es la de Tiendas. Todos los demás entran con Genesys, así que si Genesys no está disponible, solo Tiendas puede entrar hasta que vuelva.
 - **No hay búsquedas parciales**: solo contrato o DNI completos, máximo 20 resultados. No se puede listar la base desde la página.
 - **Lo interno de cada falla** (referencia, notas, historial de cambios y correos de Workforce) solo viaja a Workforce y Jefatura. A Concentrix y Tiendas el servidor les manda solo lo que muestra su pantalla, que incluye el número de falla.
 - **Posibles fallas**: la lista y el detalle (con los nombres de los clientes) solo los reciben Workforce, Jefatura y los supervisores, sin teléfonos ni DNI. El correo se copia en la PC de quien lo va a enviar; Alertas no manda correos solo.
@@ -339,7 +339,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 312 pruebas del servidor en un emulador de Apps Script
+npm test                           # 317 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente
