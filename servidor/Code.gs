@@ -747,7 +747,7 @@ function motivoCompatible_(x) {
   return Object.assign({}, x, { motivo: 'OTRO', motivoTexto: ALERTAS.MOTIVOS[x.motivo], clienteTexto: MOTIVOS_NUEVOS[x.motivo] });
 }
 
-/* Activas y cerradas en las últimas 48 horas (con las descartadas), en caché 10 minutos */
+/* Activas y cerradas en las últimas 84 horas (las 72 que las ven los asesores, más 12), con las descartadas; en caché 10 minutos */
 function fallasRecientes_() {
   const c = cache_().get('fallasRecientes');
   if (c) return JSON.parse(c);
