@@ -28,7 +28,7 @@ function BackendRemoto() {
 
   /* Las consultas de solo lectura se reintentan solas si el servidor estuvo ocupado un momento
      (con cientos de personas a la vez, Apps Script a veces rechaza una solicitud suelta). */
-  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1 };
+  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1, conexiones: 1, uso: 1 };
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
@@ -146,6 +146,8 @@ function BackendRemoto() {
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
     sms: (d) => llamar('sms', d, d.op === 'lote' ? 200000 : 120000),
+    uso: (d) => llamar('uso', d),
+    conexiones: (d) => llamar('conexiones', d, 60000),
 
     /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
@@ -255,6 +257,15 @@ function BackendLocal() {
     const m = await Store.confirmar({ tipo, texto, por: quien() }, cambios);
     return m.version;
   }
+  /* Conexiones en la demostración: una entrada por persona en esta PC, igual que la hoja Accesos del servidor */
+  const AVISOS_DEMO = { activados: 'Activados', bloqueados: 'Bloqueados', 'sin-soporte': 'No disponibles', pendiente: 'Sin responder' };
+  const accesosDemo = () => leerLS('alertas-demo-accesos', {});
+  function entradaDemo(u) {
+    const m = accesosDemo(), ahora = Date.now(), a = m[u.u];
+    m[u.u] = Object.assign({ u: u.u, primera: ahora, entradas: 0, avisos: '', avisosEn: null }, a || {},
+      { nombre: u.nombre, acceso: u.acceso, tienda: u.tienda || '', ultima: ahora, entradas: ((a && a.entradas) || 0) + 1 });
+    guardarLS('alertas-demo-accesos', m);
+  }
   async function log(entrada) {
     const u = ses.usuario;
     await Store.agregarLog(Object.assign({ t: Date.now(), u: u.u, un: u.nombre, canal: u.acceso, tienda: u.tienda || '', tipo: 'consulta' }, entrada));
@@ -275,7 +286,26 @@ function BackendLocal() {
       const usuario = { u: U.sinAcentos(nombre).toLowerCase().replace(/\s+/g, '.'), nombre, rol, acceso: CONFIG.roles[rol].corto, tienda: rol === 'tiendas' ? (tienda || '') : '', origen: 'demo' };
       ses = { usuario, expira: Date.now() + 12 * U.HORA };
       guardarSesionEn(CLAVE, ses);
+      entradaDemo(usuario);
       return usuario;
+    },
+    async uso({ avisos }) {
+      const u = ses.usuario;
+      if (!accesosDemo()[u.u]) entradaDemo(u);
+      const m = accesosDemo();
+      Object.assign(m[u.u], { avisos: AVISOS_DEMO[avisos] || '', avisosEn: Date.now() });
+      guardarLS('alertas-demo-accesos', m);
+      return { listo: true };
+    },
+    async conexiones({ desde }) {
+      const personas = {};
+      Object.values(accesosDemo()).forEach((a) => { personas[a.u] = Object.assign({ consultas: 0, falla: 0 }, a); });
+      (await Store.leerLogs(desde)).forEach((l) => {
+        if (l.tipo === 'reporte') return;
+        const p = personas[l.u] || (personas[l.u] = { u: l.u, nombre: l.un || l.u, acceso: l.canal, tienda: l.tienda || '', primera: null, ultima: null, entradas: 0, avisos: '', avisosEn: null, consultas: 0, falla: 0 });
+        p.consultas++; if (l.r === 'FALLA') p.falla++;
+      });
+      return { personas: Object.values(personas), desde, ahora: Date.now() };
     },
     salir() { ses = null; guardarSesionEn(CLAVE, null); },
 

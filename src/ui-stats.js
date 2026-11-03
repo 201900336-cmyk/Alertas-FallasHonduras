@@ -402,3 +402,102 @@ function Equipo({ d }) {
     </div>
   </div>`;
 }
+
+/* ---------- Conexiones: quién entra a Alertas (Workforce y Jefatura) ----------
+   Para darle seguimiento a quien no lo está usando: cada persona con su última entrada, cuántas veces entró,
+   sus consultas del periodo y si tiene los avisos de escritorio activados. Se descarga en CSV para mandárselo
+   a los supervisores. Las entradas se registran desde la versión 3.3 del servidor. */
+const PERIODOS_CONEX = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']];
+const ACCESOS_CONEX = [['todos', 'Todos'], ['Concentrix', 'Concentrix'], ['Tiendas', 'Tiendas'], ['Supervisor', 'Supervisores'], ['equipo', 'Workforce y Jefatura']];
+const FILTROS_CONEX = [['todos', 'Todos'], ['entraron', 'Entraron'], ['no', 'No entraron'], ['avisos', 'Sin avisos activados']];
+const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend', 'No disponibles': 'nd' };
+
+function VistaConexiones() {
+  const s = useG();
+  const [per, setPer] = useState('hoy');
+  const [acceso, setAcceso] = useState('todos');
+  const [filtro, setFiltro] = useState('todos');
+  const [q, setQ] = useState('');
+  const [orden, setOrden] = useState({ k: 'ultima', asc: false });
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState(null);
+  const [intento, setIntento] = useState(0);
+  const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
+  useEffect(() => {
+    let vivo = true;
+    setError(null);
+    Backend.conexiones({ desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
+    return () => { vivo = false; };
+  }, [desde, intento]);
+
+  const dePer = per === 'hoy' ? 'hoy' : 'en ' + per + ' días';
+  const todas = (datos && datos.personas) || [];
+  const delAcceso = todas.filter((p) => acceso === 'todos' || (acceso === 'equipo' ? p.acceso === 'Workforce HN' || p.acceso === 'Jefatura' : p.acceso === acceso));
+  const entro = (p) => !!p.ultima && p.ultima >= desde;
+  const sinAvisos = (p) => p.avisos !== 'Activados';
+  const k = {
+    entraron: delAcceso.filter(entro).length,
+    ausentes: delAcceso.filter((p) => !p.ultima || p.ultima < s.now - 3 * U.DIA).length,
+    sinConsultas: delAcceso.filter((p) => entro(p) && !p.consultas).length,
+    sinAvisos: delAcceso.filter((p) => p.ultima && sinAvisos(p)).length
+  };
+  const txt = U.sinAcentos(q.trim().toLowerCase());
+  const filas = delAcceso
+    .filter((p) => filtro === 'todos' || (filtro === 'entraron' ? entro(p) : filtro === 'no' ? !entro(p) : sinAvisos(p)))
+    .filter((p) => !txt || U.sinAcentos([p.nombre, p.tienda, p.acceso, p.u].join(' ').toLowerCase()).includes(txt))
+    .sort((a, b) => {
+      const v = (p) => (orden.k === 'nombre' ? U.sinAcentos(p.nombre).toLowerCase() : orden.k === 'ultima' ? p.ultima || 0 : p[orden.k] || 0);
+      const x = v(a), y = v(b);
+      return (x < y ? -1 : x > y ? 1 : 0) * (orden.asc ? 1 : -1) || (b.ultima || 0) - (a.ultima || 0);
+    });
+  const ordenar = (k2) => setOrden((o) => ({ k: k2, asc: o.k === k2 ? !o.asc : k2 === 'nombre' }));
+  const cab = (k2, t, der) => html`<th class=${der ? 'der' : null} aria-sort=${orden.k === k2 ? (orden.asc ? 'ascending' : 'descending') : null}>
+    <button class="th-orden" onClick=${() => ordenar(k2)}>${t}${orden.k === k2 && html`<span aria-hidden="true">${orden.asc ? ' ↑' : ' ↓'}</span>`}</button></th>`;
+  const fecha = (t) => (t ? U.dia(t) + ' ' + U.hora(t).replace(/ /g, ' ') : '');
+  function descargar() {
+    U.descargarCsv('Conexiones Alertas ' + new Date(s.now).toISOString().slice(0, 10) + '.csv', [
+      ['Nombre', 'Acceso', 'Tienda', 'Usuario', 'Primera entrada', 'Última entrada', 'Entradas', 'Consultas (' + dePer + ')', 'Con falla', 'Avisos de escritorio']
+    ].concat(filas.map((p) => [p.nombre, p.acceso, p.tienda, /^tiendas?[^:]*:/.test(p.u) ? '' : p.u, fecha(p.primera), fecha(p.ultima), p.entradas, p.consultas, p.falla, p.avisos || 'Sin dato'])));
+  }
+
+  return html`<div>
+    <div class="titulo-vista">
+      <div><h1>Conexiones</h1><p>Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.</p></div>
+      <div class="der">
+        <div class="seg" role="group" aria-label="Periodo">${PERIODOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${t}</button>`)}</div>
+      </div>
+    </div>
+    ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
+        <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
+        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setIntento(intento + 1)}>Intentar de nuevo</button></div></div>`
+      : !datos ? html`<div class="panel vacio"><b>Cargando…</b>Revisando las entradas y las consultas.</div>` : html`
+      <div class="panel kpis conex-kpis">
+        <div class="kpi"><div class="l">Entraron ${dePer}</div><div class="v">${U.n(k.entraron)}</div><div class="d">de ${U.plural(delAcceso.length, '1 persona', U.n(delAcceso.length) + ' personas')} en la lista</div></div>
+        <div class="kpi"><div class="l">No entran hace 3 días o más</div><div class="v">${U.n(k.ausentes)}</div><div class="d">o sin entrada registrada</div></div>
+        <div class="kpi"><div class="l">Entraron y no consultaron</div><div class="v">${U.n(k.sinConsultas)}</div><div class="d">${dePer}</div></div>
+        <div class="kpi"><div class="l">Sin avisos activados</div><div class="v">${U.n(k.sinAvisos)}</div><div class="d">bloqueados o sin responder</div></div>
+      </div>
+      <section class="panel">
+        <div class="panel-cab conex-cab">
+          <div class="seg" role="group" aria-label="Acceso">${ACCESOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${acceso === v} onClick=${() => setAcceso(v)} key=${v}>${t}</button>`)}</div>
+          <div class="seg" role="group" aria-label="Filtro">${FILTROS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${filtro === v} onClick=${() => setFiltro(v)} key=${v}>${t}</button>`)}</div>
+          <label class="conex-buscar"><span class="sr">Buscar por nombre o tienda</span><${Ico} n="lupa" s=${16} />
+            <input class="input" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} placeholder="Buscar por nombre o tienda" /></label>
+          <button class="btn btn-borde btn-chico" disabled=${!filas.length} onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button>
+        </div>
+        <div class="panel-cuerpo tabla-envoltura">
+          ${filas.length ? html`<table class="tabla conex-tabla"><thead><tr>
+              ${cab('nombre', 'Persona')}<th>Acceso</th>${cab('ultima', 'Última entrada')}${cab('entradas', 'Entradas', true)}${cab('consultas', 'Consultas ' + dePer, true)}<th>Avisos</th></tr></thead>
+            <tbody>${filas.map((p) => html`<tr key=${p.u}>
+              <td><b class="fuerte">${p.nombre}</b><div class="sub">${p.tienda || (/@/.test(p.u) ? p.u : '')}</div></td>
+              <td>${p.acceso === 'Supervisor' ? 'Supervisor' : p.acceso}</td>
+              <td>${p.ultima ? html`${p.ultima >= U.inicioDia(s.now) ? 'Hoy, ' + U.hora(p.ultima) : U.cuandoCorto(p.ultima, s.now)}${!entro(p) && html`<div class="sub">${U.hace(p.ultima, s.now)}</div>`}` : html`<span class="sub">Sin registro</span>`}</td>
+              <td class="der num">${p.entradas ? U.n(p.entradas) : '—'}</td>
+              <td class="der num">${U.n(p.consultas)}</td>
+              <td>${p.avisos ? html`<span class="aviso-estado" data-s=${AVISO_CONEX[p.avisos] || 'nd'}>${p.avisos}</span>` : html`<span class="sub">Sin dato</span>`}</td>
+            </tr>`)}</tbody></table>`
+          : html`<div class="vacio"><b>${todas.length ? 'Nadie con ese filtro' : 'Todavía no hay entradas registradas'}</b>${todas.length ? 'Prueba con otro filtro o búsqueda.' : 'Desde la versión 3.3 del servidor, cada vez que alguien entra queda anotado aquí.'}</div>`}
+        </div>
+      </section>`}
+  </div>`;
+}

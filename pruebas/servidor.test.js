@@ -519,20 +519,20 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(!ultimo.ok && ultimo.codigo === 'LIMITE', 'límite de consultas por hora', ultimo);
   g.ejecutar('ALERTAS.LIMITE_CONSULTAS_HORA = 400');
   // La cuenta de Tiendas la comparten ~200 personas: los errores de una no bloquean a las demás
-  for (let k = 0; k < 5; k++) g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'mala' + k, nombre: 'Persona Despistada', tienda: 'CAC Mall Premier' } });
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Persona Despistada', tienda: 'CAC Mall Premier' } });
+  for (let k = 0; k < 5; k++) g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'mala' + k, nombre: 'Rosa Pineda', tienda: 'CAC Mall Premier' } });
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Rosa Pineda', tienda: 'CAC Mall Premier' } });
   ok(!r.ok && r.codigo === 'LIMITE', 'quien se equivoca 5 veces queda bloqueado 15 minutos', r);
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Otra Persona', tienda: 'CAC Mall Premier' } });
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Marta Díaz', tienda: 'CAC Mall Premier' } });
   ok(r.ok, 'pero las demás tiendas siguen entrando con la misma cuenta', r);
   for (let k = 0; k < 100; k++) g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'adivina' + k, nombre: 'Intruso ' + k, tienda: 'X' + k } });
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Otra Persona', tienda: 'CAC Mall Premier' } });
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Marta Díaz', tienda: 'CAC Mall Premier' } });
   ok(!r.ok && r.codigo === 'LIMITE', 'con 100 contraseñas equivocadas de distintas personas, la cuenta se bloquea 15 minutos', r);
   C.guardarCuenta('tiendas', 'tiendas', 'ClaveTiendasNueva2026');
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaveTiendasNueva2026', nombre: 'Otra Persona', tienda: 'CAC Mall Premier' } });
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaveTiendasNueva2026', nombre: 'Marta Díaz', tienda: 'CAC Mall Premier' } });
   ok(r.ok, 'al cambiar la contraseña, la cuenta se desbloquea', r);
   const tTienda3 = r.datos.token;
   for (let k = 0; k < 20; k++) g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'workforce.temporal', clave: 'adivina' + k, nombre: 'Intruso ' + k } });
-  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaveTiendasNueva2026', nombre: 'Otra Persona', tienda: 'CAC Mall Premier' } });
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaveTiendasNueva2026', nombre: 'Marta Díaz', tienda: 'CAC Mall Premier' } });
   ok(r.ok, 'intentos con un usuario que no existe no bloquean la cuenta de Tiendas', r);
 
   /* ---------- Estadísticas ---------- */
@@ -561,6 +561,47 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     r = g.post({ accion: 'telefonos', token: tWf, datos: { id: f1.id } });
     ok(!r.ok && r.codigo === 'BASE' && /TELEFONO/.test(r.error), 'si la base subida no trae teléfonos, lo dice claro', r);
   }
+
+  /* ---------- Conexiones y nombres de Tiendas ---------- */
+  console.log('\n8b. Conexiones y nombres reales en Tiendas');
+  const tiendaCon = (nombre) => g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaveTiendasNueva2026', nombre, tienda: 'CAC Metromall' } });
+  const nombresMalos = ['el pepe', 'la mera mera', 'Mera Mera', 'Pepe', 'asdf qwer', 'Juan P', 'Karla 2', 'Prueba Tienda', 'Jjjuan Perez'].map((n) => [n, tiendaCon(n)]);
+  ok(nombresMalos.every(([, x]) => !x.ok && x.codigo === 'DATOS' && /nombre|letras/i.test(x.error)), 'Tiendas tiene que poner nombre y apellido reales: rechaza "el pepe", "la mera mera", "Pepe", iniciales y números',
+    nombresMalos.filter(([, x]) => x.ok || x.codigo !== 'DATOS').map(([n, x]) => [n, x.codigo]));
+  r = tiendaCon('  daniela   RAMÍREZ ');
+  ok(r.ok && r.datos.usuario.nombre === 'Daniela Ramírez' && /^tiendas:daniela ramírez@cac metromall$/.test(r.datos.usuario.u), 'y lo deja en nombre propio: "  daniela   RAMÍREZ " entra como Daniela Ramírez', r.datos && r.datos.usuario);
+  const tDaniela = r.datos.token;
+  r = tiendaCon('maria de los angeles lopez');
+  ok(r.ok && r.datos.usuario.nombre === 'Maria de los Angeles Lopez', 'con "de los" en minúscula en medio: ' + (r.datos && r.datos.usuario.nombre));
+  // Cada entrada queda en la hoja Accesos del archivo de consultas (una fila por persona)
+  const hAcc = g.SpreadsheetApp.openById(g.E.props.get('CONSULTAS_ID')).getSheetByName('Accesos');
+  const filaDe = (u) => hAcc.getRange(1, 1, hAcc.getLastRow(), 9).getValues().filter((f) => f[0] === u);
+  const fDaniela = filaDe('tiendas:daniela ramírez@cac metromall');
+  ok(hAcc && hAcc.getRange(1, 1, 1, 9).getValues()[0].join('|') === 'Usuario|Nombre|Acceso|Tienda|Primera entrada|Última entrada|Entradas|Avisos de escritorio|Avisos al'
+    && fDaniela.length === 1 && fDaniela[0][1] === 'Daniela Ramírez' && fDaniela[0][2] === 'Tiendas' && fDaniela[0][3] === 'CAC Metromall' && fDaniela[0][6] === 1,
+    'cada entrada queda en la hoja Accesos: Daniela Ramírez, Tiendas, CAC Metromall, 1 entrada', fDaniela);
+  const entradasAna = (filaDe('ana.lopez@claro.com.hn')[0] || [])[6];
+  g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-wf' } });
+  const fAna = filaDe('ana.lopez@claro.com.hn');
+  ok(fAna.length === 1 && fAna[0][6] === entradasAna + 1 && fAna[0][2] === 'Workforce HN' && +fAna[0][5] >= +fAna[0][4], 'la misma persona no se repite: suma la entrada y actualiza la última (Ana López, ' + fAna[0][6] + ' entradas)', fAna);
+  // La página dice si en esa PC están activados los avisos de escritorio
+  r = g.post({ accion: 'uso', token: tDaniela, datos: { avisos: 'bloqueados' } });
+  ok(r.ok && filaDe('tiendas:daniela ramírez@cac metromall')[0][7] === 'Bloqueados', 'el estado de los avisos queda en su fila (Bloqueados)', r);
+  r = g.post({ accion: 'uso', token: tAgente, datos: { avisos: 'activados' } });
+  ok(r.ok && filaDe('karla.zelaya@concentrix.com')[0][7] === 'Activados', 'y Activados para quien los permitió', filaDe('karla.zelaya@concentrix.com'));
+  r = g.post({ accion: 'uso', token: tAgente, datos: { avisos: 'otro' } });
+  ok(!r.ok && r.codigo === 'DATOS', 'un estado inventado se rechaza', r);
+  // El reporte: solo Workforce y Jefatura
+  ok(['tAgente', 'tTienda3', 'tSup'].every((k) => { const x = g.post({ accion: 'conexiones', token: { tAgente, tTienda3, tSup }[k], datos: {} }); return !x.ok && x.codigo === 'PERMISO'; }),
+    'Concentrix, Tiendas y los supervisores no ven el reporte de conexiones');
+  r = g.post({ accion: 'conexiones', token: tWf, datos: { desde: Date.now() - 6 * 86400000 } });
+  const pers = r.ok ? r.datos.personas : [];
+  const pKarla = pers.find((p) => p.u === 'karla.zelaya@concentrix.com'), pDaniela = pers.find((p) => p.nombre === 'Daniela Ramírez');
+  const consultasKarla = hc.getRange(2, 1, hc.getLastRow() - 1, 6).getValues().filter((f) => f[1] === 'karla.zelaya@concentrix.com' && f[5] !== 'reporte').length;
+  ok(r.ok && pKarla && pKarla.acceso === 'Concentrix' && pKarla.consultas === consultasKarla && pKarla.entradas >= 1 && pKarla.ultima && pKarla.avisos === 'Activados',
+    'Workforce ve a cada persona con su última entrada, entradas, consultas del periodo (' + (pKarla && pKarla.consultas) + ' de Karla) y avisos', pKarla);
+  ok(pDaniela && pDaniela.tienda === 'CAC Metromall' && pDaniela.consultas === 0 && pDaniela.avisos === 'Bloqueados' && pers.some((p) => p.acceso === 'Supervisor'),
+    'también quien entró y no consultó (Daniela Ramírez, avisos bloqueados) y los supervisores', pDaniela);
 
   /* ---------- Segunda carga ---------- */
   console.log('\n9. Segunda carga semanal (reemplaza la anterior)');
@@ -1289,7 +1330,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const deAlertas = (h) => h.getProtections('SHEET').filter((p) => p.getDescription() === DESC);
   const visibles = (l) => l.getSheets().filter((h) => !h.isSheetHidden()).map((h) => h.getName());
   const mensaje = () => (g2.E.alertas[g2.E.alertas.length - 1] || [])[1] || '';
-  const OTRO = 'ariel.velasquez@claro.com.hn';
+  const OTRO = 'otra.cuenta@claro.com.hn';
   g2.E.ahora = null;
   const pestanasAntes = pestanas().length;
   g2.E.usuario = OTRO;

@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.2',                // se ve en la pestaña INICIO
+  VERSION: '3.3',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -56,7 +56,7 @@ const ALERTAS = {
   AVISOS_MAX: 8,                 // fallas publicadas, reabiertas o cerradas que guarda "estado" para el aviso de escritorio
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares' },
+  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares', accesos: 'Accesos' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura', supervisor: 'Supervisor' },
   ESCRIBEN: ['workforce', 'jefatura'],
   // Ven las posibles fallas (el aviso de 5 clientes en 60 min) y las pueden reportar; publicar fallas, solo Workforce y Jefatura
@@ -91,6 +91,8 @@ const COL_CARGAS = ['Fecha', 'Subió', 'Archivo', 'Servicios', 'HFC', 'GPON', 'N
 const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo', 'Contrato', 'Nodo', 'Resultado', 'Falla'];
 const COL_RESUMEN = ['Día', 'Consultas', 'Con falla', 'Sin resultado', 'Reportes', 'Datos (no editar)'];
 const COL_RESUMEN_AS = ['Día', 'Usuario', 'Nombre', 'Canal', 'Consultas', 'Con falla', 'Sin resultado'];
+// Archivo de consultas: una fila por persona que entró a Alertas (para el reporte de Conexiones)
+const COL_ACCESOS = ['Usuario', 'Nombre', 'Acceso', 'Tienda', 'Primera entrada', 'Última entrada', 'Entradas', 'Avisos de escritorio', 'Avisos al'];
 const COL_DESCARGAS = ['Fecha', 'Usuario', 'Nombre', 'Fallas', 'Nodos', 'Clientes', 'Números en el archivo'];
 const COL_ENVIOS = ['Fecha', 'Falla', 'ID de Alertas', 'Tipo', 'Teléfono', 'Estado', 'Detalle', 'Envío', 'Envió', 'Control'];
 const COL_TIENDAS = ['Tienda (una por fila: así aparece en la lista al entrar)'];
@@ -108,10 +110,11 @@ const TIENDAS_INICIALES = [
 const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
-  telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_, monitoreo: accionMonitoreo_
+  telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_, monitoreo: accionMonitoreo_,
+  uso: accionUso_, conexiones: accionConexiones_
 };
 const PUBLICAS = { config: true, login: true, monitoreo: true };
-const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true };
+const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true, conexiones: true };
 const DE_ALERTAS = { alertas: true, alerta: true };   // Workforce, Jefatura y los supervisores de Call Center
 
 /* ============================================================================
@@ -397,7 +400,7 @@ function loginClave_(d) {
   const nombre = texto_(d.nombre, 60);
   const tienda = texto_(d.tienda, 60);
   if (!usuario || !clave) throw fallo_('DATOS', 'Escribe el usuario y la contraseña.');
-  if (nombre.length < 3) throw fallo_('DATOS', 'Escribe tu nombre.');
+  if (nombre.length < 3) throw fallo_('DATOS', 'Escribe tu nombre y apellido.');
   // Solo la cuenta de Tiendas entra con contraseña: no hay accesos temporales (por privacidad, desde la 3.2).
   // Una cuenta temporal que haya quedado de antes cuenta como usuario o contraseña incorrectos.
   const c0 = (cfg_().CUENTAS || {})[usuario];
@@ -420,12 +423,48 @@ function loginClave_(d) {
     throw fallo_('ACCESO', 'Usuario o contraseña incorrectos.');
   }
   cache.remove(kp);
+  // Nombre y apellido reales (la cuenta es compartida: así cada consulta queda a nombre de alguien), en nombre propio
+  const nom = nombrePersona_(nombre);
+  if (!nom.ok) throw fallo_('DATOS', nom.error);
   // La tienda tiene que ser una de la lista (se guarda con el nombre exacto de la hoja Tiendas)
   const k = normTienda_(tienda);
   const suTienda = (k && tiendas_().filter((t) => normTienda_(t) === k)[0]) || '';
   if (!suTienda) throw fallo_('DATOS', tienda ? 'Elige tu tienda de la lista.' : 'Elige la tienda desde donde atiendes.');
-  const id = usuario + ':' + nombre.toLowerCase() + '@' + suTienda.toLowerCase();
-  return emitirSesion_({ u: id, n: nombre, r: 'tiendas', t: suTienda, o: 'clave', a: usuario });
+  const id = usuario + ':' + nom.nombre.toLowerCase() + '@' + suTienda.toLowerCase();
+  return emitirSesion_({ u: id, n: nom.nombre, r: 'tiendas', t: suTienda, o: 'clave', a: usuario });
+}
+
+/* Nombre de una persona de Tiendas: nombre y apellido reales, sin apodos ni relleno ("el pepe", "la mera mera",
+   "prueba", "asdf"), en nombre propio ("juan perez" → "Juan Perez"). La página revisa lo mismo
+   (Model.nombrePersona); el servidor lo vuelve a revisar porque la página se puede saltar. */
+const PARTICULAS_NOMBRE_ = { de: 1, del: 1, la: 1, las: 1, los: 1, y: 1, e: 1, da: 1, das: 1, do: 1, dos: 1, van: 1, von: 1 };
+const ARTICULOS_NOMBRE_ = { el: 1, la: 1, los: 1, las: 1, lo: 1, un: 1, una: 1, de: 1, del: 1, y: 1, e: 1 };
+const NO_NOMBRES_ = ('pepe pepito test testing prueba pruebas ejemplo demo asesor asesora agente tienda tiendas usuario usuaria admin administrador '
+  + 'nadie ninguno ninguna anonimo anonima desconocido desconocida fulano fulana mengano mengana zutano zutana perengano perengana '
+  + 'xxx asdf qwerty abc nombre apellido jefe jefa patron patrona cliente claro hola yo chele maje mae cerote cipote cipota bicho '
+  + 'puta puto mierda verga culo pija pendejo pendeja idiota tonto tonta loco loca persona personas otra otro alguien cualquiera '
+  + 'gente intruso hacker').split(' ').reduce((m, w) => { m[w] = 1; return m; }, {});
+function nombrePersona_(texto) {
+  const limpio = String(texto == null ? '' : texto).normalize('NFC').replace(/\s+/g, ' ').trim();
+  const real = 'Escribe tu nombre y apellido reales, por ejemplo: Juan Pérez.';
+  if (limpio.length < 5) return { ok: false, error: 'Escribe tu nombre y apellido.' };
+  if (limpio.length > 60) return { ok: false, error: 'El nombre es demasiado largo: escribe solo tu nombre y apellidos.' };
+  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]+$/.test(limpio)) return { ok: false, error: 'Escribe solo letras, sin números ni signos.' };
+  const palabras = limpio.toLowerCase().split(' ');
+  const base = (w) => w.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['-]/g, '');
+  const principales = palabras.filter((w) => !PARTICULAS_NOMBRE_[w]);
+  if (principales.length < 2) return { ok: false, error: 'Escribe tu nombre y tu apellido, por ejemplo: Juan Pérez.' };
+  if (palabras.length > 6) return { ok: false, error: 'Escribe solo tu nombre y tus apellidos.' };
+  if (ARTICULOS_NOMBRE_[palabras[0]] || palabras.some((w) => NO_NOMBRES_[base(w)])) return { ok: false, error: real };
+  if (principales.some((w) => base(w).length < 2)) return { ok: false, error: 'Escribe tu nombre y apellido completos, sin iniciales.' };
+  if (principales.some((w) => !/[aeiouy]/.test(base(w)) || /(.)\1\1/.test(base(w)))) return { ok: false, error: real };
+  if (principales.map(base).every((w, i, a) => w === a[0])) return { ok: false, error: real };
+  return { ok: true, nombre: nombrePropio_(palabras) };
+}
+/* Nombre propio, como NOMPROPIO de Excel pero con "de", "del", "la"… en minúscula en medio (María de la Cruz) */
+function nombrePropio_(palabras) {
+  return palabras.map((w, i) => (i > 0 && PARTICULAS_NOMBRE_[w] ? w
+    : w.split('-').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join('-'))).join(' ');
 }
 
 function emitirSesion_(p) {
@@ -434,7 +473,83 @@ function emitirSesion_(p) {
   p.e = ahora + ALERTAS.HORAS_SESION * 3600000;
   const cuerpo = Utilities.base64EncodeWebSafe(JSON.stringify(p), Utilities.Charset.UTF_8);
   const firma = Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(cuerpo, secreto_(), Utilities.Charset.UTF_8));
+  registrarEntrada_(p);
   return { token: cuerpo + '.' + firma, usuario: usuarioPublico_(p), expira: p.e };
+}
+
+/* ----- Conexiones: quién entra a Alertas -----
+   Cada persona que entra queda en la hoja Accesos del archivo de consultas, una fila por persona: primera y
+   última entrada, cuántas veces entró y si en su PC están activados los avisos de escritorio. Nunca frena la
+   entrada: si algo falla, solo queda en el registro de errores de Apps Script. */
+function hojaAccesos_() { return hojaEn_(libroConsultas_(), ALERTAS.HOJAS.accesos, COL_ACCESOS); }
+function filaAcceso_(h, u) {
+  const ult = h.getLastRow();
+  if (ult < 2) return 0;
+  const c = h.getRange(2, 1, ult - 1, 1).createTextFinder(String(u)).matchEntireCell(true).matchCase(true).findNext();
+  return c ? c.getRow() : 0;
+}
+function registrarEntrada_(p) {
+  try {
+    const h = hojaAccesos_(), ahora = new Date(), fila = filaAcceso_(h, p.u);
+    if (fila) {
+      const r = h.getRange(fila, 2, 1, 6), v = r.getValues()[0];
+      r.setValues([[p.n, ALERTAS.ROLES[p.r], p.t || '', v[3] || ahora, ahora, (Number(v[5]) || 0) + 1]]);
+    } else h.appendRow([p.u, p.n, ALERTAS.ROLES[p.r], p.t || '', ahora, ahora, 1, '', '']);
+    return fila || h.getLastRow();
+  } catch (e) { console.error('No se pudo registrar la entrada: ' + (e && e.message)); return 0; }
+}
+/* La página avisa si en esa PC están activados los avisos de escritorio (una vez por sesión y cuando cambia) */
+const ESTADOS_AVISOS_ = { activados: 'Activados', bloqueados: 'Bloqueados', 'sin-soporte': 'No disponibles', pendiente: 'Sin responder' };
+function accionUso_(d, ses) {
+  const avisos = ESTADOS_AVISOS_[String(d.avisos || '')];
+  if (!avisos) throw fallo_('DATOS', 'Estado de los avisos no válido.');
+  try {
+    const h = hojaAccesos_();
+    const fila = filaAcceso_(h, ses.u) || registrarEntrada_(ses);   // una sesión de antes de la 3.3 se anota ahora
+    if (fila) h.getRange(fila, 8, 1, 2).setValues([[avisos, new Date()]]);
+  } catch (e) { console.error('No se pudo anotar el estado de los avisos: ' + (e && e.message)); }
+  return { listo: true };
+}
+function leerAccesos_() {
+  const h = libroConsultas_().getSheetByName(ALERTAS.HOJAS.accesos);
+  if (!h || h.getLastRow() < 2) return [];
+  const ms = (v) => (v ? fechaMs_(v) || null : null);
+  return h.getRange(2, 1, h.getLastRow() - 1, COL_ACCESOS.length).getValues().filter((f) => f[0]).map((f) => ({
+    u: String(f[0]), nombre: String(f[1] || ''), acceso: String(f[2] || ''), tienda: String(f[3] || ''),
+    primera: ms(f[4]), ultima: ms(f[5]), entradas: Number(f[6]) || 0, avisos: String(f[7] || ''), avisosEn: ms(f[8])
+  }));
+}
+/* Reporte de Conexiones (Workforce y Jefatura): cada persona que entró o consultó, con su última entrada, cuántas
+   veces entró, el estado de sus avisos y sus consultas del periodo. */
+function accionConexiones_(d) {
+  const ahora = Date.now(), reloj = reloj_(), DIA = 86400000;
+  const hoy = reloj.inicio(ahora);
+  const desde = Math.max(reloj.inicio(Number(d.desde) || hoy), hoy - (ALERTAS.DIAS_ESTADISTICAS - 1) * DIA);
+  const clave = 'conexiones:' + desde;
+  const hit = cache_().get(clave);
+  if (hit) return JSON.parse(hit);
+  const personas = {};
+  leerAccesos_().forEach((a) => {
+    const p = personas[a.u];
+    if (!p) { personas[a.u] = a; return; }
+    // Dos filas de la misma persona (dos entradas en el mismo instante): se juntan
+    if ((a.ultima || 0) > (p.ultima || 0)) { p.ultima = a.ultima; p.nombre = a.nombre; }
+    p.primera = Math.min(p.primera || Infinity, a.primera || Infinity) === Infinity ? null : Math.min(p.primera || Infinity, a.primera || Infinity);
+    p.entradas += a.entradas;
+    if ((a.avisosEn || 0) > (p.avisosEn || 0)) { p.avisos = a.avisos; p.avisosEn = a.avisosEn; }
+  });
+  const ag = agregarPeriodo_(desde, hoy, reloj);
+  Object.keys(ag.asesores).forEach((u) => {
+    const x = ag.asesores[u], i = x.canal.indexOf(': ');
+    const p = personas[u] || (personas[u] = { u: u, nombre: x.nombre, acceso: i > 0 ? x.canal.slice(0, i) : x.canal, tienda: i > 0 ? x.canal.slice(i + 2) : '',
+      primera: null, ultima: null, entradas: 0, avisos: '', avisosEn: null });
+    p.consultas = x.n; p.falla = x.falla;
+  });
+  const lista = Object.keys(personas).map((u) => { const p = personas[u]; p.consultas = p.consultas || 0; p.falla = p.falla || 0; return p; });
+  const res = { personas: lista, desde: desde, ahora: ahora };
+  const txt = JSON.stringify(res);
+  if (txt.length < 95000) cache_().put(clave, txt, 60);
+  return res;
 }
 function usuarioPublico_(p) {
   return { u: p.u, nombre: p.n, rol: p.r, acceso: ALERTAS.ROLES[p.r], tienda: p.t || '', origen: p.o };
@@ -2398,23 +2513,7 @@ function accionEstadisticas_(d) {
   const hit = cache_().get(clave);
   if (hit) return JSON.parse(hit);
 
-  const tecDe = tecnologias_();
-  const ag = agregado_();
-  if (desde < hoy) {
-    const resumido = String(props_().getProperty('RESUMIDO_HASTA') || '');
-    const ayer = reloj.dia(hoy - 1);
-    if (resumido && resumido >= reloj.dia(desde)) {
-      const r = leerResumenes_(reloj.dia(desde), resumido < ayer ? resumido : ayer);
-      const porDia = {};
-      r.asesores.forEach((a) => { const k = String(a[0]); (porDia[k] = porDia[k] || []).push(a); });
-      r.filas.forEach((f) => sumarResumen_(ag, f, porDia[String(f[0])] || []));
-    }
-    // Días que la tarea de cada hora todavía no resumió: del detalle, como mucho los últimos 3
-    const pendiente = Math.max(desde, resumido ? reloj.desdeDia(resumido) + DIA : desde, hoy - 3 * DIA);
-    if (pendiente < hoy) leerConsultas_(pendiente, hoy).forEach((f) => sumarFila_(ag, f, tecDe, reloj));
-  }
-  leerConsultas_(Math.max(desde, hoy), null).forEach((f) => sumarFila_(ag, f, tecDe, reloj));
-
+  const ag = agregarPeriodo_(desde, hoy, reloj);
   const top = Object.keys(ag.top).map((c) => [c, ag.top[c]]).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const fichas = buscarContratos_(top.map((x) => x[0]));
   const res = {
@@ -2433,6 +2532,28 @@ function accionEstadisticas_(d) {
   };
   cache_().put(clave, JSON.stringify(res), 120);
   return res;
+}
+
+/* Las consultas de un periodo: los días ya resumidos, de los resúmenes; hoy y lo que falte, del detalle */
+function agregarPeriodo_(desde, hoy, reloj) {
+  const DIA = 86400000;
+  const tecDe = tecnologias_();
+  const ag = agregado_();
+  if (desde < hoy) {
+    const resumido = String(props_().getProperty('RESUMIDO_HASTA') || '');
+    const ayer = reloj.dia(hoy - 1);
+    if (resumido && resumido >= reloj.dia(desde)) {
+      const r = leerResumenes_(reloj.dia(desde), resumido < ayer ? resumido : ayer);
+      const porDia = {};
+      r.asesores.forEach((a) => { const k = String(a[0]); (porDia[k] = porDia[k] || []).push(a); });
+      r.filas.forEach((f) => sumarResumen_(ag, f, porDia[String(f[0])] || []));
+    }
+    // Días que la tarea de cada hora todavía no resumió: del detalle, como mucho los últimos 3
+    const pendiente = Math.max(desde, resumido ? reloj.desdeDia(resumido) + DIA : desde, hoy - 3 * DIA);
+    if (pendiente < hoy) leerConsultas_(pendiente, hoy).forEach((f) => sumarFila_(ag, f, tecDe, reloj));
+  }
+  leerConsultas_(Math.max(desde, hoy), null).forEach((f) => sumarFila_(ag, f, tecDe, reloj));
+  return ag;
 }
 
 /* Los datos de varios contratos con una sola lectura de la columna (más rápido que buscarlos uno por uno) */

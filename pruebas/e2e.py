@@ -27,11 +27,18 @@ with sync_playwright() as p:
     ctx = b.new_context(viewport={'width': 1440, 'height': 900}, locale='es-HN', timezone_id='America/Tegucigalpa', reduced_motion='reduce')
     ctx.grant_permissions(['clipboard-read', 'clipboard-write'])   # para revisar el correo que se copia
     errores = []
-    def pagina():
+    # Los avisos de escritorio son obligatorios para entrar, y el Chromium de prueba no tiene notificaciones: cada
+    # pestaña las simula. permiso: cómo está el navegador al abrir; pide: lo que responde si Alertas pregunta.
+    # Lo que se avisa queda en window.__avisos.
+    def pagina(permiso='granted', pide='granted', enfocada=True):
         pg = ctx.new_page()
         pg.bring_to_front()   # con varias pestañas a la vez, la nueva queda al frente (si no, a veces Playwright no la ve a tiempo)
         pg.on('pageerror', lambda e: errores.append(str(e)))
         pg.on('console', lambda m: errores.append(m.text) if m.type == 'error' and 'favicon' not in m.text else None)
+        pg.add_init_script("""window.__avisos = [];
+          window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {}
+            static requestPermission() { window.Notification.permission = '%s'; return Promise.resolve('%s'); } };
+          window.Notification.permission = '%s';""" % (pide, pide, permiso) + ('' if enfocada else ' document.hasFocus = () => false;'))
         return pg
 
     print('1. Tiendas con usuario genérico')
@@ -68,6 +75,13 @@ with sync_playwright() as p:
     ok(t.locator(SEL).input_value() == 'CAC Santa Rosa de Copan' and entrar_activo(), 'si lo escrito coincide con una sola tienda, al salir del campo queda elegida', t.locator(SEL).input_value())
     t.fill(SEL, 'mall multiplaza tgu'); t.press(SEL, 'Enter')
     ok(t.locator(SEL).input_value() == 'CAC Mall Multiplaza TGU', 'Enter elige la primera de la lista', t.locator(SEL).input_value())
+    # El nombre tiene que ser real (nombre y apellido) y queda en nombre propio
+    NOM = 'input[autocomplete=name]'
+    for malo in ('el pepe', 'la mera mera', 'Pepe'):
+        t.fill(NOM, malo); t.press(NOM, 'Tab')
+        ok(t.locator('.campo-error').count() == 1 and not entrar_activo(), f'"{malo}" no sirve como nombre: ' + (t.locator('.campo-error').inner_text() if t.locator('.campo-error').count() else ''))
+    t.fill(NOM, 'pedro   MEJÍA'); t.press(NOM, 'Tab')
+    ok(t.locator(NOM).input_value() == 'Pedro Mejía' and t.locator('.campo-error').count() == 0 and entrar_activo(), 'al salir del campo, "pedro   MEJÍA" queda como Pedro Mejía', t.locator(NOM).input_value())
     t.click('button:has-text("Entrar") >> nth=-1'); t.wait_for_selector('.error-acceso')
     ok('incorrectos' in t.locator('.error-acceso').inner_text(), 'clave mala muestra el error')
     t.fill('input[type=password]', 'ClaroTiendas2026'); t.click('form button[type=submit]')
@@ -80,6 +94,18 @@ with sync_playwright() as p:
     t.screenshot(path=OUT + 'e02_tiendas_inicio.png')
     t.goto(APP + '#fallas'); t.wait_for_timeout(500)
     ok(t.locator('.buscador-caja').count() == 1, 'Tiendas no puede abrir Fallas aunque escriba la dirección')
+
+    print('1b. Tiendas con los avisos bloqueados en el navegador')
+    t2 = pagina(permiso='denied', pide='denied')
+    t2.goto(APP); t2.wait_for_selector('text=Entrar con Genesys')
+    t2.fill('input[type=password]', 'ClaroTiendas2026'); t2.fill('input[autocomplete=name]', 'daniela ramirez'); t2.press('input[autocomplete=name]', 'Tab')
+    t2.click('.selector-tienda input'); t2.fill('.selector-tienda input', 'metromall'); t2.locator('.selector-opcion', has_text='Metromall').click()
+    t2.click('form button[type=submit]'); t2.wait_for_selector('.puerta-avisos', timeout=15000)
+    ok('Daniela Ramirez' in t2.locator('.usuario-txt').inner_text() and 'bloqueados' in t2.locator('.puerta-avisos h1').inner_text() and 'Permitir' in t2.locator('.puerta-pasos').inner_text(),
+       'con los avisos bloqueados, explica cómo permitirlos desde el candado (y el nombre quedó como Daniela Ramirez)', t2.locator('.usuario-txt').inner_text())
+    t2.screenshot(path=OUT + 'e02b_avisos_bloqueados.png')
+    t2.click('.puerta-avisos button:has-text("Seguir sin avisos")'); t2.wait_for_selector('.buscador-caja input', timeout=10000)
+    ok(True, 'si el navegador no deja cambiarlo, puede seguir sin avisos (queda registrado)')
 
     print('2. Workforce entra con Genesys (PKCE)')
     http('/test/genesys?correo=ana.lopez@claro.com.hn&nombre=Ana%20Lopez')
@@ -162,7 +188,7 @@ with sync_playwright() as p:
     # El aviso de escritorio, simulado: se anota lo que se avisa, como si Alertas estuviera minimizado
     w.evaluate("""() => { window.__avisos = []; document.hasFocus = () => false;
       window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
-      window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted', avisosEscritorio: true }); }""")
+      window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted' }); }""")
     w.evaluate("() => ir('fallas')")
     def buscar_en(contratos):
         for c in contratos:
@@ -196,23 +222,22 @@ with sync_playwright() as p:
 
     print('5b. Supervisor de Call Center')
     http('/test/genesys?correo=sofia.mejia@concentrix.com&nombre=Sofia%20Mejia')
-    s = pagina()
-    # Avisos de escritorio simulados desde antes de abrir la página: el navegador todavía no ha preguntado
-    s.add_init_script("""window.__avisos = []; document.hasFocus = () => false;
-      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {}
-        static requestPermission() { window.Notification.permission = 'granted'; return Promise.resolve('granted'); } };
-      window.Notification.permission = 'default';""")
+    s = pagina(permiso='default', pide='granted', enfocada=False)   # el navegador todavía no ha preguntado; Alertas a un lado
     s.goto(APP); s.wait_for_selector('text=Entrar con Genesys')
     ok('supervisores' in s.locator('.acceso-bloque h3').first.inner_text(), 'la entrada con Genesys dice que es también para los supervisores', s.locator('.acceso-bloque h3').first.inner_text())
-    s.click('text=Entrar con Genesys'); s.wait_for_selector('.buscador-caja input', timeout=15000)
+    s.click('text=Entrar con Genesys'); s.wait_for_selector('.usuario-txt', timeout=15000)
     ok('Sofía Mejía' in s.locator('.usuario-txt').inner_text() and 'Supervisor' in s.locator('.usuario-txt').inner_text() and s.locator('.nav').count() == 0,
-       'la supervisora entra con Genesys (rol de la hoja Usuarios) y ve el panel de los asesores, sin el menú de Workforce', s.locator('.usuario-txt').inner_text())
-    s.wait_for_selector('.oferta-avisos', timeout=5000)
-    ok('publique una falla y cuando se resuelva, y cuando haya una posible falla' in s.locator('.oferta-avisos').inner_text(), 'la invita a activar los avisos de escritorio (fallas nuevas, resueltas y posibles fallas)')
-    s.screenshot(path=OUT + 'e06s_supervisor_inicio.png')
-    s.click('.oferta-avisos button:has-text("Activar avisos")'); s.wait_for_timeout(400)
+       'la supervisora entra con Genesys (rol de la hoja Usuarios), sin el menú de Workforce', s.locator('.usuario-txt').inner_text())
+    # Avisos obligatorios: hasta que los permita, no ve la consulta
+    s.wait_for_selector('.puerta-avisos', timeout=10000)
+    ok('Es obligatorio' in s.locator('.puerta-avisos').inner_text() and 'publique una falla y cuando se resuelva, y cuando haya una posible falla' in s.locator('.puerta-avisos').inner_text()
+       and s.locator('.buscador-caja').count() == 0, 'al entrar, los avisos de escritorio son obligatorios: no ve la consulta hasta activarlos')
+    s.screenshot(path=OUT + 'e06s_avisos_obligatorios.png')
+    s.click('.puerta-avisos button:has-text("Activar avisos")'); s.wait_for_selector('.buscador-caja input', timeout=10000)
     av = s.evaluate('() => window.__avisos')
-    ok(s.locator('.oferta-avisos').count() == 0 and any(x['t'] == 'Avisos de Alertas activados' and 'publique una falla y cuando se resuelva' in x['b'] for x in av), 'al activarlos se va la invitación y llega el aviso de prueba', av)
+    ok(s.locator('.puerta-avisos').count() == 0 and any(x['t'] == 'Avisos de Alertas activados' and 'publique una falla y cuando se resuelva' in x['b'] for x in av),
+       'al permitirlos sigue a la consulta (el panel de los asesores) y llega el aviso de prueba', av)
+    s.screenshot(path=OUT + 'e06s_supervisor_inicio.png')
     s.wait_for_selector(f'.posibles .pf-tarjeta:has-text("{nodoPF}")', timeout=20000)
     tarjeta_s = s.locator('.pf-tarjeta', has_text=nodoPF)
     ok('Reportada al VOC por Ana López' in tarjeta_s.inner_text() and tarjeta_s.locator('button:has-text("Crear falla")').count() == 0,
@@ -269,8 +294,9 @@ with sync_playwright() as p:
     t.evaluate("() => { const s = JSON.parse(sessionStorage.getItem('alertas-sesion')); s.token = s.token.slice(0, -4) + 'AAAA'; sessionStorage.setItem('alertas-sesion', JSON.stringify(s)); }")
     t.reload(); t.wait_for_selector('text=Tu sesión venció', timeout=15000)
     ok(t.locator('.aviso-acceso').count() == 1 and t.locator('.buscador-caja').count() == 0, 'si la sesión no vale, vuelve a Entrar con el aviso')
-    ok(t.locator('.selector-tienda input').input_value() == 'CAC Mall Multiplaza TGU' and t.locator('input[autocomplete=username]').input_value() == 'tiendas',
-       'esta PC recuerda la tienda y el usuario de Tiendas', t.locator('.selector-tienda input').input_value())
+    ok(t.locator('.selector-tienda input').input_value() == 'CAC Metromall' and t.locator('input[autocomplete=username]').input_value() == 'tiendas'
+       and t.locator('input[autocomplete=name]').input_value() == 'Daniela Ramirez',
+       'esta PC recuerda la tienda, el usuario y el nombre de la última entrada de Tiendas (Daniela Ramirez, CAC Metromall)', t.locator('.selector-tienda input').input_value())
     t.screenshot(path=OUT + 'e06b_sesion_vencida.png')
 
     print('7. Otra persona de Workforce entra con Genesys (no hay acceso temporal)')
@@ -349,7 +375,7 @@ with sync_playwright() as p:
     ok(x.locator('.falla-card', has_text='F1254585').locator('button.enviar-sms').count() == 0, 'una falla resuelta ya no tiene botón de SMS (no se avisa el servicio restablecido)')
     x.evaluate("""() => { window.__avisos = []; document.hasFocus = () => false;
       window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
-      window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted', avisosEscritorio: true }); }""")
+      window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted' }); }""")
     x.evaluate("(n) => A.publicarFalla({ nodos: n, motivo: 'POSTES', numero: 'F1254600' })", ejemplos[:2]); x.wait_for_timeout(800)
     # Aviso de escritorio de la falla nueva: le llega a todos los que lo activaron (aquí, la supervisora), no a quien la publicó
     for pg in (s, x): pg.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))')
@@ -405,6 +431,30 @@ with sync_playwright() as p:
     t_sms.locator('button.enviar-sms').click(); x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
     ok('Ya les llegó a todos' in x.locator('.sms-cifras').inner_text() and x.locator('.modal-pie .btn-primario').is_disabled(), 'al abrirlo otra vez, no se le repite a nadie')
     x.keyboard.press('Escape')
+
+    print('7c. Reporte de conexiones (Workforce y Jefatura)')
+    ok(a.locator('.nav').count() == 0 and s.locator('.nav').count() == 0, 'Concentrix y los supervisores no tienen la sección Conexiones')
+    x.goto(APP + '#conexiones'); x.wait_for_selector('.conex-tabla tbody tr', timeout=30000); x.wait_for_timeout(500)
+    fila = lambda nombre: x.locator('.conex-tabla tbody tr', has_text=nombre)
+    ok(fila('Daniela Ramirez').count() == 1 and 'CAC Metromall' in fila('Daniela Ramirez').inner_text() and 'Bloqueados' in fila('Daniela Ramirez').inner_text(),
+       'Daniela Ramirez (Tiendas, CAC Metromall) sale con los avisos bloqueados', fila('Daniela Ramirez').inner_text() if fila('Daniela Ramirez').count() else '')
+    ok('Supervisor' in fila('Sofía Mejía').inner_text() and 'Activados' in fila('Sofía Mejía').inner_text() and 'Activados' in fila('Pedro Mejía').inner_text(),
+       'la supervisora y Pedro Mejía (Tiendas) con los avisos activados')
+    karla = fila('Karla Zelaya').locator('td').all_inner_texts()
+    ok(len(karla) == 6 and karla[1] == 'Concentrix' and int(karla[4].replace(',', '')) >= 5, 'Karla Zelaya (Concentrix) con sus consultas de hoy: ' + (karla[4] if len(karla) > 4 else ''), karla)
+    kp = x.locator('.conex-kpis .kpi').all_inner_texts()
+    ok(len(kp) == 4 and kp[0].startswith('Entraron hoy') and 'Sin avisos activados' in kp[3], 'arriba: cuántos entraron hoy, cuántos no entran hace días, quién entró y no consultó, y sin avisos', kp)
+    x.screenshot(path=OUT + 'e07_conexiones.png', full_page=True)
+    x.click('.conex-cab button:has-text("Sin avisos activados")'); x.wait_for_timeout(300)
+    nombres = x.locator('.conex-tabla tbody tr td:first-child b').all_inner_texts()
+    ok('Daniela Ramirez' in nombres and 'Sofía Mejía' not in nombres, 'el filtro "Sin avisos activados" deja a quien los tiene bloqueados', nombres)
+    x.click('.conex-cab button:has-text("Todos") >> nth=1'); x.fill('.conex-buscar input', 'metromall'); x.wait_for_timeout(300)
+    ok(x.locator('.conex-tabla tbody tr').count() == 1, 'buscar "metromall" deja solo a quien entró desde esa tienda')
+    with x.expect_download() as dl: x.click('.conex-cab button:has-text("Descargar CSV")')
+    crudo = open(dl.value.path(), 'rb').read().decode('utf-8-sig').split('\r\n')
+    ok(crudo[0].startswith('Nombre,Acceso,Tienda,Usuario,Primera entrada,Última entrada,Entradas,Consultas (hoy)') and any(l.startswith('Daniela Ramirez,Tiendas,CAC Metromall,,') and l.endswith(',Bloqueados') for l in crudo),
+       'Descargar CSV: ' + dl.value.suggested_filename + ', con Daniela Ramirez y sus avisos bloqueados', crudo[:3])
+    x.fill('.conex-buscar input', '')
 
     if EXCEL:
         print('8. Subir la base real desde la página')

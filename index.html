@@ -195,6 +195,8 @@ button { cursor: pointer; }
 .btn-grande { height: 48px; padding: 0 22px; font-size: 15px; border-radius: 12px; }
 
 .campo { display: flex; flex-direction: column; gap: 6px; }
+.campo .campo-error { color: var(--falla-text); font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+.input[aria-invalid="true"] { border-color: var(--falla); }
 .campo > span { font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .campo small { font-size: 12.5px; color: var(--ink-3); }
 .input, .select, .textarea {
@@ -482,15 +484,21 @@ button { cursor: pointer; }
 .enlace { border: 0; background: none; padding: 0; color: var(--ink); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .enlace:disabled { opacity: 0.5; cursor: default; }
 .modal-pie .pie-espacio { flex: 1; }
-/* Invitación a activar los avisos de escritorio (arriba del contenido, no se queda pegada al bajar) */
-.oferta-avisos {
-  display: flex; align-items: center; gap: 12px 14px; flex-wrap: wrap; margin: 0 0 18px; padding: 12px 14px 12px 16px;
-  border-radius: 14px; background: var(--surface); border: 1px solid var(--line);
+/* Avisos de escritorio obligatorios: pantalla al entrar, mientras no estén permitidos */
+.puerta-avisos {
+  max-width: 600px; margin: 48px auto; padding: 36px 36px 30px; border-radius: 20px; background: var(--surface);
+  border: 1px solid var(--line); box-shadow: 0 18px 50px -24px rgba(16, 24, 40, 0.28); text-align: center;
 }
-.oferta-ico { width: 34px; height: 34px; border-radius: 10px; background: var(--resuelta-soft); color: var(--resuelta-text); display: grid; place-items: center; flex: none; }
-.oferta-avisos p { margin: 0; flex: 1 1 360px; min-width: 0; font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
-.oferta-avisos p b { color: var(--ink); font-weight: 700; }
-.oferta-acc { display: flex; gap: 6px; margin-left: auto; }
+.puerta-ico { width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 18px; background: var(--resuelta-soft); color: var(--resuelta-text); display: grid; place-items: center; }
+.puerta-avisos h1 { margin: 0 0 10px; font-size: 26px; font-weight: 800; font-stretch: 115%; line-height: 1.15; text-wrap: balance; }
+.puerta-avisos > p { margin: 0 auto; max-width: 48ch; color: var(--ink-2); font-size: 15px; line-height: 1.5; }
+.puerta-acc { display: flex; justify-content: center; margin: 24px 0 14px; }
+.puerta-pie { margin: 0; font-size: 13.5px; color: var(--ink-3) !important; }
+.puerta-pasos { text-align: left; margin: 20px auto 0; padding: 14px 18px 14px 38px; max-width: 46ch; border-radius: 12px; background: var(--surface-2); color: var(--ink-2); font-size: 14px; line-height: 1.55; }
+.puerta-pasos li + li { margin-top: 4px; }
+.puerta-pasos svg { vertical-align: -2px; }
+.puerta-avisos .nota { margin-top: 16px; text-align: left; }
+@media (max-width: 640px) { .puerta-avisos { margin: 20px 0; padding: 28px 20px 24px; } .puerta-avisos h1 { font-size: 22px; } }
 /* Los avisos de arriba se apilan (actualización de Workforce y posible falla) y quedan a la vista al bajar */
 .avisos-arriba { position: sticky; top: 60px; z-index: 25; }
 .avisos-arriba .aviso { position: static; }
@@ -608,6 +616,25 @@ button { cursor: pointer; }
 
 .tabla-envoltura { overflow-x: auto; }
 table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+/* Conexiones */
+.conex-cab { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
+/* En el teléfono los filtros se desplazan de lado en vez de salirse del panel */
+.conex-cab .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.conex-cab .seg::-webkit-scrollbar { display: none; }
+.conex-cab .seg button { flex: none; white-space: nowrap; }
+.conex-buscar { position: relative; flex: 1 1 220px; min-width: 200px; max-width: 320px; margin-left: auto; }
+.conex-buscar svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.conex-buscar .input { height: 36px; padding-left: 34px; }
+.th-orden { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+.th-orden:hover { color: var(--ink); }
+.tabla th[aria-sort] { color: var(--ink); }
+.conex-tabla td .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.aviso-estado { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 7px; font-size: 12.5px; font-weight: 650; white-space: nowrap; }
+.aviso-estado[data-s="ok"] { background: var(--ok-soft); color: var(--ok-text); }
+.aviso-estado[data-s="mal"] { background: var(--falla-soft); color: var(--falla-text); }
+.aviso-estado[data-s="pend"] { background: var(--resuelta-soft); color: var(--resuelta-text); }
+.aviso-estado[data-s="nd"] { background: var(--surface-3); color: var(--ink-2); }
+.conex-kpis { margin-bottom: 18px; }
 .tabla th { text-align: left; font-weight: 650; color: var(--ink-3); font-size: 12.5px; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
 .tabla td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .tabla small.numero-falla { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
@@ -1636,8 +1663,8 @@ const CONFIG = {
     tiendas: { nombre: 'Tiendas Claro', corto: 'Tiendas', canal: 'Tiendas', vistas: ['consulta'], entrada: 'Usuario de Tiendas' },
     // Supervisores de Call Center: el panel de los asesores más las posibles fallas (aviso y reporte); no publican fallas
     supervisor: { nombre: 'Supervisores de Call Center', corto: 'Supervisor', canal: 'Supervisor', vistas: ['consulta'], alertas: true, entrada: 'Genesys' },
-    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats'], alertas: true, entrada: 'Genesys' },
-    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats'], equipo: true, alertas: true, entrada: 'Genesys' }
+    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats', 'conexiones'], alertas: true, entrada: 'Genesys' },
+    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats', 'conexiones'], equipo: true, alertas: true, entrada: 'Genesys' }
   },
 
   // "cliente" es la forma en que el asesor le explica el motivo al cliente.
@@ -2600,6 +2627,37 @@ const Model = (() => {
     if (c.reporte) t += (t ? ', ' : '') + 'reportó posible falla';
     return t;
   }
+  /* Nombre de una persona de Tiendas: nombre y apellido reales, sin apodos ni relleno ("el pepe", "la mera mera",
+     "prueba", "asdf"), en nombre propio ("juan perez" → "Juan Perez"). El servidor revisa lo mismo
+     (nombrePersona_ en Code.gs). Devuelve { ok, nombre } o { ok: false, error }. */
+  const PARTICULAS_NOMBRE = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'da', 'das', 'do', 'dos', 'van', 'von']);
+  const ARTICULOS_NOMBRE = new Set(['el', 'la', 'los', 'las', 'lo', 'un', 'una', 'de', 'del', 'y', 'e']);
+  const NO_NOMBRES = new Set(('pepe pepito test testing prueba pruebas ejemplo demo asesor asesora agente tienda tiendas usuario usuaria admin administrador '
+    + 'nadie ninguno ninguna anonimo anonima desconocido desconocida fulano fulana mengano mengana zutano zutana perengano perengana '
+    + 'xxx asdf qwerty abc nombre apellido jefe jefa patron patrona cliente claro hola yo chele maje mae cerote cipote cipota bicho '
+    + 'puta puto mierda verga culo pija pendejo pendeja idiota tonto tonta loco loca persona personas otra otro alguien cualquiera '
+    + 'gente intruso hacker').split(' '));
+  function nombrePersona(texto) {
+    const limpio = String(texto == null ? '' : texto).normalize('NFC').replace(/\s+/g, ' ').trim();
+    const real = 'Escribe tu nombre y apellido reales, por ejemplo: Juan Pérez.';
+    if (limpio.length < 5) return { ok: false, error: 'Escribe tu nombre y apellido.' };
+    if (limpio.length > 60) return { ok: false, error: 'El nombre es demasiado largo: escribe solo tu nombre y apellidos.' };
+    if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]+$/.test(limpio)) return { ok: false, error: 'Escribe solo letras, sin números ni signos.' };
+    const palabras = limpio.toLowerCase().split(' ');
+    const base = (w) => U.sinAcentos(w).replace(/['-]/g, '');
+    const principales = palabras.filter((w) => !PARTICULAS_NOMBRE.has(w));
+    if (principales.length < 2) return { ok: false, error: 'Escribe tu nombre y tu apellido, por ejemplo: Juan Pérez.' };
+    if (palabras.length > 6) return { ok: false, error: 'Escribe solo tu nombre y tus apellidos.' };
+    if (ARTICULOS_NOMBRE.has(palabras[0]) || palabras.some((w) => NO_NOMBRES.has(base(w)))) return { ok: false, error: real };
+    if (principales.some((w) => base(w).length < 2)) return { ok: false, error: 'Escribe tu nombre y apellido completos, sin iniciales.' };
+    if (principales.some((w) => !/[aeiouy]/.test(base(w)) || /(.)\1\1/.test(base(w)))) return { ok: false, error: real };
+    if (principales.map(base).every((w, i, a) => w === a[0])) return { ok: false, error: real };
+    // Nombre propio, como NOMPROPIO de Excel pero con "de", "del", "la"… en minúscula en medio (María de la Cruz)
+    const nombre = palabras.map((w, i) => (i > 0 && PARTICULAS_NOMBRE.has(w) ? w
+      : w.split('-').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join('-'))).join(' ');
+    return { ok: true, nombre };
+  }
+
   function correoPosibleFalla(d, info, firma, ahora, equipo) {
     equipo = equipo || CONFIG.equipo;
     const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
@@ -2685,7 +2743,7 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();
 
@@ -3005,7 +3063,7 @@ function BackendRemoto() {
 
   /* Las consultas de solo lectura se reintentan solas si el servidor estuvo ocupado un momento
      (con cientos de personas a la vez, Apps Script a veces rechaza una solicitud suelta). */
-  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1 };
+  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1, conexiones: 1, uso: 1 };
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
@@ -3123,6 +3181,8 @@ function BackendRemoto() {
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
     sms: (d) => llamar('sms', d, d.op === 'lote' ? 200000 : 120000),
+    uso: (d) => llamar('uso', d),
+    conexiones: (d) => llamar('conexiones', d, 60000),
 
     /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
@@ -3232,6 +3292,15 @@ function BackendLocal() {
     const m = await Store.confirmar({ tipo, texto, por: quien() }, cambios);
     return m.version;
   }
+  /* Conexiones en la demostración: una entrada por persona en esta PC, igual que la hoja Accesos del servidor */
+  const AVISOS_DEMO = { activados: 'Activados', bloqueados: 'Bloqueados', 'sin-soporte': 'No disponibles', pendiente: 'Sin responder' };
+  const accesosDemo = () => leerLS('alertas-demo-accesos', {});
+  function entradaDemo(u) {
+    const m = accesosDemo(), ahora = Date.now(), a = m[u.u];
+    m[u.u] = Object.assign({ u: u.u, primera: ahora, entradas: 0, avisos: '', avisosEn: null }, a || {},
+      { nombre: u.nombre, acceso: u.acceso, tienda: u.tienda || '', ultima: ahora, entradas: ((a && a.entradas) || 0) + 1 });
+    guardarLS('alertas-demo-accesos', m);
+  }
   async function log(entrada) {
     const u = ses.usuario;
     await Store.agregarLog(Object.assign({ t: Date.now(), u: u.u, un: u.nombre, canal: u.acceso, tienda: u.tienda || '', tipo: 'consulta' }, entrada));
@@ -3252,7 +3321,26 @@ function BackendLocal() {
       const usuario = { u: U.sinAcentos(nombre).toLowerCase().replace(/\s+/g, '.'), nombre, rol, acceso: CONFIG.roles[rol].corto, tienda: rol === 'tiendas' ? (tienda || '') : '', origen: 'demo' };
       ses = { usuario, expira: Date.now() + 12 * U.HORA };
       guardarSesionEn(CLAVE, ses);
+      entradaDemo(usuario);
       return usuario;
+    },
+    async uso({ avisos }) {
+      const u = ses.usuario;
+      if (!accesosDemo()[u.u]) entradaDemo(u);
+      const m = accesosDemo();
+      Object.assign(m[u.u], { avisos: AVISOS_DEMO[avisos] || '', avisosEn: Date.now() });
+      guardarLS('alertas-demo-accesos', m);
+      return { listo: true };
+    },
+    async conexiones({ desde }) {
+      const personas = {};
+      Object.values(accesosDemo()).forEach((a) => { personas[a.u] = Object.assign({ consultas: 0, falla: 0 }, a); });
+      (await Store.leerLogs(desde)).forEach((l) => {
+        if (l.tipo === 'reporte') return;
+        const p = personas[l.u] || (personas[l.u] = { u: l.u, nombre: l.un || l.u, acceso: l.canal, tienda: l.tienda || '', primera: null, ultima: null, entradas: 0, avisos: '', avisosEn: null, consultas: 0, falla: 0 });
+        p.consultas++; if (l.r === 'FALLA') p.falla++;
+      });
+      return { personas: Object.values(personas), desde, ahora: Date.now() };
     },
     salir() { ses = null; guardarSesionEn(CLAVE, null); },
 
@@ -3596,9 +3684,10 @@ const G = {
     sinConexion: false, cargando: false,
     // Posibles fallas (Workforce): umbral del servidor, la que está abierta, las que llegaron y no se han visto,
     // y si los avisos de escritorio están permitidos y activados
-    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', avisosEscritorio: false, semillaFalla: null,
-    // La invitación a activar los avisos de escritorio se cerró con "Ahora no" (vuelve a los 7 días)
-    ofertaCerrada: false
+    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', semillaFalla: null,
+    // Los avisos de escritorio son obligatorios. Solo si el navegador los tiene bloqueados se puede seguir sin
+    // ellos en esta pestaña (queda registrado en Conexiones)
+    sinAvisos: false
   },
   subs: new Set(),
   set(p) { Object.assign(this.s, typeof p === 'function' ? p(this.s) : p); this.subs.forEach((f) => f()); }
@@ -3630,7 +3719,7 @@ const A = {
   pub: { visto: null, propias: new Set() },
   async arrancar() {
     G.set({ tema: leerLS('alertas-tema', 'auto'), descartadas: leerLS('alertas-descartadas', {}), misConsultas: leerSS('alertas-mis-consultas', []), ruta: rutaActual(),
-      permisoAvisos: Avisos.permiso(), avisosEscritorio: Avisos.activos(), ofertaCerrada: Date.now() - (Number(leerLS('alertas-oferta-avisos', 0)) || 0) < 7 * U.DIA });
+      permisoAvisos: Avisos.permiso(), sinAvisos: !!leerSS('alertas-sin-avisos', false) });
     aplicarTema(G.s.tema);
     Backend.alExpirar((msg) => { A.limpiar(); G.set({ avisoAcceso: msg || 'Tu sesión venció. Entra de nuevo.' }); });
     window.addEventListener('hashchange', () => G.set({ ruta: rutaActual() }));
@@ -3655,12 +3744,26 @@ const A = {
     if (!CONFIG.roles[user.rol].vistas.includes(G.s.ruta)) ir('consulta');
     try { await A.recargar(); } catch (e) { if (e.codigo !== 'SESION') tostada(e.message); }
     G.set({ cargando: false });
+    A.reportarAvisos();
   },
+  /* Para el reporte de Conexiones: si en esta PC están activados los avisos de escritorio (una vez por sesión y
+     cuando cambia). Nunca molesta: si falla, se intenta en la siguiente entrada. */
+  reportarAvisos() {
+    if (!G.s.user) return;
+    const p = Avisos.permiso();
+    const estado = !Avisos.soportado() ? 'sin-soporte' : p === 'granted' ? 'activados' : p === 'denied' ? 'bloqueados' : 'pendiente';
+    if (leerSS('alertas-avisos-reportado', '') === estado) return;
+    guardarSS('alertas-avisos-reportado', estado);
+    Backend.uso({ avisos: estado }).catch(() => guardarSS('alertas-avisos-reportado', ''));
+  },
+  // Sin avisos en esta pestaña: solo cuando el navegador los tiene bloqueados y la persona no los puede cambiar
+  seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
     G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
       alertaAbierta: null, alertasNuevas: [], semillaFalla: null });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
+    guardarSS('alertas-avisos-reportado', ''); guardarSS('alertas-sin-avisos', false); G.set({ sinAvisos: false });
   },
   salir() { Backend.salir(); A.limpiar(); },
 
@@ -3874,7 +3977,7 @@ function aplicarTema(t) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
 }
-const RUTAS = ['consulta', 'fallas', 'base', 'stats'];
+const RUTAS = ['consulta', 'fallas', 'base', 'stats', 'conexiones'];
 function rutaActual() { const h = (location.hash || '').replace('#', ''); return RUTAS.includes(h) ? h : 'consulta'; }
 function ir(r) { if (location.hash !== '#' + r) location.hash = r; G.set({ ruta: r }); }
 // Un motivo que esta página no conoce (por ejemplo, uno nuevo del servidor) se muestra como "Otro", con su texto
@@ -3904,21 +4007,22 @@ function posiblesFallas(s, mf) {
 const umbralAlertas = () => G.s.umbral || { minutos: CONFIG.alerta.minutos, clientes: CONFIG.alerta.clientesDistintos, observar: CONFIG.alerta.observar, reportes: CONFIG.alerta.reportes };
 const lapsoAlerta = (a) => U.dur(Math.max(0, a.ultimo - a.primero));
 
-/* Avisos de escritorio (notificaciones del navegador): fallas nuevas para todos; posibles fallas para Workforce,
-   Jefatura y los supervisores de Call Center */
+/* Avisos de escritorio (notificaciones del navegador), obligatorios para todos: fallas nuevas y resueltas; y
+   posibles fallas para Workforce, Jefatura y los supervisores de Call Center */
 const Avisos = {
   soportado: () => typeof window.Notification === 'function' && window.isSecureContext !== false,
   permiso: () => (Avisos.soportado() ? Notification.permission : 'no'),
-  activos: () => Avisos.permiso() === 'granted' && leerLS('alertas-avisos-escritorio', true) !== false,
+  activos: () => Avisos.permiso() === 'granted',
   async activar() {
     if (!Avisos.soportado()) return 'no';
     let p = Notification.permission;
     if (p === 'default') { try { p = await Notification.requestPermission(); } catch (e) { p = Notification.permission; } }
-    if (p === 'granted') guardarLS('alertas-avisos-escritorio', true);
-    G.set({ permisoAvisos: p, avisosEscritorio: p === 'granted' });
+    G.set({ permisoAvisos: p });
     return p;
   },
-  desactivar() { guardarLS('alertas-avisos-escritorio', false); G.set({ avisosEscritorio: false }); },
+  /* Hace falta la pantalla de los avisos: el navegador los soporta y no están permitidos (salvo que estén
+     bloqueados y la persona eligió seguir sin ellos) */
+  faltan: (s) => Avisos.soportado() && s.permisoAvisos !== 'granted' && !(s.permisoAvisos === 'denied' && s.sinAvisos),
   crear(titulo, cuerpo, tag, alTocar) {
     try {
       const n = new Notification(titulo, { body: cuerpo, tag, lang: 'es' });
@@ -3953,6 +4057,8 @@ const Avisos = {
     // Etiqueta por falla y por tipo: la de resuelta no reemplaza en silencio a la de publicada
     Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo, A.verAvisoFalla);
   },
+  // Desde el menú o el panel: para revisar que en esta PC se vean (Windows puede tener las notificaciones apagadas)
+  probar() { Avisos.prueba(); tostada('Te mandamos un aviso de prueba. Si no lo ves, revisa que Windows permita las notificaciones del navegador.'); },
   prueba() {
     const um = umbralAlertas();
     Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
@@ -4687,16 +4793,11 @@ function AvisosEscritorio() {
   const s = useG();
   if (!Avisos.soportado()) return null;
   const p = s.permisoAvisos;
-  if (p === 'default' && !s.ofertaCerrada) return null;   // mientras está la invitación de arriba, que hace lo mismo
   if (p === 'denied') return html`<p class="avisos-esc bloqueados"><${Ico} n="info" s=${16} />El navegador bloqueó los avisos de escritorio de esta página. Permítelos en el candado junto a la dirección.</p>`;
-  if (p === 'granted' && s.avisosEscritorio) return html`<div class="avisos-esc">
-    <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
-    <button class="btn btn-fantasma btn-chico" onClick=${Avisos.desactivar}>Desactivar</button>
-  </div>`;
+  if (p !== 'granted') return null;
   return html`<div class="avisos-esc">
-    <button class="btn btn-borde btn-chico" title="Recibe un aviso aunque Alertas esté minimizado o en otra pestaña"
-      onClick=${async () => { if ((await Avisos.activar()) === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); } }}>
-      <${Ico} n="campana" s=${16} />Avisarme en el escritorio</button>
+    <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
+    <button class="btn btn-fantasma btn-chico" title="Manda un aviso de prueba para revisar que se vea en esta PC" onClick=${Avisos.probar}>Probar</button>
   </div>`;
 }
 
@@ -5976,6 +6077,105 @@ function Equipo({ d }) {
   </div>`;
 }
 
+/* ---------- Conexiones: quién entra a Alertas (Workforce y Jefatura) ----------
+   Para darle seguimiento a quien no lo está usando: cada persona con su última entrada, cuántas veces entró,
+   sus consultas del periodo y si tiene los avisos de escritorio activados. Se descarga en CSV para mandárselo
+   a los supervisores. Las entradas se registran desde la versión 3.3 del servidor. */
+const PERIODOS_CONEX = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']];
+const ACCESOS_CONEX = [['todos', 'Todos'], ['Concentrix', 'Concentrix'], ['Tiendas', 'Tiendas'], ['Supervisor', 'Supervisores'], ['equipo', 'Workforce y Jefatura']];
+const FILTROS_CONEX = [['todos', 'Todos'], ['entraron', 'Entraron'], ['no', 'No entraron'], ['avisos', 'Sin avisos activados']];
+const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend', 'No disponibles': 'nd' };
+
+function VistaConexiones() {
+  const s = useG();
+  const [per, setPer] = useState('hoy');
+  const [acceso, setAcceso] = useState('todos');
+  const [filtro, setFiltro] = useState('todos');
+  const [q, setQ] = useState('');
+  const [orden, setOrden] = useState({ k: 'ultima', asc: false });
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState(null);
+  const [intento, setIntento] = useState(0);
+  const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
+  useEffect(() => {
+    let vivo = true;
+    setError(null);
+    Backend.conexiones({ desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
+    return () => { vivo = false; };
+  }, [desde, intento]);
+
+  const dePer = per === 'hoy' ? 'hoy' : 'en ' + per + ' días';
+  const todas = (datos && datos.personas) || [];
+  const delAcceso = todas.filter((p) => acceso === 'todos' || (acceso === 'equipo' ? p.acceso === 'Workforce HN' || p.acceso === 'Jefatura' : p.acceso === acceso));
+  const entro = (p) => !!p.ultima && p.ultima >= desde;
+  const sinAvisos = (p) => p.avisos !== 'Activados';
+  const k = {
+    entraron: delAcceso.filter(entro).length,
+    ausentes: delAcceso.filter((p) => !p.ultima || p.ultima < s.now - 3 * U.DIA).length,
+    sinConsultas: delAcceso.filter((p) => entro(p) && !p.consultas).length,
+    sinAvisos: delAcceso.filter((p) => p.ultima && sinAvisos(p)).length
+  };
+  const txt = U.sinAcentos(q.trim().toLowerCase());
+  const filas = delAcceso
+    .filter((p) => filtro === 'todos' || (filtro === 'entraron' ? entro(p) : filtro === 'no' ? !entro(p) : sinAvisos(p)))
+    .filter((p) => !txt || U.sinAcentos([p.nombre, p.tienda, p.acceso, p.u].join(' ').toLowerCase()).includes(txt))
+    .sort((a, b) => {
+      const v = (p) => (orden.k === 'nombre' ? U.sinAcentos(p.nombre).toLowerCase() : orden.k === 'ultima' ? p.ultima || 0 : p[orden.k] || 0);
+      const x = v(a), y = v(b);
+      return (x < y ? -1 : x > y ? 1 : 0) * (orden.asc ? 1 : -1) || (b.ultima || 0) - (a.ultima || 0);
+    });
+  const ordenar = (k2) => setOrden((o) => ({ k: k2, asc: o.k === k2 ? !o.asc : k2 === 'nombre' }));
+  const cab = (k2, t, der) => html`<th class=${der ? 'der' : null} aria-sort=${orden.k === k2 ? (orden.asc ? 'ascending' : 'descending') : null}>
+    <button class="th-orden" onClick=${() => ordenar(k2)}>${t}${orden.k === k2 && html`<span aria-hidden="true">${orden.asc ? ' ↑' : ' ↓'}</span>`}</button></th>`;
+  const fecha = (t) => (t ? U.dia(t) + ' ' + U.hora(t).replace(/ /g, ' ') : '');
+  function descargar() {
+    U.descargarCsv('Conexiones Alertas ' + new Date(s.now).toISOString().slice(0, 10) + '.csv', [
+      ['Nombre', 'Acceso', 'Tienda', 'Usuario', 'Primera entrada', 'Última entrada', 'Entradas', 'Consultas (' + dePer + ')', 'Con falla', 'Avisos de escritorio']
+    ].concat(filas.map((p) => [p.nombre, p.acceso, p.tienda, /^tiendas?[^:]*:/.test(p.u) ? '' : p.u, fecha(p.primera), fecha(p.ultima), p.entradas, p.consultas, p.falla, p.avisos || 'Sin dato'])));
+  }
+
+  return html`<div>
+    <div class="titulo-vista">
+      <div><h1>Conexiones</h1><p>Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.</p></div>
+      <div class="der">
+        <div class="seg" role="group" aria-label="Periodo">${PERIODOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${t}</button>`)}</div>
+      </div>
+    </div>
+    ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
+        <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
+        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setIntento(intento + 1)}>Intentar de nuevo</button></div></div>`
+      : !datos ? html`<div class="panel vacio"><b>Cargando…</b>Revisando las entradas y las consultas.</div>` : html`
+      <div class="panel kpis conex-kpis">
+        <div class="kpi"><div class="l">Entraron ${dePer}</div><div class="v">${U.n(k.entraron)}</div><div class="d">de ${U.plural(delAcceso.length, '1 persona', U.n(delAcceso.length) + ' personas')} en la lista</div></div>
+        <div class="kpi"><div class="l">No entran hace 3 días o más</div><div class="v">${U.n(k.ausentes)}</div><div class="d">o sin entrada registrada</div></div>
+        <div class="kpi"><div class="l">Entraron y no consultaron</div><div class="v">${U.n(k.sinConsultas)}</div><div class="d">${dePer}</div></div>
+        <div class="kpi"><div class="l">Sin avisos activados</div><div class="v">${U.n(k.sinAvisos)}</div><div class="d">bloqueados o sin responder</div></div>
+      </div>
+      <section class="panel">
+        <div class="panel-cab conex-cab">
+          <div class="seg" role="group" aria-label="Acceso">${ACCESOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${acceso === v} onClick=${() => setAcceso(v)} key=${v}>${t}</button>`)}</div>
+          <div class="seg" role="group" aria-label="Filtro">${FILTROS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${filtro === v} onClick=${() => setFiltro(v)} key=${v}>${t}</button>`)}</div>
+          <label class="conex-buscar"><span class="sr">Buscar por nombre o tienda</span><${Ico} n="lupa" s=${16} />
+            <input class="input" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} placeholder="Buscar por nombre o tienda" /></label>
+          <button class="btn btn-borde btn-chico" disabled=${!filas.length} onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button>
+        </div>
+        <div class="panel-cuerpo tabla-envoltura">
+          ${filas.length ? html`<table class="tabla conex-tabla"><thead><tr>
+              ${cab('nombre', 'Persona')}<th>Acceso</th>${cab('ultima', 'Última entrada')}${cab('entradas', 'Entradas', true)}${cab('consultas', 'Consultas ' + dePer, true)}<th>Avisos</th></tr></thead>
+            <tbody>${filas.map((p) => html`<tr key=${p.u}>
+              <td><b class="fuerte">${p.nombre}</b><div class="sub">${p.tienda || (/@/.test(p.u) ? p.u : '')}</div></td>
+              <td>${p.acceso === 'Supervisor' ? 'Supervisor' : p.acceso}</td>
+              <td>${p.ultima ? html`${p.ultima >= U.inicioDia(s.now) ? 'Hoy, ' + U.hora(p.ultima) : U.cuandoCorto(p.ultima, s.now)}${!entro(p) && html`<div class="sub">${U.hace(p.ultima, s.now)}</div>`}` : html`<span class="sub">Sin registro</span>`}</td>
+              <td class="der num">${p.entradas ? U.n(p.entradas) : '—'}</td>
+              <td class="der num">${U.n(p.consultas)}</td>
+              <td>${p.avisos ? html`<span class="aviso-estado" data-s=${AVISO_CONEX[p.avisos] || 'nd'}>${p.avisos}</span>` : html`<span class="sub">Sin dato</span>`}</td>
+            </tr>`)}</tbody></table>`
+          : html`<div class="vacio"><b>${todas.length ? 'Nadie con ese filtro' : 'Todavía no hay entradas registradas'}</b>${todas.length ? 'Prueba con otro filtro o búsqueda.' : 'Desde la versión 3.3 del servidor, cada vez que alguien entra queda anotado aquí.'}</div>`}
+        </div>
+      </section>`}
+  </div>`;
+}
+
 
 /* ---- portada.js ---- */
 /* ==========================================================================
@@ -6588,9 +6788,12 @@ function Acceso() {
   const listaTiendas = (cfg.listaTiendas && cfg.listaTiendas.length) ? cfg.listaTiendas : CONFIG.tiendas;
   const [tienda, setTienda] = useState(() => tiendaDeLista(listaTiendas, leerLS('alertas-tienda', '')));
   const [nombre, setNombre] = useState(leerLS('alertas-nombre', ''));
+  const [nombreTocado, setNombreTocado] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
-  const listo = usuario.trim() && clave && nombre.trim().length >= 3 && !!tienda;
+  // Nombre y apellido reales, en nombre propio (la cuenta de Tiendas es compartida: cada consulta queda a nombre de alguien)
+  const nom = Model.nombrePersona(nombre);
+  const listo = usuario.trim() && clave && nom.ok && !!tienda;
 
   async function genesys() {
     setError(''); setOcupado(true);
@@ -6601,8 +6804,8 @@ function Acceso() {
     if (!listo || ocupado) return;
     setError(''); setOcupado(true);
     try {
-      const u = await Backend.conClave({ usuario: usuario.trim(), clave, nombre: nombre.trim(), tienda });
-      guardarLS('alertas-nombre', nombre.trim());
+      const u = await Backend.conClave({ usuario: usuario.trim(), clave, nombre: nom.nombre, tienda });
+      guardarLS('alertas-nombre', u.nombre || nom.nombre);
       guardarLS('alertas-tienda', u.tienda || tienda); guardarLS('alertas-usuario-tiendas', usuario.trim());
       setClave('');
       await A.entrar(u);
@@ -6631,7 +6834,10 @@ function Acceso() {
             <label class="campo"><span>Contraseña</span><input class="input" type="password" value=${clave} onInput=${(e) => setClave(e.currentTarget.value)} autocomplete="current-password" /></label>
           </div>
           <${SelectorTienda} valor=${tienda} onCambio=${setTienda} lista=${listaTiendas} />
-          <label class="campo"><span>Tu nombre</span><input class="input" value=${nombre} onInput=${(e) => setNombre(e.currentTarget.value)} autocomplete="name" placeholder="Ejemplo: Karla Zelaya" /></label>
+          <label class="campo"><span>Tu nombre y apellido</span>
+            <input class="input" value=${nombre} onInput=${(e) => setNombre(e.currentTarget.value)} autocomplete="name" placeholder="Nombre y apellido reales"
+              aria-invalid=${nombreTocado && !nom.ok} onBlur=${() => { setNombreTocado(true); if (nom.ok && nom.nombre !== nombre) setNombre(nom.nombre); }} />
+            ${nombreTocado && !nom.ok && html`<small class="campo-error" role="alert">${nom.error}</small>`}</label>
           <button class="btn btn-borde btn-grande" type="submit" disabled=${!listo || ocupado}>${ocupado ? 'Entrando…' : 'Entrar'}</button>
         </form>
         ${error && html`<div class="nota error-acceso" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>`}
@@ -6683,7 +6889,7 @@ function BarraSuperior({ mf }) {
   const s = useG();
   const [menu, setMenu] = useState(false);
   const u = s.user, rol = CONFIG.roles[u.rol];
-  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats']];
+  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats'], ['conexiones', 'Conexiones', 'equipo']];
   useEffect(() => {
     if (!menu) return;
     const c = (e) => { if (!e.target.closest('.usuario-zona')) setMenu(false); };
@@ -6720,8 +6926,8 @@ function BarraSuperior({ mf }) {
           <div class="info"><b>${u.nombre}</b>${rol.nombre}${u.tienda ? html`<br />Tienda ${u.tienda}` : ''}<br />${u.origen === 'genesys' ? 'Entró con Genesys' : u.origen === 'demo' ? 'Demostración' : 'Usuario ' + String(u.u).split(':')[0]}</div>
           <hr />
           <button role="menuitem" onClick=${() => { setMenu(false); A.actualizar(); }}><${Ico} n="refrescar" s=${17} />Actualizar datos</button>
-          ${Avisos.soportado() && html`<button role="menuitem" onClick=${() => { setMenu(false); cambiarAvisos(!s.avisosEscritorio); }}>
-            <${Ico} n="campana" s=${17} />${s.avisosEscritorio ? 'Desactivar avisos en el escritorio' : 'Activar avisos en el escritorio'}</button>`}
+          ${s.permisoAvisos === 'granted' && html`<button role="menuitem" onClick=${() => { setMenu(false); Avisos.probar(); }}>
+            <${Ico} n="campana" s=${17} />Probar los avisos en el escritorio</button>`}
           <button role="menuitem" onClick=${() => { setMenu(false); A.salir(); }}><${Ico} n="salir" s=${17} />Salir</button>
         </div>`}
       </div>
@@ -6762,26 +6968,46 @@ function AvisoPosibleFalla({ mf }) {
   </div>`;
 }
 
-/* Activar o desactivar los avisos de escritorio desde el menú o la invitación (el navegador pide permiso la primera vez) */
-async function cambiarAvisos(activar) {
-  if (!activar) { Avisos.desactivar(); tostada('Avisos en el escritorio desactivados'); return; }
-  const p = await Avisos.activar();
-  if (p === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); }
-  else if (p === 'denied') tostada('El navegador bloqueó los avisos de esta página. Permítelos en el candado junto a la dirección.');
-}
-/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla que Workforce publica y de cuando se resuelve.
-   Sale mientras el navegador no haya preguntado; "Ahora no" la esconde 7 días (el menú del usuario siempre los activa). */
-function OfertaAvisos() {
+/* Avisos de escritorio obligatorios: al entrar, mientras no estén permitidos, Alertas muestra esta pantalla en
+   vez de la consulta. Si el navegador los tiene bloqueados, explica cómo permitirlos; si no se puede (por ejemplo,
+   por una regla de la empresa en esa PC), deja seguir sin avisos y queda registrado en Conexiones. */
+function PuertaAvisos() {
   const s = useG();
-  if (s.ofertaCerrada || !Avisos.soportado() || s.permisoAvisos !== 'default') return null;
-  return html`<div class="oferta-avisos" role="region" aria-label="Avisos en el escritorio">
-    <span class="oferta-ico"><${Ico} n="campana" s=${18} /></span>
-    <p><b>Entérate al instante de cada falla.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla y cuando se resuelva${veAlertas() ? ', y cuando haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
-    <div class="oferta-acc">
-      <button class="btn btn-primario btn-chico" onClick=${() => cambiarAvisos(true)}>Activar avisos</button>
-      <button class="btn btn-fantasma btn-chico" onClick=${() => { guardarLS('alertas-oferta-avisos', Date.now()); G.set({ ofertaCerrada: true }); }}>Ahora no</button>
-    </div>
-  </div>`;
+  const [intento, setIntento] = useState(false);
+  const p = s.permisoAvisos;
+  const listo = () => { Avisos.prueba(); tostada('Avisos en el escritorio activados'); A.reportarAvisos(); };
+  // Si los permiten desde el candado del navegador, Alertas sigue sola
+  useEffect(() => {
+    const t = setInterval(() => {
+      const x = Avisos.permiso();
+      if (x !== G.s.permisoAvisos) { G.set({ permisoAvisos: x }); if (x === 'granted') listo(); else A.reportarAvisos(); }
+    }, 1500);
+    return () => clearInterval(t);
+  }, []);
+  async function activar() {
+    setIntento(true);
+    if ((await Avisos.activar()) === 'granted') listo(); else A.reportarAvisos();
+  }
+  const que = 'cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva' + (veAlertas() ? ', y cuando haya una posible falla' : '');
+  return html`<section class="puerta-avisos" aria-labelledby="puerta-titulo">
+    <div class="puerta-ico"><${Ico} n="campana" s=${30} /></div>
+    ${p === 'denied' ? html`
+      <h1 id="puerta-titulo">Los avisos están bloqueados en este navegador</h1>
+      <p>Para usar Alertas necesitas los avisos en el escritorio: te avisamos ${que}, aunque Alertas esté minimizado.</p>
+      <ol class="puerta-pasos">
+        <li>Toca el candado <${Ico} n="candado" s=${15} /> a la izquierda de la dirección de la página.</li>
+        <li>En <b>Notificaciones</b>, elige <b>Permitir</b>.</li>
+        <li>Alertas sigue sola en unos segundos. Si no, toca <b>Ya lo permití</b>.</li>
+      </ol>
+      <div class="puerta-acc"><button class="btn btn-primario btn-grande" onClick=${() => location.reload()}>Ya lo permití</button></div>
+      <p class="puerta-pie">¿El navegador no te deja cambiarlo? <button class="enlace" onClick=${A.seguirSinAvisos}>Seguir sin avisos</button>. Queda registrado en el reporte de conexiones.</p>`
+    : html`
+      <h1 id="puerta-titulo">Activa los avisos en el escritorio</h1>
+      <p>Es obligatorio para usar Alertas. Te avisamos al instante ${que}, aunque tengas Alertas minimizado o en otra pestaña.</p>
+      <div class="puerta-acc"><button class="btn btn-primario btn-grande" onClick=${activar}><${Ico} n="campana" s=${18} />Activar avisos</button></div>
+      <p class="puerta-pie">El navegador te va a preguntar si permites las notificaciones: elige <b>Permitir</b>.</p>
+      ${intento && p !== 'granted' && html`<div class="nota aviso-acceso" role="alert"><${Ico} n="info" s=${18} /><span>Todavía no se activaron. Si el navegador no te mostró la pregunta, toca la campana tachada o el candado junto a la dirección y elige Permitir.</span></div>`}`}
+  </section>`;
 }
 
 function Shell() {
@@ -6790,18 +7016,20 @@ function Shell() {
   const rol = CONFIG.roles[s.user.rol];
   const ruta = rol.vistas.includes(s.ruta) ? s.ruta : 'consulta';
   useEffect(() => { document.title = (mf.activas.length ? '(' + mf.activas.length + ') ' : '') + CONFIG.app + ', fallas de red fija'; }, [mf.activas.length]);
+  const puerta = Avisos.faltan(s);   // avisos de escritorio obligatorios
   return html`<div class="app">
     <${BarraSuperior} mf=${mf} />
-    <div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>
+    ${!puerta && html`<div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>`}
     ${Backend.modo === 'local' && html`<div class="demo-cinta">${s.meta.demo ? 'Estás viendo datos de demostración: clientes, fallas y consultas inventados.' : 'Modo demostración: los datos se guardan solo en esta PC.'}${!RT.api ? ' Falta conectar el servidor en config.js.' : ''}</div>`}
     <main class="contenido" id="contenido">
-      <${OfertaAvisos} />
-      ${ruta === 'consulta' && html`<${VistaConsulta} />`}
-      ${ruta === 'fallas' && html`<${VistaFallas} />`}
-      ${ruta === 'base' && html`<${VistaBase} />`}
-      ${ruta === 'stats' && html`<${VistaStats} />`}
+      ${puerta ? html`<${PuertaAvisos} />` : html`
+        ${ruta === 'consulta' && html`<${VistaConsulta} />`}
+        ${ruta === 'fallas' && html`<${VistaFallas} />`}
+        ${ruta === 'base' && html`<${VistaBase} />`}
+        ${ruta === 'stats' && html`<${VistaStats} />`}
+        ${ruta === 'conexiones' && html`<${VistaConexiones} />`}`}
     </main>
-    ${veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
+    ${!puerta && veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />
   </div>`;
 }

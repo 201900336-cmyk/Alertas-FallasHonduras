@@ -13,9 +13,10 @@ const G = {
     sinConexion: false, cargando: false,
     // Posibles fallas (Workforce): umbral del servidor, la que está abierta, las que llegaron y no se han visto,
     // y si los avisos de escritorio están permitidos y activados
-    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', avisosEscritorio: false, semillaFalla: null,
-    // La invitación a activar los avisos de escritorio se cerró con "Ahora no" (vuelve a los 7 días)
-    ofertaCerrada: false
+    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', semillaFalla: null,
+    // Los avisos de escritorio son obligatorios. Solo si el navegador los tiene bloqueados se puede seguir sin
+    // ellos en esta pestaña (queda registrado en Conexiones)
+    sinAvisos: false
   },
   subs: new Set(),
   set(p) { Object.assign(this.s, typeof p === 'function' ? p(this.s) : p); this.subs.forEach((f) => f()); }
@@ -47,7 +48,7 @@ const A = {
   pub: { visto: null, propias: new Set() },
   async arrancar() {
     G.set({ tema: leerLS('alertas-tema', 'auto'), descartadas: leerLS('alertas-descartadas', {}), misConsultas: leerSS('alertas-mis-consultas', []), ruta: rutaActual(),
-      permisoAvisos: Avisos.permiso(), avisosEscritorio: Avisos.activos(), ofertaCerrada: Date.now() - (Number(leerLS('alertas-oferta-avisos', 0)) || 0) < 7 * U.DIA });
+      permisoAvisos: Avisos.permiso(), sinAvisos: !!leerSS('alertas-sin-avisos', false) });
     aplicarTema(G.s.tema);
     Backend.alExpirar((msg) => { A.limpiar(); G.set({ avisoAcceso: msg || 'Tu sesión venció. Entra de nuevo.' }); });
     window.addEventListener('hashchange', () => G.set({ ruta: rutaActual() }));
@@ -72,12 +73,26 @@ const A = {
     if (!CONFIG.roles[user.rol].vistas.includes(G.s.ruta)) ir('consulta');
     try { await A.recargar(); } catch (e) { if (e.codigo !== 'SESION') tostada(e.message); }
     G.set({ cargando: false });
+    A.reportarAvisos();
   },
+  /* Para el reporte de Conexiones: si en esta PC están activados los avisos de escritorio (una vez por sesión y
+     cuando cambia). Nunca molesta: si falla, se intenta en la siguiente entrada. */
+  reportarAvisos() {
+    if (!G.s.user) return;
+    const p = Avisos.permiso();
+    const estado = !Avisos.soportado() ? 'sin-soporte' : p === 'granted' ? 'activados' : p === 'denied' ? 'bloqueados' : 'pendiente';
+    if (leerSS('alertas-avisos-reportado', '') === estado) return;
+    guardarSS('alertas-avisos-reportado', estado);
+    Backend.uso({ avisos: estado }).catch(() => guardarSS('alertas-avisos-reportado', ''));
+  },
+  // Sin avisos en esta pestaña: solo cuando el navegador los tiene bloqueados y la persona no los puede cambiar
+  seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
     G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
       alertaAbierta: null, alertasNuevas: [], semillaFalla: null });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
+    guardarSS('alertas-avisos-reportado', ''); guardarSS('alertas-sin-avisos', false); G.set({ sinAvisos: false });
   },
   salir() { Backend.salir(); A.limpiar(); },
 
@@ -291,7 +306,7 @@ function aplicarTema(t) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
 }
-const RUTAS = ['consulta', 'fallas', 'base', 'stats'];
+const RUTAS = ['consulta', 'fallas', 'base', 'stats', 'conexiones'];
 function rutaActual() { const h = (location.hash || '').replace('#', ''); return RUTAS.includes(h) ? h : 'consulta'; }
 function ir(r) { if (location.hash !== '#' + r) location.hash = r; G.set({ ruta: r }); }
 // Un motivo que esta página no conoce (por ejemplo, uno nuevo del servidor) se muestra como "Otro", con su texto
@@ -321,21 +336,22 @@ function posiblesFallas(s, mf) {
 const umbralAlertas = () => G.s.umbral || { minutos: CONFIG.alerta.minutos, clientes: CONFIG.alerta.clientesDistintos, observar: CONFIG.alerta.observar, reportes: CONFIG.alerta.reportes };
 const lapsoAlerta = (a) => U.dur(Math.max(0, a.ultimo - a.primero));
 
-/* Avisos de escritorio (notificaciones del navegador): fallas nuevas para todos; posibles fallas para Workforce,
-   Jefatura y los supervisores de Call Center */
+/* Avisos de escritorio (notificaciones del navegador), obligatorios para todos: fallas nuevas y resueltas; y
+   posibles fallas para Workforce, Jefatura y los supervisores de Call Center */
 const Avisos = {
   soportado: () => typeof window.Notification === 'function' && window.isSecureContext !== false,
   permiso: () => (Avisos.soportado() ? Notification.permission : 'no'),
-  activos: () => Avisos.permiso() === 'granted' && leerLS('alertas-avisos-escritorio', true) !== false,
+  activos: () => Avisos.permiso() === 'granted',
   async activar() {
     if (!Avisos.soportado()) return 'no';
     let p = Notification.permission;
     if (p === 'default') { try { p = await Notification.requestPermission(); } catch (e) { p = Notification.permission; } }
-    if (p === 'granted') guardarLS('alertas-avisos-escritorio', true);
-    G.set({ permisoAvisos: p, avisosEscritorio: p === 'granted' });
+    G.set({ permisoAvisos: p });
     return p;
   },
-  desactivar() { guardarLS('alertas-avisos-escritorio', false); G.set({ avisosEscritorio: false }); },
+  /* Hace falta la pantalla de los avisos: el navegador los soporta y no están permitidos (salvo que estén
+     bloqueados y la persona eligió seguir sin ellos) */
+  faltan: (s) => Avisos.soportado() && s.permisoAvisos !== 'granted' && !(s.permisoAvisos === 'denied' && s.sinAvisos),
   crear(titulo, cuerpo, tag, alTocar) {
     try {
       const n = new Notification(titulo, { body: cuerpo, tag, lang: 'es' });
@@ -370,6 +386,8 @@ const Avisos = {
     // Etiqueta por falla y por tipo: la de resuelta no reemplaza en silencio a la de publicada
     Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo, A.verAvisoFalla);
   },
+  // Desde el menú o el panel: para revisar que en esta PC se vean (Windows puede tener las notificaciones apagadas)
+  probar() { Avisos.prueba(); tostada('Te mandamos un aviso de prueba. Si no lo ves, revisa que Windows permita las notificaciones del navegador.'); },
   prueba() {
     const um = umbralAlertas();
     Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'

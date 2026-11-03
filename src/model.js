@@ -506,6 +506,37 @@ const Model = (() => {
     if (c.reporte) t += (t ? ', ' : '') + 'reportó posible falla';
     return t;
   }
+  /* Nombre de una persona de Tiendas: nombre y apellido reales, sin apodos ni relleno ("el pepe", "la mera mera",
+     "prueba", "asdf"), en nombre propio ("juan perez" → "Juan Perez"). El servidor revisa lo mismo
+     (nombrePersona_ en Code.gs). Devuelve { ok, nombre } o { ok: false, error }. */
+  const PARTICULAS_NOMBRE = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'da', 'das', 'do', 'dos', 'van', 'von']);
+  const ARTICULOS_NOMBRE = new Set(['el', 'la', 'los', 'las', 'lo', 'un', 'una', 'de', 'del', 'y', 'e']);
+  const NO_NOMBRES = new Set(('pepe pepito test testing prueba pruebas ejemplo demo asesor asesora agente tienda tiendas usuario usuaria admin administrador '
+    + 'nadie ninguno ninguna anonimo anonima desconocido desconocida fulano fulana mengano mengana zutano zutana perengano perengana '
+    + 'xxx asdf qwerty abc nombre apellido jefe jefa patron patrona cliente claro hola yo chele maje mae cerote cipote cipota bicho '
+    + 'puta puto mierda verga culo pija pendejo pendeja idiota tonto tonta loco loca persona personas otra otro alguien cualquiera '
+    + 'gente intruso hacker').split(' '));
+  function nombrePersona(texto) {
+    const limpio = String(texto == null ? '' : texto).normalize('NFC').replace(/\s+/g, ' ').trim();
+    const real = 'Escribe tu nombre y apellido reales, por ejemplo: Juan Pérez.';
+    if (limpio.length < 5) return { ok: false, error: 'Escribe tu nombre y apellido.' };
+    if (limpio.length > 60) return { ok: false, error: 'El nombre es demasiado largo: escribe solo tu nombre y apellidos.' };
+    if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]+$/.test(limpio)) return { ok: false, error: 'Escribe solo letras, sin números ni signos.' };
+    const palabras = limpio.toLowerCase().split(' ');
+    const base = (w) => U.sinAcentos(w).replace(/['-]/g, '');
+    const principales = palabras.filter((w) => !PARTICULAS_NOMBRE.has(w));
+    if (principales.length < 2) return { ok: false, error: 'Escribe tu nombre y tu apellido, por ejemplo: Juan Pérez.' };
+    if (palabras.length > 6) return { ok: false, error: 'Escribe solo tu nombre y tus apellidos.' };
+    if (ARTICULOS_NOMBRE.has(palabras[0]) || palabras.some((w) => NO_NOMBRES.has(base(w)))) return { ok: false, error: real };
+    if (principales.some((w) => base(w).length < 2)) return { ok: false, error: 'Escribe tu nombre y apellido completos, sin iniciales.' };
+    if (principales.some((w) => !/[aeiouy]/.test(base(w)) || /(.)\1\1/.test(base(w)))) return { ok: false, error: real };
+    if (principales.map(base).every((w, i, a) => w === a[0])) return { ok: false, error: real };
+    // Nombre propio, como NOMPROPIO de Excel pero con "de", "del", "la"… en minúscula en medio (María de la Cruz)
+    const nombre = palabras.map((w, i) => (i > 0 && PARTICULAS_NOMBRE.has(w) ? w
+      : w.split('-').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join('-'))).join(' ');
+    return { ok: true, nombre };
+  }
+
   function correoPosibleFalla(d, info, firma, ahora, equipo) {
     equipo = equipo || CONFIG.equipo;
     const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
@@ -591,6 +622,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

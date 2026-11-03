@@ -103,16 +103,11 @@ function AvisosEscritorio() {
   const s = useG();
   if (!Avisos.soportado()) return null;
   const p = s.permisoAvisos;
-  if (p === 'default' && !s.ofertaCerrada) return null;   // mientras está la invitación de arriba, que hace lo mismo
   if (p === 'denied') return html`<p class="avisos-esc bloqueados"><${Ico} n="info" s=${16} />El navegador bloqueó los avisos de escritorio de esta página. Permítelos en el candado junto a la dirección.</p>`;
-  if (p === 'granted' && s.avisosEscritorio) return html`<div class="avisos-esc">
-    <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
-    <button class="btn btn-fantasma btn-chico" onClick=${Avisos.desactivar}>Desactivar</button>
-  </div>`;
+  if (p !== 'granted') return null;
   return html`<div class="avisos-esc">
-    <button class="btn btn-borde btn-chico" title="Recibe un aviso aunque Alertas esté minimizado o en otra pestaña"
-      onClick=${async () => { if ((await Avisos.activar()) === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); } }}>
-      <${Ico} n="campana" s=${16} />Avisarme en el escritorio</button>
+    <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
+    <button class="btn btn-fantasma btn-chico" title="Manda un aviso de prueba para revisar que se vea en esta PC" onClick=${Avisos.probar}>Probar</button>
   </div>`;
 }
 

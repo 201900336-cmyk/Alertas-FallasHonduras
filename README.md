@@ -8,7 +8,8 @@
 - **Los supervisores de Call Center** ven el mismo panel de los asesores y además reciben el aviso de **posibles fallas**: la reportan al VOC o le avisan a Workforce. No crean fallas.
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
-- **Todos** pueden activar los avisos en el escritorio: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
+- **Todos** tienen que permitir los avisos en el escritorio al entrar: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
+- **Conexiones** (Workforce y Jefatura): quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados, para darle seguimiento a quien no lo usa.
 
 ---
 
@@ -39,7 +40,7 @@ Navegador (GitHub Pages)             Google (privado)                           
 | **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas (con el envío de SMS por Notifícame), Base y Estadísticas |
 | **Jefatura** | Genesys, con su correo en la hoja **Usuarios** | Todo lo de Workforce |
 
-Tiendas pide la tienda y el nombre de la persona para que cada consulta quede a nombre de alguien, aunque la cuenta sea compartida. El usuario genérico ya aparece escrito. La tienda se elige de una lista desplegable: al escribir parte del nombre (por ejemplo "multi") aparecen las que coinciden, sin importar tildes ni mayúsculas, y hay que elegir una; un nombre que no está en la lista no deja entrar. Cada PC recuerda su tienda.
+Tiendas pide la tienda y el nombre y apellido reales de la persona para que cada consulta quede a nombre de alguien, aunque la cuenta sea compartida. El nombre queda en nombre propio ("juan perez" entra como "Juan Perez") y no se aceptan apodos ni relleno ("el pepe", "la mera mera", "prueba"), números ni iniciales. El usuario genérico ya aparece escrito. La tienda se elige de una lista desplegable: al escribir parte del nombre (por ejemplo "multi") aparecen las que coinciden, sin importar tildes ni mayúsculas, y hay que elegir una; un nombre que no está en la lista no deja entrar. Cada PC recuerda su tienda.
 
 ---
 
@@ -161,13 +162,13 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 - Si una falla todavía no tiene número de falla, sale con el ID que le pone Alertas: **F**, la fecha (año, mes y día) y el número del día, sin guiones, por ejemplo `F26110201`. La tarjeta avisa "Sin número todavía" y se agrega con **Editar**. Las publicadas antes del 2 nov se guardaron con guiones (`F-261030-05`) y salen sin ellos (`F26103005`). El historial encuentra una falla por su número de falla o por su ID, y el CSV trae los dos.
 - Una falla cerrada sigue visible para los asesores **72 horas (3 días)** y luego sale de su panel. Workforce la conserva en el historial.
 - Cuando Workforce publica, edita, cierra o sube una base, los demás ven el aviso **"Workforce HN hizo una actualización"** en alrededor de un minuto. Lo que diga cada búsqueda siempre está al día: el servidor responde con las fallas del momento.
-- **Avisos de fallas en el escritorio (todos)**: quien activa los avisos (la invitación arriba de la página o **Activar avisos en el escritorio** en el menú de su nombre) recibe una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto):
+- **Avisos de fallas en el escritorio (obligatorios para todos)**: al entrar, Alertas pide permitir los avisos y no muestra la consulta hasta que la persona elige **Permitir** en el navegador. Si el navegador los tiene bloqueados, explica cómo permitirlos desde el candado junto a la dirección; si la PC no deja cambiarlo (por ejemplo, por una regla de la empresa), deja **seguir sin avisos** y queda como "Bloqueados" en **Conexiones**. Con los avisos permitidos llega una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto); en el menú de su nombre está **Probar los avisos en el escritorio**:
   - **Nueva falla publicada** (o reabierta): número, motivo, nodos, clientes y quién la publicó.
   - **Falla resuelta**: lo mismo, con la hora en que se restableció el servicio y quién la cerró.
   - **Se descartó la posible falla**: cuando una posible falla general no se confirma, para que dejen de decirle al cliente que se está validando.
   - Llega en alrededor de un minuto, una vez por cada cosa; a quien hizo el cambio no le llega. Al tocarla, Alertas se pone al día y muestra el panel de fallas.
 - **Posibles fallas** (Workforce, Jefatura y supervisores): cuando **5 clientes distintos** de un nodo sin falla publicada consultan en **60 minutos**, o 2 asesores lo reportan con **Reportar posible falla**, el nodo aparece en **Fallas > Posibles fallas** (a los supervisores, arriba de su consulta). Solo cuentan las búsquedas de Concentrix y Tiendas (las de Workforce y los supervisores revisando no suman, y un cliente que vuelve a llamar cuenta una vez). Con 3 o 4 clientes el nodo queda **en observación**.
-  - **Aviso**: una barra arriba en cualquier vista y, con **Avisarme en el escritorio**, una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto). Cada posible falla se avisa una vez por PC, y otra vez si sigue después de 2 horas.
+  - **Aviso**: una barra arriba en cualquier vista y una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto). Cada posible falla se avisa una vez por PC, y otra vez si sigue después de 2 horas.
   - **Ver clientes y correo**: los clientes que consultaron (hora, contrato, nombre, nodo, tecnología, OLT, NAP/TAP, colonia, municipio, categoría y canal, con la tienda) y el correo listo para el VOC o el personal interno. **Copiar correo** lo deja para pegarlo en Outlook con Ctrl+V, con la tabla y su formato; también se puede copiar solo la tabla o el asunto.
   - **Marcar como reportada**: el resto de Workforce ve quién la reportó y a qué hora, para que nadie mande el mismo correo dos veces (la marca dura 6 horas y se puede quitar).
   - **Los supervisores** tienen dos botones: **Avisar a Workforce** (con una nota opcional: a Workforce le llega la barra y el aviso de escritorio, y para ellos sigue pendiente) y **Reporté al VOC** (queda como reportada para todos). El correo sale firmado por la supervisión de Call Center. Un supervisor solo quita su propia marca; Workforce, cualquiera. Crear la falla es solo de Workforce.
@@ -180,6 +181,16 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
   - **De la primera llamada a publicar** y **Del aviso a publicar** (medianas), cuántas se publicaron **antes de que llamaran** y cuántos clientes llamaron antes y se atendieron sin saber de la falla.
   - Por falla, una barra: en gris, clientes llamando sin aviso todavía; en ámbar, desde el aviso de posible falla hasta la publicación. Se descarga en CSV.
   - Cuenta las consultas de Concentrix y Tiendas en los nodos de la falla en las 4 horas antes de publicarla, sin pausas de más de 45 minutos entre una y otra ni antes de publicar. El servidor lo calcula y lo guarda al publicar: las fallas publicadas antes del 2 nov no tienen el dato.
+
+## Conexiones: quién usa Alertas
+
+Sección **Conexiones** (Workforce y Jefatura), para darle seguimiento a quien no está usando Alertas:
+
+- Cada persona que entra queda anotada (una fila por persona en la hoja **Accesos** del archivo de consultas): primera y última entrada, cuántas veces entró y si en su PC están permitidos los avisos de escritorio (**Activados**, **Bloqueados**, **Sin responder** o **No disponibles**). Se anota desde la versión 3.3 del servidor.
+- Arriba: cuántos entraron en el periodo, cuántos no entran hace 3 días o más, quién entró y no hizo consultas, y quién no tiene los avisos activados.
+- La tabla trae a cada persona con su acceso (Concentrix, Tiendas con su tienda, supervisor, Workforce o Jefatura), su última entrada, cuántas veces entró, sus consultas del periodo (hoy, 7 o 30 días) y el estado de sus avisos. Se filtra por acceso, por "Entraron", "No entraron" o "Sin avisos activados", y se busca por nombre o tienda.
+- **Descargar CSV** baja lo que se ve en la tabla, para mandárselo a los supervisores.
+- Alertas solo conoce a quien ya entró alguna vez: quien nunca ha entrado no aparece.
 
 ## Avisar a los clientes por SMS (Notifícame)
 
@@ -339,7 +350,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 317 pruebas del servidor en un emulador de Apps Script
+npm test                           # 328 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

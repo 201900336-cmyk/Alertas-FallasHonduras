@@ -208,9 +208,12 @@ function Acceso() {
   const listaTiendas = (cfg.listaTiendas && cfg.listaTiendas.length) ? cfg.listaTiendas : CONFIG.tiendas;
   const [tienda, setTienda] = useState(() => tiendaDeLista(listaTiendas, leerLS('alertas-tienda', '')));
   const [nombre, setNombre] = useState(leerLS('alertas-nombre', ''));
+  const [nombreTocado, setNombreTocado] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
-  const listo = usuario.trim() && clave && nombre.trim().length >= 3 && !!tienda;
+  // Nombre y apellido reales, en nombre propio (la cuenta de Tiendas es compartida: cada consulta queda a nombre de alguien)
+  const nom = Model.nombrePersona(nombre);
+  const listo = usuario.trim() && clave && nom.ok && !!tienda;
 
   async function genesys() {
     setError(''); setOcupado(true);
@@ -221,8 +224,8 @@ function Acceso() {
     if (!listo || ocupado) return;
     setError(''); setOcupado(true);
     try {
-      const u = await Backend.conClave({ usuario: usuario.trim(), clave, nombre: nombre.trim(), tienda });
-      guardarLS('alertas-nombre', nombre.trim());
+      const u = await Backend.conClave({ usuario: usuario.trim(), clave, nombre: nom.nombre, tienda });
+      guardarLS('alertas-nombre', u.nombre || nom.nombre);
       guardarLS('alertas-tienda', u.tienda || tienda); guardarLS('alertas-usuario-tiendas', usuario.trim());
       setClave('');
       await A.entrar(u);
@@ -251,7 +254,10 @@ function Acceso() {
             <label class="campo"><span>Contraseña</span><input class="input" type="password" value=${clave} onInput=${(e) => setClave(e.currentTarget.value)} autocomplete="current-password" /></label>
           </div>
           <${SelectorTienda} valor=${tienda} onCambio=${setTienda} lista=${listaTiendas} />
-          <label class="campo"><span>Tu nombre</span><input class="input" value=${nombre} onInput=${(e) => setNombre(e.currentTarget.value)} autocomplete="name" placeholder="Ejemplo: Karla Zelaya" /></label>
+          <label class="campo"><span>Tu nombre y apellido</span>
+            <input class="input" value=${nombre} onInput=${(e) => setNombre(e.currentTarget.value)} autocomplete="name" placeholder="Nombre y apellido reales"
+              aria-invalid=${nombreTocado && !nom.ok} onBlur=${() => { setNombreTocado(true); if (nom.ok && nom.nombre !== nombre) setNombre(nom.nombre); }} />
+            ${nombreTocado && !nom.ok && html`<small class="campo-error" role="alert">${nom.error}</small>`}</label>
           <button class="btn btn-borde btn-grande" type="submit" disabled=${!listo || ocupado}>${ocupado ? 'Entrando…' : 'Entrar'}</button>
         </form>
         ${error && html`<div class="nota error-acceso" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>`}
@@ -303,7 +309,7 @@ function BarraSuperior({ mf }) {
   const s = useG();
   const [menu, setMenu] = useState(false);
   const u = s.user, rol = CONFIG.roles[u.rol];
-  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats']];
+  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats'], ['conexiones', 'Conexiones', 'equipo']];
   useEffect(() => {
     if (!menu) return;
     const c = (e) => { if (!e.target.closest('.usuario-zona')) setMenu(false); };
@@ -340,8 +346,8 @@ function BarraSuperior({ mf }) {
           <div class="info"><b>${u.nombre}</b>${rol.nombre}${u.tienda ? html`<br />Tienda ${u.tienda}` : ''}<br />${u.origen === 'genesys' ? 'Entró con Genesys' : u.origen === 'demo' ? 'Demostración' : 'Usuario ' + String(u.u).split(':')[0]}</div>
           <hr />
           <button role="menuitem" onClick=${() => { setMenu(false); A.actualizar(); }}><${Ico} n="refrescar" s=${17} />Actualizar datos</button>
-          ${Avisos.soportado() && html`<button role="menuitem" onClick=${() => { setMenu(false); cambiarAvisos(!s.avisosEscritorio); }}>
-            <${Ico} n="campana" s=${17} />${s.avisosEscritorio ? 'Desactivar avisos en el escritorio' : 'Activar avisos en el escritorio'}</button>`}
+          ${s.permisoAvisos === 'granted' && html`<button role="menuitem" onClick=${() => { setMenu(false); Avisos.probar(); }}>
+            <${Ico} n="campana" s=${17} />Probar los avisos en el escritorio</button>`}
           <button role="menuitem" onClick=${() => { setMenu(false); A.salir(); }}><${Ico} n="salir" s=${17} />Salir</button>
         </div>`}
       </div>
@@ -382,26 +388,46 @@ function AvisoPosibleFalla({ mf }) {
   </div>`;
 }
 
-/* Activar o desactivar los avisos de escritorio desde el menú o la invitación (el navegador pide permiso la primera vez) */
-async function cambiarAvisos(activar) {
-  if (!activar) { Avisos.desactivar(); tostada('Avisos en el escritorio desactivados'); return; }
-  const p = await Avisos.activar();
-  if (p === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); }
-  else if (p === 'denied') tostada('El navegador bloqueó los avisos de esta página. Permítelos en el candado junto a la dirección.');
-}
-/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla que Workforce publica y de cuando se resuelve.
-   Sale mientras el navegador no haya preguntado; "Ahora no" la esconde 7 días (el menú del usuario siempre los activa). */
-function OfertaAvisos() {
+/* Avisos de escritorio obligatorios: al entrar, mientras no estén permitidos, Alertas muestra esta pantalla en
+   vez de la consulta. Si el navegador los tiene bloqueados, explica cómo permitirlos; si no se puede (por ejemplo,
+   por una regla de la empresa en esa PC), deja seguir sin avisos y queda registrado en Conexiones. */
+function PuertaAvisos() {
   const s = useG();
-  if (s.ofertaCerrada || !Avisos.soportado() || s.permisoAvisos !== 'default') return null;
-  return html`<div class="oferta-avisos" role="region" aria-label="Avisos en el escritorio">
-    <span class="oferta-ico"><${Ico} n="campana" s=${18} /></span>
-    <p><b>Entérate al instante de cada falla.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla y cuando se resuelva${veAlertas() ? ', y cuando haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
-    <div class="oferta-acc">
-      <button class="btn btn-primario btn-chico" onClick=${() => cambiarAvisos(true)}>Activar avisos</button>
-      <button class="btn btn-fantasma btn-chico" onClick=${() => { guardarLS('alertas-oferta-avisos', Date.now()); G.set({ ofertaCerrada: true }); }}>Ahora no</button>
-    </div>
-  </div>`;
+  const [intento, setIntento] = useState(false);
+  const p = s.permisoAvisos;
+  const listo = () => { Avisos.prueba(); tostada('Avisos en el escritorio activados'); A.reportarAvisos(); };
+  // Si los permiten desde el candado del navegador, Alertas sigue sola
+  useEffect(() => {
+    const t = setInterval(() => {
+      const x = Avisos.permiso();
+      if (x !== G.s.permisoAvisos) { G.set({ permisoAvisos: x }); if (x === 'granted') listo(); else A.reportarAvisos(); }
+    }, 1500);
+    return () => clearInterval(t);
+  }, []);
+  async function activar() {
+    setIntento(true);
+    if ((await Avisos.activar()) === 'granted') listo(); else A.reportarAvisos();
+  }
+  const que = 'cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva' + (veAlertas() ? ', y cuando haya una posible falla' : '');
+  return html`<section class="puerta-avisos" aria-labelledby="puerta-titulo">
+    <div class="puerta-ico"><${Ico} n="campana" s=${30} /></div>
+    ${p === 'denied' ? html`
+      <h1 id="puerta-titulo">Los avisos están bloqueados en este navegador</h1>
+      <p>Para usar Alertas necesitas los avisos en el escritorio: te avisamos ${que}, aunque Alertas esté minimizado.</p>
+      <ol class="puerta-pasos">
+        <li>Toca el candado <${Ico} n="candado" s=${15} /> a la izquierda de la dirección de la página.</li>
+        <li>En <b>Notificaciones</b>, elige <b>Permitir</b>.</li>
+        <li>Alertas sigue sola en unos segundos. Si no, toca <b>Ya lo permití</b>.</li>
+      </ol>
+      <div class="puerta-acc"><button class="btn btn-primario btn-grande" onClick=${() => location.reload()}>Ya lo permití</button></div>
+      <p class="puerta-pie">¿El navegador no te deja cambiarlo? <button class="enlace" onClick=${A.seguirSinAvisos}>Seguir sin avisos</button>. Queda registrado en el reporte de conexiones.</p>`
+    : html`
+      <h1 id="puerta-titulo">Activa los avisos en el escritorio</h1>
+      <p>Es obligatorio para usar Alertas. Te avisamos al instante ${que}, aunque tengas Alertas minimizado o en otra pestaña.</p>
+      <div class="puerta-acc"><button class="btn btn-primario btn-grande" onClick=${activar}><${Ico} n="campana" s=${18} />Activar avisos</button></div>
+      <p class="puerta-pie">El navegador te va a preguntar si permites las notificaciones: elige <b>Permitir</b>.</p>
+      ${intento && p !== 'granted' && html`<div class="nota aviso-acceso" role="alert"><${Ico} n="info" s=${18} /><span>Todavía no se activaron. Si el navegador no te mostró la pregunta, toca la campana tachada o el candado junto a la dirección y elige Permitir.</span></div>`}`}
+  </section>`;
 }
 
 function Shell() {
@@ -410,18 +436,20 @@ function Shell() {
   const rol = CONFIG.roles[s.user.rol];
   const ruta = rol.vistas.includes(s.ruta) ? s.ruta : 'consulta';
   useEffect(() => { document.title = (mf.activas.length ? '(' + mf.activas.length + ') ' : '') + CONFIG.app + ', fallas de red fija'; }, [mf.activas.length]);
+  const puerta = Avisos.faltan(s);   // avisos de escritorio obligatorios
   return html`<div class="app">
     <${BarraSuperior} mf=${mf} />
-    <div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>
+    ${!puerta && html`<div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>`}
     ${Backend.modo === 'local' && html`<div class="demo-cinta">${s.meta.demo ? 'Estás viendo datos de demostración: clientes, fallas y consultas inventados.' : 'Modo demostración: los datos se guardan solo en esta PC.'}${!RT.api ? ' Falta conectar el servidor en config.js.' : ''}</div>`}
     <main class="contenido" id="contenido">
-      <${OfertaAvisos} />
-      ${ruta === 'consulta' && html`<${VistaConsulta} />`}
-      ${ruta === 'fallas' && html`<${VistaFallas} />`}
-      ${ruta === 'base' && html`<${VistaBase} />`}
-      ${ruta === 'stats' && html`<${VistaStats} />`}
+      ${puerta ? html`<${PuertaAvisos} />` : html`
+        ${ruta === 'consulta' && html`<${VistaConsulta} />`}
+        ${ruta === 'fallas' && html`<${VistaFallas} />`}
+        ${ruta === 'base' && html`<${VistaBase} />`}
+        ${ruta === 'stats' && html`<${VistaStats} />`}
+        ${ruta === 'conexiones' && html`<${VistaConexiones} />`}`}
     </main>
-    ${veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
+    ${!puerta && veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />
   </div>`;
 }
