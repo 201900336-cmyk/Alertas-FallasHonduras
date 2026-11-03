@@ -412,7 +412,23 @@ const ACCESOS_CONEX = [['todos', 'Todos'], ['Concentrix', 'Concentrix'], ['Tiend
 const FILTROS_CONEX = [['todos', 'Todos'], ['entraron', 'Entraron'], ['no', 'No entraron'], ['avisos', 'Sin avisos activados']];
 const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend', 'No disponibles': 'nd' };
 
-function VistaConexiones() {
+/* ---------- Reportes (Workforce y Jefatura): Conexiones y SMS de Notifícame ---------- */
+function VistaReportes() {
+  const [tab, setTab] = useState(() => (leerLS('alertas-reporte', 'conexiones') === 'sms' ? 'sms' : 'conexiones'));
+  const elegir = (t) => { setTab(t); guardarLS('alertas-reporte', t); };
+  return html`<div>
+    <div class="titulo-vista"><div><h1>Reportes</h1><p>${tab === 'sms'
+      ? 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.'
+      : 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.'}</p></div></div>
+    <div class="pestanas" role="tablist">
+      <button role="tab" aria-selected=${tab === 'conexiones'} onClick=${() => elegir('conexiones')}>Conexiones</button>
+      <button role="tab" aria-selected=${tab === 'sms'} onClick=${() => elegir('sms')}>SMS de Notifícame</button>
+    </div>
+    ${tab === 'sms' ? html`<${ReporteSms} />` : html`<${ReporteConexiones} />`}
+  </div>`;
+}
+
+function ReporteConexiones() {
   const s = useG();
   const [per, setPer] = useState('hoy');
   const [acceso, setAcceso] = useState('todos');
@@ -461,11 +477,8 @@ function VistaConexiones() {
   }
 
   return html`<div>
-    <div class="titulo-vista">
-      <div><h1>Conexiones</h1><p>Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.</p></div>
-      <div class="der">
-        <div class="seg" role="group" aria-label="Periodo">${PERIODOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${t}</button>`)}</div>
-      </div>
+    <div class="reporte-barra">
+      <div class="seg" role="group" aria-label="Periodo">${PERIODOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${t}</button>`)}</div>
     </div>
     ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
         <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
@@ -497,6 +510,83 @@ function VistaConexiones() {
               <td>${p.avisos ? html`<span class="aviso-estado" data-s=${AVISO_CONEX[p.avisos] || 'nd'}>${p.avisos}</span>` : html`<span class="sub">Sin dato</span>`}</td>
             </tr>`)}</tbody></table>`
           : html`<div class="vacio"><b>${todas.length ? 'Nadie con ese filtro' : 'Todavía no hay entradas registradas'}</b>${todas.length ? 'Prueba con otro filtro o búsqueda.' : 'Desde la versión 3.3 del servidor, cada vez que alguien entra queda anotado aquí.'}</div>`}
+        </div>
+      </section>`}
+  </div>`;
+}
+
+/* ---------- Reporte de SMS de Notifícame ----------
+   Un envío por fila (hoja "Reporte SMS" de la base interna): cuándo, la falla, el mensaje aprobado y su texto,
+   quién lo mandó, a cuántos clientes se apartó y cuántos salieron, los números de control y las partes de SMS.
+   Sin teléfonos. Se descarga en CSV. */
+const PERIODOS_SMS = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días'], ['90', '90 días']];
+
+function ReporteSms() {
+  const s = useG();
+  const [per, setPer] = useState('30');
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState(null);
+  const [intento, setIntento] = useState(0);
+  const [abierto, setAbierto] = useState('');
+  const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
+  useEffect(() => {
+    let vivo = true;
+    setError(null);
+    Backend.sms({ op: 'reporte', desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
+    return () => { vivo = false; };
+  }, [desde, intento]);
+
+  const envios = (datos && datos.envios) || [];
+  const t = envios.reduce((a, e) => ({ clientes: a.clientes + e.enviados, sms: a.sms + (e.sms || 0), problemas: a.problemas + e.errores + e.dudosos, control: a.control + e.control }),
+    { clientes: 0, sms: 0, problemas: 0, control: 0 });
+  const fallas = new Set(envios.map((e) => e.id)).size;
+  const porPersona = Object.entries(envios.reduce((m, e) => { const p = m[e.por] || (m[e.por] = { envios: 0, clientes: 0 }); p.envios++; p.clientes += e.enviados; return m; }, {}))
+    .sort((a, b) => b[1].clientes - a[1].clientes);
+  const fecha = (x) => (x ? U.dia(x) + ' ' + U.hora(x).replace(/ /g, ' ') : '');
+  const quien = (n) => html`<span class="persona"><span class="avatar chico">${iniciales(n)}</span>${n}</span>`;
+  function descargar() {
+    U.descargarCsv('SMS Notificame ' + new Date(s.now).toISOString().slice(0, 10) + '.csv', [
+      ['Fecha', 'Terminó', 'Falla', 'ID de Alertas', 'Motivo', 'Nodos', 'Aviso', 'Mensaje', 'Texto', 'Envió', 'Clientes', 'Enviados', 'Con error', 'En duda', 'Sin enviar', 'Números de control', 'Partes por SMS', 'SMS (partes)']
+    ].concat(envios.map((e) => [fecha(e.en), fecha(e.fin), e.falla, e.id, e.motivo, e.nodos, e.aviso, e.mensaje, e.texto, e.por, e.clientes, e.enviados, e.errores, e.dudosos, e.sinEnviar,
+      e.control, e.partes || '', e.sms || ''])));
+  }
+
+  return html`<div>
+    <div class="reporte-barra">
+      <div class="seg" role="group" aria-label="Periodo">${PERIODOS_SMS.map(([v, x]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${x}</button>`)}</div>
+      <button class="btn btn-borde btn-chico" disabled=${!envios.length} onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button>
+    </div>
+    ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
+        <p>${/no válida|desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
+        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setIntento(intento + 1)}>Intentar de nuevo</button></div></div>`
+      : !datos ? html`<div class="panel vacio"><b>Cargando…</b>Revisando los envíos de SMS.</div>` : html`
+      <div class="panel kpis conex-kpis">
+        <div class="kpi"><div class="l">Envíos</div><div class="v">${U.n(envios.length)}</div><div class="d">${U.plural(fallas, 'de 1 falla', 'de ' + U.n(fallas) + ' fallas')}</div></div>
+        <div class="kpi"><div class="l">Clientes avisados</div><div class="v">${U.n(t.clientes)}</div><div class="d">${U.n(t.control)} a números de control</div></div>
+        <div class="kpi"><div class="l">Partes de SMS</div><div class="v">${U.n(t.sms)}</div><div class="d">un mensaje de más de 160 caracteres son 2 partes</div></div>
+        <div class="kpi"><div class="l">Con error o en duda</div><div class="v">${U.n(t.problemas)}</div><div class="d">${t.clientes + t.problemas ? U.pct(t.problemas, t.clientes + t.problemas) + ' % de lo que se intentó' : 'Ninguno'}</div></div>
+      </div>
+      ${porPersona.length > 0 && html`<div class="sms-personas">${porPersona.map(([n, p]) => html`<span class="chip" key=${n}><span>${n}: <b class="num">${U.plural(p.envios, '1 envío', p.envios + ' envíos')}</b>, ${U.n(p.clientes)} clientes</span></span>`)}</div>`}
+      <section class="panel">
+        <div class="panel-cuerpo tabla-envoltura">
+          ${envios.length ? html`<table class="tabla sms-tabla"><thead><tr>
+              <th>Fecha</th><th>Falla</th><th>Mensaje</th><th>Envió</th><th class="der">Clientes</th><th class="der">Error o duda</th><th class="der">Control</th><th class="der">Partes</th></tr></thead>
+            <tbody>${envios.map((e, k) => {
+              const clave = e.envio || e.id + ':' + e.en;
+              return html`<tr key=${clave}>
+                <td class="nowrap">${U.dia(e.en)}<div class="sub">${U.hora(e.en)}</div></td>
+                <td><b class="fuerte">${e.falla}</b><div class="sub">${e.motivo}${e.nodos ? ' · ' + e.nodos : ''}</div></td>
+                <td><span>${e.mensaje}</span>${e.aviso && e.aviso !== 'Aviso de falla' && html`<div class="sub">${e.aviso}</div>`}
+                  ${e.texto && html`<div><button class="enlace sms-ver" aria-expanded=${abierto === clave} onClick=${() => setAbierto(abierto === clave ? '' : clave)}>${abierto === clave ? 'Ocultar el texto' : 'Ver el texto'}</button></div>`}
+                  ${abierto === clave && html`<p class="sms-texto-rep">${e.texto}</p>`}</td>
+                <td>${quien(e.por)}</td>
+                <td class="der num"><b>${U.n(e.enviados)}</b><div class="sub">de ${U.n(e.clientes)}${e.sinEnviar ? ', ' + U.n(e.sinEnviar) + ' sin enviar' : ''}</div></td>
+                <td class="der num">${e.errores + e.dudosos ? html`${U.n(e.errores + e.dudosos)}<div class="sub">${[e.errores ? e.errores + ' error' + (e.errores === 1 ? '' : 'es') : '', e.dudosos ? e.dudosos + ' en duda' : ''].filter(Boolean).join(', ')}</div>` : '0'}</td>
+                <td class="der num">${U.n(e.control)}</td>
+                <td class="der num">${e.sms ? html`${U.n(e.sms)}<div class="sub">${e.partes} por número</div>` : html`<span class="sub">Sin dato</span>`}</td>
+              </tr>`;
+            })}</tbody></table>`
+          : html`<div class="vacio"><b>Sin envíos de SMS en este periodo</b>Cuando Workforce mande SMS desde una falla, aparecen aquí.</div>`}
         </div>
       </section>`}
   </div>`;

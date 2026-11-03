@@ -9,7 +9,7 @@
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
 - **Todos** tienen que permitir los avisos en el escritorio al entrar: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
-- **Conexiones** (Workforce y Jefatura): quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados, para darle seguimiento a quien no lo usa.
+- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
 
 ---
 
@@ -182,15 +182,31 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
   - Por falla, una barra: en gris, clientes llamando sin aviso todavía; en ámbar, desde el aviso de posible falla hasta la publicación. Se descarga en CSV.
   - Cuenta las consultas de Concentrix y Tiendas en los nodos de la falla en las 4 horas antes de publicarla, sin pausas de más de 45 minutos entre una y otra ni antes de publicar. El servidor lo calcula y lo guarda al publicar: las fallas publicadas antes del 2 nov no tienen el dato.
 
-## Conexiones: quién usa Alertas
+## Reportes
 
-Sección **Conexiones** (Workforce y Jefatura), para darle seguimiento a quien no está usando Alertas:
+Sección **Reportes** (Workforce y Jefatura), con dos pestañas.
+
+### Conexiones: quién usa Alertas
+
+Para darle seguimiento a quien no está usando Alertas:
 
 - Cada persona que entra queda anotada (una fila por persona en la hoja **Accesos** del archivo de consultas): primera y última entrada, cuántas veces entró y si en su PC están permitidos los avisos de escritorio (**Activados**, **Bloqueados**, **Sin responder** o **No disponibles**). Se anota desde la versión 3.3 del servidor.
 - Arriba: cuántos entraron en el periodo, cuántos no entran hace 3 días o más, quién entró y no hizo consultas, y quién no tiene los avisos activados.
 - La tabla trae a cada persona con su acceso (Concentrix, Tiendas con su tienda, supervisor, Workforce o Jefatura), su última entrada, cuántas veces entró, sus consultas del periodo (hoy, 7 o 30 días) y el estado de sus avisos. Se filtra por acceso, por "Entraron", "No entraron" o "Sin avisos activados", y se busca por nombre o tienda.
 - **Descargar CSV** baja lo que se ve en la tabla, para mandárselo a los supervisores.
 - Alertas solo conoce a quien ya entró alguna vez: quien nunca ha entrado no aparece.
+
+### SMS de Notifícame
+
+Cada envío de SMS queda en la hoja **Reporte SMS** de la base interna (una fila por envío, para siempre y sin teléfonos), y la pestaña lo muestra por periodo (hoy, 7, 30 o 90 días):
+
+- **Cuándo** empezó y terminó, **la falla** (número de falla, motivo y nodos) y si fue aviso de falla.
+- **El mensaje aprobado** que se mandó y su texto completo (**Ver el texto**).
+- **Quién** lo mandó.
+- **Clientes**: a cuántos se les apartó, a cuántos les salió, cuántos con error, en duda o sin enviar (si se detuvo), y cuántos **números de control** lo recibieron.
+- **Partes de SMS**: los mensajes aprobados pasan de 160 caracteres, así que cada número cuenta 2 partes. Sirve para cuadrar con lo que cobra Notifícame.
+- Arriba: envíos, clientes avisados, partes de SMS y con error o en duda, y cuánto mandó cada persona. **Descargar CSV** baja la tabla con el texto de cada mensaje.
+- Los envíos de antes de la versión 3.4 también salen: la primera vez, la hoja se arma con lo que quedó anotado en cada falla, y el mensaje se reconoce por los números de control (si el envío los llevó).
 
 ## Avisar a los clientes por SMS (Notifícame)
 
@@ -350,7 +366,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 328 pruebas del servidor en un emulador de Apps Script
+npm test                           # 335 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

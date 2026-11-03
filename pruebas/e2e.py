@@ -432,9 +432,11 @@ with sync_playwright() as p:
     ok('Ya les llegó a todos' in x.locator('.sms-cifras').inner_text() and x.locator('.modal-pie .btn-primario').is_disabled(), 'al abrirlo otra vez, no se le repite a nadie')
     x.keyboard.press('Escape')
 
-    print('7c. Reporte de conexiones (Workforce y Jefatura)')
-    ok(a.locator('.nav').count() == 0 and s.locator('.nav').count() == 0, 'Concentrix y los supervisores no tienen la sección Conexiones')
-    x.goto(APP + '#conexiones'); x.wait_for_selector('.conex-tabla tbody tr', timeout=30000); x.wait_for_timeout(500)
+    print('7c. Reportes: conexiones y SMS de Notifícame (Workforce y Jefatura)')
+    ok(a.locator('.nav').count() == 0 and s.locator('.nav').count() == 0, 'Concentrix y los supervisores no tienen la sección Reportes')
+    x.goto(APP + '#reportes'); x.wait_for_selector('.conex-tabla tbody tr', timeout=30000); x.wait_for_timeout(500)
+    ok(x.locator('.nav a[aria-current=page]').inner_text().strip() == 'Reportes' and x.locator('.pestanas button[aria-selected=true]').inner_text().strip() == 'Conexiones',
+       'Reportes abre en Conexiones')
     fila = lambda nombre: x.locator('.conex-tabla tbody tr', has_text=nombre)
     ok(fila('Daniela Ramirez').count() == 1 and 'CAC Metromall' in fila('Daniela Ramirez').inner_text() and 'Bloqueados' in fila('Daniela Ramirez').inner_text(),
        'Daniela Ramirez (Tiendas, CAC Metromall) sale con los avisos bloqueados', fila('Daniela Ramirez').inner_text() if fila('Daniela Ramirez').count() else '')
@@ -455,6 +457,23 @@ with sync_playwright() as p:
     ok(crudo[0].startswith('Nombre,Acceso,Tienda,Usuario,Primera entrada,Última entrada,Entradas,Consultas (hoy)') and any(l.startswith('Daniela Ramirez,Tiendas,CAC Metromall,,') and l.endswith(',Bloqueados') for l in crudo),
        'Descargar CSV: ' + dl.value.suggested_filename + ', con Daniela Ramirez y sus avisos bloqueados', crudo[:3])
     x.fill('.conex-buscar input', '')
+    # Reporte de SMS: el envío de F1254600 (caída de postes) que mandó Mario Rivera en 7b
+    x.click('.pestanas button:has-text("SMS de Notifícame")'); x.wait_for_selector('.sms-tabla tbody tr', timeout=30000); x.wait_for_timeout(300)
+    env = x.locator('.sms-tabla tbody tr', has_text='F1254600')
+    celdas = env.locator('td').all_inner_texts() if env.count() == 1 else []
+    ok(len(celdas) == 8 and 'Caída de postes' in celdas[1] and celdas[2].startswith('Caída de postes') and 'Mario Rivera' in celdas[3]
+       and celdas[4].replace(',', '').startswith(str(n_sms)) and celdas[6] == '3' and celdas[7].replace(',', '').startswith(str(2 * (n_sms + 3))),
+       f'el reporte de SMS trae el envío de F1254600: mensaje "Caída de postes", Mario Rivera, {n_sms} clientes, 3 de control y {2 * (n_sms + 3)} partes', celdas)
+    kp = x.locator('.conex-kpis .kpi').all_inner_texts()
+    ok(len(kp) == 4 and kp[0].startswith('Envíos') and kp[1].startswith('Clientes avisados') and str(n_sms) in kp[1].replace(',', '') and 'Mario Rivera' in x.locator('.sms-personas').inner_text(),
+       'arriba: envíos, clientes avisados, partes de SMS y con error, y cuánto mandó cada persona', kp)
+    env.locator('button:has-text("Ver el texto")').click()
+    ok('Se reporta dano en infraestructura publica (postes)' in env.locator('.sms-texto-rep').inner_text(), 'con "Ver el texto" se lee el mensaje exacto que se mandó')
+    x.screenshot(path=OUT + 'e07b_reporte_sms.png', full_page=True)
+    with x.expect_download() as dl: x.click('.reporte-barra button:has-text("Descargar CSV")')
+    crudo = open(dl.value.path(), 'rb').read().decode('utf-8-sig').split('\r\n')
+    ok(crudo[0].startswith('Fecha,Terminó,Falla,ID de Alertas,Motivo,Nodos,Aviso,Mensaje,Texto,Envió,Clientes,Enviados') and any(',F1254600,' in l and 'Mario Rivera' in l for l in crudo)
+       and not any(re.search(r'504\d{8}', l) for l in crudo), 'Descargar CSV: ' + dl.value.suggested_filename + ', sin teléfonos', crudo[:2])
 
     if EXCEL:
         print('8. Subir la base real desde la página')

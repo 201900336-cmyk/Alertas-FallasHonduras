@@ -623,6 +623,18 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .aviso-estado[data-s="pend"] { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .aviso-estado[data-s="nd"] { background: var(--surface-3); color: var(--ink-2); }
 .conex-kpis { margin-bottom: 18px; }
+/* Reportes */
+.reporte-barra { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: -4px 0 16px; }
+.sms-personas { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 16px; }
+.sms-tabla td .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+/* En el teléfono las tablas se desplazan de lado en vez de partir cada palabra */
+table.sms-tabla { min-width: 820px; }
+table.conex-tabla { min-width: 680px; }
+.sms-tabla td.nowrap { white-space: nowrap; }
+.sms-tabla .persona { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.avatar.chico { width: 24px; height: 24px; font-size: 10.5px; }
+.sms-ver { font-size: 12.5px; margin-top: 4px; }
+.sms-texto-rep { margin: 8px 0 0; padding: 10px 12px; max-width: 46ch; border-radius: 10px; background: var(--surface-2); color: var(--ink-2); font-size: 13px; line-height: 1.45; white-space: pre-line; }
 .tabla th { text-align: left; font-weight: 650; color: var(--ink-3); font-size: 12.5px; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
 .tabla td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .tabla small.numero-falla { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-2); }

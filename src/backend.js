@@ -257,6 +257,21 @@ function BackendLocal() {
     const m = await Store.confirmar({ tipo, texto, por: quien() }, cambios);
     return m.version;
   }
+  /* Reporte de SMS en la demostración: lo que quedó anotado en cada falla, igual que la hoja Reporte SMS del servidor */
+  async function reporteSmsDemo(desde) {
+    const envios = [];
+    (await Store.leerFallas()).forEach((f) => (f.sms || []).forEach((x) => {
+      const en = x.inicio || x.en;
+      if (en < (desde || 0)) return;
+      const ap = x.aprobado && SMS_APROBADOS_DEMO[x.aprobado], texto = ap ? ap[1] : '';
+      const partes = texto ? U.partesSms(texto).partes : 0, clientes = x.total || 0;
+      envios.push({ en, fin: x.en, falla: U.numeroFalla(f), id: f.id, motivo: nombreMotivo(f), nodos: f.nodos.join(', '),
+        aviso: x.tipo === 'RESTABLECIDO' ? 'Servicio restablecido' : 'Aviso de falla', mensaje: ap ? ap[0] : 'Sin dato', texto, por: x.por, clientes,
+        enviados: x.enviados, errores: x.errores, dudosos: x.dudosos, sinEnviar: Math.max(0, clientes - x.enviados - x.errores - x.dudosos), control: x.control || 0,
+        partes, sms: partes * ((x.enviados || 0) + (x.control || 0)), envio: x.envio || '' });
+    }));
+    return { envios: envios.sort((a, b) => b.en - a.en), desde, ahora: Date.now() };
+  }
   /* Conexiones en la demostración: una entrada por persona en esta PC, igual que la hoja Accesos del servidor */
   const AVISOS_DEMO = { activados: 'Activados', bloqueados: 'Bloqueados', 'sin-soporte': 'No disponibles', pendiente: 'Sin responder' };
   const accesosDemo = () => leerLS('alertas-demo-accesos', {});
@@ -473,6 +488,7 @@ function BackendLocal() {
        mayoría con celular; algunos solo con fijo o sin teléfono), unos pocos números que fallan y otros
        que quedan en duda, con el mismo protocolo que el servidor (iniciar, lote con paso, terminar). */
     async sms(d) {
+      if (d.op === 'reporte') return reporteSmsDemo(d.desde);
       const fallas = await Store.leerFallas();
       const f = fallas.find((x) => x.id === d.id);
       if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
@@ -489,7 +505,8 @@ function BackendLocal() {
         if (!(m.enviados || m.errores || m.dudosos || m.cEnv)) return null;
         const ahora = Date.now();
         const extra = [m.errores ? m.errores + ' con error' : '', m.dudosos ? m.dudosos + ' en duda' : ''].filter(Boolean);
-        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total - m.ctrl, control: m.cEnv, por: m.por.nombre, en: ahora }]);
+        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total - m.ctrl, control: m.cEnv, por: m.por.nombre, en: ahora,
+          aprobado: m.aprobado, inicio: m.en, envio: m.envio }]);
         f.historial.push({ accion: 'SMS', en: ahora, por: m.por, detalle: (m.tipo === 'RESTABLECIDO' ? 'Servicio restablecido' : 'Aviso de falla') + ' a ' + m.enviados
           + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '')
           + (m.ctrl ? ' y a ' + m.cEnv + ' números de control' : '') + (nota ? '; ' + nota : '') });
@@ -531,7 +548,7 @@ function BackendLocal() {
         lista.forEach((k) => estados.set(k, 'Pendiente'));
         const huella = U.hashSms(mensaje), yaC = controlDe(huella);
         const ctrl = CONTROL_DEMO.filter((k) => !yaC.has(k));            // los de control van primero, una vez por mensaje
-        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, huella, lista: ctrl.concat(lista), total: ctrl.length + lista.length,
+        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, aprobado: String(d.aprobado), en: Date.now(), huella, lista: ctrl.concat(lista), total: ctrl.length + lista.length,
           ctrl: ctrl.length, cEnv: 0, siguiente: 0, pasos: 0, enviados: 0, errores: 0, dudosos: 0, error: '', por: quien(), conDuda: d.dudosos === true };
         smsDemo.envios.set(f.id, nuevo);
         return Object.assign(avance(nuevo), extra);

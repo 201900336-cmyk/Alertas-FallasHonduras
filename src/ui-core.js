@@ -306,7 +306,7 @@ function aplicarTema(t) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
 }
-const RUTAS = ['consulta', 'fallas', 'base', 'stats', 'conexiones'];
+const RUTAS = ['consulta', 'fallas', 'base', 'stats', 'reportes'];
 function rutaActual() { const h = (location.hash || '').replace('#', ''); return RUTAS.includes(h) ? h : 'consulta'; }
 function ir(r) { if (location.hash !== '#' + r) location.hash = r; G.set({ ruta: r }); }
 // Un motivo que esta página no conoce (por ejemplo, uno nuevo del servidor) se muestra como "Otro", con su texto
@@ -439,6 +439,7 @@ const ICONOS = {
   fallas: '<path d="M3 12h5l2-4 2.5 9L15 9l1.5 3H21"/><path d="M3 20h18"/>',
   equipo: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.3 6-5.3s5.4 1.9 6 5.3"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6-.3 4.6 1.4 5 4.4"/>',
   abajo: '<path d="m6 9 6 6 6-6"/>',
+  reporte: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>',
   campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
   correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',

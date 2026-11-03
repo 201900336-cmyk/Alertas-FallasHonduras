@@ -1096,6 +1096,35 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   C.guardarControlSms({ texto: '' });
   g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f4.id, cerradaEn: Date.now() - 60000, nota: 'Prueba de SMS' } });
 
+  /* Reporte de SMS (Notifícame): un envío por fila, con la falla, el mensaje, quién, clientes y partes */
+  console.log('\n9b3. Reporte de los SMS enviados');
+  r = sms(tAgente, { op: 'reporte', desde: 0 });
+  ok(!r.ok && r.codigo === 'PERMISO', 'Concentrix no ve el reporte de SMS', r);
+  r = sms(tWf, { op: 'reporte', desde: 0 });
+  const rep1 = r.ok ? r.datos.envios : [];
+  const fallasSms = g.post({ accion: 'cargar', token: tWf, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.sms && f.sms.length);
+  const anotados = fallasSms.reduce((t, f) => t + f.sms.length, 0), enviadosFallas = fallasSms.reduce((t, f) => t + f.sms.reduce((a, x) => a + x.enviados, 0), 0);
+  ok(r.ok && rep1.length === anotados && rep1.reduce((t, e) => t + e.enviados, 0) === enviadosFallas && rep1.every((e, i) => !i || rep1[i - 1].en >= e.en),
+    'el reporte trae cada envío que quedó en las fallas (' + rep1.length + ' envíos, ' + enviadosFallas + ' SMS a clientes), del más nuevo al más viejo', [rep1.length, anotados]);
+  const eC = rep1.find((e) => e.id === f4.id && e.control === 4);
+  ok(eC && eC.mensaje === 'Falla de energía eléctrica' && eC.texto === msjC && eC.por === 'Ana López' && eC.errores === 4 && eC.partes === 2 && eC.sms === 2 * (eC.enviados + 4)
+    && eC.clientes === eC.enviados + eC.errores + eC.dudosos + eC.sinEnviar && eC.aviso === 'Aviso de falla' && eC.motivo && eC.nodos && eC.falla && eC.fin >= eC.en,
+    'cada envío dice la falla, el mensaje aprobado y su texto, quién lo mandó, clientes, con error, control y partes (' + (eC && eC.sms) + ' partes)', eC);
+  ok(rep1.every((e) => e.texto && e.partes === 2 && e.sms === 2 * (e.enviados + e.control)) && !/504\d{8}|\b[2-9]\d{7}\b/.test(JSON.stringify(rep1).replace(/"envio":"[^"]*"/g, '')),
+    'todos con su texto y 2 partes por número (los mensajes aprobados pasan de 160 caracteres), y sin teléfonos');
+  r = sms(tWf, { op: 'reporte', desde: Date.now() + 3600000 });
+  ok(r.ok && r.datos.envios.length === 0, 'el periodo filtra por fecha del envío');
+  // Los envíos de antes de la 3.4 (la hoja todavía no existía): se arma sola con lo anotado en las fallas
+  const hRep = g.E.activo.getSheetByName('Reporte SMS');
+  ok(hRep && hRep.getRange(1, 1, 1, 19).getValues()[0].join('|') === 'Fecha|Terminó|Falla|ID de Alertas|Motivo|Nodos|Aviso|Mensaje|Texto|Envió|Clientes|Enviados|Con error|En duda|Sin enviar|Números de control|Partes por SMS|SMS (partes)|Envío',
+    'la hoja Reporte SMS de la base interna tiene una fila por envío', hRep && hRep.getLastRow());
+  g.E.activo.deleteSheet(hRep);
+  r = sms(tWf, { op: 'reporte', desde: 0 });
+  const rep2 = r.ok ? r.datos.envios : [];
+  const eC2 = rep2.find((e) => e.id === f4.id && e.control === 4);
+  ok(r.ok && rep2.length === rep1.length && rep2.reduce((t, e) => t + e.enviados, 0) === enviadosFallas && eC2 && eC2.mensaje === 'Falla de energía eléctrica' && eC2.por === 'Ana López',
+    'si la hoja no existe (envíos de antes de la 3.4), se arma con lo anotado en las fallas y reconoce el mensaje por los números de control', [rep2.length, eC2 && eC2.mensaje]);
+
   /* ---------- Carga por cambios ---------- */
   console.log('\n9c. Carga por cambios (solo lo que cambió)');
   const SEP = '\u001f';

@@ -309,7 +309,7 @@ function BarraSuperior({ mf }) {
   const s = useG();
   const [menu, setMenu] = useState(false);
   const u = s.user, rol = CONFIG.roles[u.rol];
-  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats'], ['conexiones', 'Conexiones', 'equipo']];
+  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats'], ['reportes', 'Reportes', 'reporte']];
   useEffect(() => {
     if (!menu) return;
     const c = (e) => { if (!e.target.closest('.usuario-zona')) setMenu(false); };
@@ -447,7 +447,7 @@ function Shell() {
         ${ruta === 'fallas' && html`<${VistaFallas} />`}
         ${ruta === 'base' && html`<${VistaBase} />`}
         ${ruta === 'stats' && html`<${VistaStats} />`}
-        ${ruta === 'conexiones' && html`<${VistaConexiones} />`}`}
+        ${ruta === 'reportes' && html`<${VistaReportes} />`}`}
     </main>
     ${!puerta && veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />

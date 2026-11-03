@@ -42,8 +42,8 @@ const CONFIG = {
     tiendas: { nombre: 'Tiendas Claro', corto: 'Tiendas', canal: 'Tiendas', vistas: ['consulta'], entrada: 'Usuario de Tiendas' },
     // Supervisores de Call Center: el panel de los asesores más las posibles fallas (aviso y reporte); no publican fallas
     supervisor: { nombre: 'Supervisores de Call Center', corto: 'Supervisor', canal: 'Supervisor', vistas: ['consulta'], alertas: true, entrada: 'Genesys' },
-    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats', 'conexiones'], alertas: true, entrada: 'Genesys' },
-    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats', 'conexiones'], equipo: true, alertas: true, entrada: 'Genesys' }
+    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats', 'reportes'], alertas: true, entrada: 'Genesys' },
+    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats', 'reportes'], equipo: true, alertas: true, entrada: 'Genesys' }
   },
 
   // "cliente" es la forma en que el asesor le explica el motivo al cliente.

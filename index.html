@@ -635,6 +635,18 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .aviso-estado[data-s="pend"] { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .aviso-estado[data-s="nd"] { background: var(--surface-3); color: var(--ink-2); }
 .conex-kpis { margin-bottom: 18px; }
+/* Reportes */
+.reporte-barra { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: -4px 0 16px; }
+.sms-personas { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 16px; }
+.sms-tabla td .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+/* En el teléfono las tablas se desplazan de lado en vez de partir cada palabra */
+table.sms-tabla { min-width: 820px; }
+table.conex-tabla { min-width: 680px; }
+.sms-tabla td.nowrap { white-space: nowrap; }
+.sms-tabla .persona { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.avatar.chico { width: 24px; height: 24px; font-size: 10.5px; }
+.sms-ver { font-size: 12.5px; margin-top: 4px; }
+.sms-texto-rep { margin: 8px 0 0; padding: 10px 12px; max-width: 46ch; border-radius: 10px; background: var(--surface-2); color: var(--ink-2); font-size: 13px; line-height: 1.45; white-space: pre-line; }
 .tabla th { text-align: left; font-weight: 650; color: var(--ink-3); font-size: 12.5px; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
 .tabla td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .tabla small.numero-falla { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
@@ -1663,8 +1675,8 @@ const CONFIG = {
     tiendas: { nombre: 'Tiendas Claro', corto: 'Tiendas', canal: 'Tiendas', vistas: ['consulta'], entrada: 'Usuario de Tiendas' },
     // Supervisores de Call Center: el panel de los asesores más las posibles fallas (aviso y reporte); no publican fallas
     supervisor: { nombre: 'Supervisores de Call Center', corto: 'Supervisor', canal: 'Supervisor', vistas: ['consulta'], alertas: true, entrada: 'Genesys' },
-    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats', 'conexiones'], alertas: true, entrada: 'Genesys' },
-    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats', 'conexiones'], equipo: true, alertas: true, entrada: 'Genesys' }
+    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats', 'reportes'], alertas: true, entrada: 'Genesys' },
+    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats', 'reportes'], equipo: true, alertas: true, entrada: 'Genesys' }
   },
 
   // "cliente" es la forma en que el asesor le explica el motivo al cliente.
@@ -3292,6 +3304,21 @@ function BackendLocal() {
     const m = await Store.confirmar({ tipo, texto, por: quien() }, cambios);
     return m.version;
   }
+  /* Reporte de SMS en la demostración: lo que quedó anotado en cada falla, igual que la hoja Reporte SMS del servidor */
+  async function reporteSmsDemo(desde) {
+    const envios = [];
+    (await Store.leerFallas()).forEach((f) => (f.sms || []).forEach((x) => {
+      const en = x.inicio || x.en;
+      if (en < (desde || 0)) return;
+      const ap = x.aprobado && SMS_APROBADOS_DEMO[x.aprobado], texto = ap ? ap[1] : '';
+      const partes = texto ? U.partesSms(texto).partes : 0, clientes = x.total || 0;
+      envios.push({ en, fin: x.en, falla: U.numeroFalla(f), id: f.id, motivo: nombreMotivo(f), nodos: f.nodos.join(', '),
+        aviso: x.tipo === 'RESTABLECIDO' ? 'Servicio restablecido' : 'Aviso de falla', mensaje: ap ? ap[0] : 'Sin dato', texto, por: x.por, clientes,
+        enviados: x.enviados, errores: x.errores, dudosos: x.dudosos, sinEnviar: Math.max(0, clientes - x.enviados - x.errores - x.dudosos), control: x.control || 0,
+        partes, sms: partes * ((x.enviados || 0) + (x.control || 0)), envio: x.envio || '' });
+    }));
+    return { envios: envios.sort((a, b) => b.en - a.en), desde, ahora: Date.now() };
+  }
   /* Conexiones en la demostración: una entrada por persona en esta PC, igual que la hoja Accesos del servidor */
   const AVISOS_DEMO = { activados: 'Activados', bloqueados: 'Bloqueados', 'sin-soporte': 'No disponibles', pendiente: 'Sin responder' };
   const accesosDemo = () => leerLS('alertas-demo-accesos', {});
@@ -3508,6 +3535,7 @@ function BackendLocal() {
        mayoría con celular; algunos solo con fijo o sin teléfono), unos pocos números que fallan y otros
        que quedan en duda, con el mismo protocolo que el servidor (iniciar, lote con paso, terminar). */
     async sms(d) {
+      if (d.op === 'reporte') return reporteSmsDemo(d.desde);
       const fallas = await Store.leerFallas();
       const f = fallas.find((x) => x.id === d.id);
       if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
@@ -3524,7 +3552,8 @@ function BackendLocal() {
         if (!(m.enviados || m.errores || m.dudosos || m.cEnv)) return null;
         const ahora = Date.now();
         const extra = [m.errores ? m.errores + ' con error' : '', m.dudosos ? m.dudosos + ' en duda' : ''].filter(Boolean);
-        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total - m.ctrl, control: m.cEnv, por: m.por.nombre, en: ahora }]);
+        f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total - m.ctrl, control: m.cEnv, por: m.por.nombre, en: ahora,
+          aprobado: m.aprobado, inicio: m.en, envio: m.envio }]);
         f.historial.push({ accion: 'SMS', en: ahora, por: m.por, detalle: (m.tipo === 'RESTABLECIDO' ? 'Servicio restablecido' : 'Aviso de falla') + ' a ' + m.enviados
           + (m.enviados === 1 ? ' cliente' : ' clientes') + (extra.length ? ' (' + extra.join(', ') + ')' : '')
           + (m.ctrl ? ' y a ' + m.cEnv + ' números de control' : '') + (nota ? '; ' + nota : '') });
@@ -3566,7 +3595,7 @@ function BackendLocal() {
         lista.forEach((k) => estados.set(k, 'Pendiente'));
         const huella = U.hashSms(mensaje), yaC = controlDe(huella);
         const ctrl = CONTROL_DEMO.filter((k) => !yaC.has(k));            // los de control van primero, una vez por mensaje
-        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, huella, lista: ctrl.concat(lista), total: ctrl.length + lista.length,
+        const nuevo = { envio: 'S' + Date.now().toString(36).toUpperCase(), falla: f.id, tipo, mensaje, aprobado: String(d.aprobado), en: Date.now(), huella, lista: ctrl.concat(lista), total: ctrl.length + lista.length,
           ctrl: ctrl.length, cEnv: 0, siguiente: 0, pasos: 0, enviados: 0, errores: 0, dudosos: 0, error: '', por: quien(), conDuda: d.dudosos === true };
         smsDemo.envios.set(f.id, nuevo);
         return Object.assign(avance(nuevo), extra);
@@ -3977,7 +4006,7 @@ function aplicarTema(t) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
 }
-const RUTAS = ['consulta', 'fallas', 'base', 'stats', 'conexiones'];
+const RUTAS = ['consulta', 'fallas', 'base', 'stats', 'reportes'];
 function rutaActual() { const h = (location.hash || '').replace('#', ''); return RUTAS.includes(h) ? h : 'consulta'; }
 function ir(r) { if (location.hash !== '#' + r) location.hash = r; G.set({ ruta: r }); }
 // Un motivo que esta página no conoce (por ejemplo, uno nuevo del servidor) se muestra como "Otro", con su texto
@@ -4110,6 +4139,7 @@ const ICONOS = {
   fallas: '<path d="M3 12h5l2-4 2.5 9L15 9l1.5 3H21"/><path d="M3 20h18"/>',
   equipo: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.3 6-5.3s5.4 1.9 6 5.3"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6-.3 4.6 1.4 5 4.4"/>',
   abajo: '<path d="m6 9 6 6 6-6"/>',
+  reporte: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>',
   campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
   correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',
@@ -6086,7 +6116,23 @@ const ACCESOS_CONEX = [['todos', 'Todos'], ['Concentrix', 'Concentrix'], ['Tiend
 const FILTROS_CONEX = [['todos', 'Todos'], ['entraron', 'Entraron'], ['no', 'No entraron'], ['avisos', 'Sin avisos activados']];
 const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend', 'No disponibles': 'nd' };
 
-function VistaConexiones() {
+/* ---------- Reportes (Workforce y Jefatura): Conexiones y SMS de Notifícame ---------- */
+function VistaReportes() {
+  const [tab, setTab] = useState(() => (leerLS('alertas-reporte', 'conexiones') === 'sms' ? 'sms' : 'conexiones'));
+  const elegir = (t) => { setTab(t); guardarLS('alertas-reporte', t); };
+  return html`<div>
+    <div class="titulo-vista"><div><h1>Reportes</h1><p>${tab === 'sms'
+      ? 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.'
+      : 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.'}</p></div></div>
+    <div class="pestanas" role="tablist">
+      <button role="tab" aria-selected=${tab === 'conexiones'} onClick=${() => elegir('conexiones')}>Conexiones</button>
+      <button role="tab" aria-selected=${tab === 'sms'} onClick=${() => elegir('sms')}>SMS de Notifícame</button>
+    </div>
+    ${tab === 'sms' ? html`<${ReporteSms} />` : html`<${ReporteConexiones} />`}
+  </div>`;
+}
+
+function ReporteConexiones() {
   const s = useG();
   const [per, setPer] = useState('hoy');
   const [acceso, setAcceso] = useState('todos');
@@ -6135,11 +6181,8 @@ function VistaConexiones() {
   }
 
   return html`<div>
-    <div class="titulo-vista">
-      <div><h1>Conexiones</h1><p>Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.</p></div>
-      <div class="der">
-        <div class="seg" role="group" aria-label="Periodo">${PERIODOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${t}</button>`)}</div>
-      </div>
+    <div class="reporte-barra">
+      <div class="seg" role="group" aria-label="Periodo">${PERIODOS_CONEX.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${t}</button>`)}</div>
     </div>
     ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
         <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
@@ -6171,6 +6214,83 @@ function VistaConexiones() {
               <td>${p.avisos ? html`<span class="aviso-estado" data-s=${AVISO_CONEX[p.avisos] || 'nd'}>${p.avisos}</span>` : html`<span class="sub">Sin dato</span>`}</td>
             </tr>`)}</tbody></table>`
           : html`<div class="vacio"><b>${todas.length ? 'Nadie con ese filtro' : 'Todavía no hay entradas registradas'}</b>${todas.length ? 'Prueba con otro filtro o búsqueda.' : 'Desde la versión 3.3 del servidor, cada vez que alguien entra queda anotado aquí.'}</div>`}
+        </div>
+      </section>`}
+  </div>`;
+}
+
+/* ---------- Reporte de SMS de Notifícame ----------
+   Un envío por fila (hoja "Reporte SMS" de la base interna): cuándo, la falla, el mensaje aprobado y su texto,
+   quién lo mandó, a cuántos clientes se apartó y cuántos salieron, los números de control y las partes de SMS.
+   Sin teléfonos. Se descarga en CSV. */
+const PERIODOS_SMS = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días'], ['90', '90 días']];
+
+function ReporteSms() {
+  const s = useG();
+  const [per, setPer] = useState('30');
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState(null);
+  const [intento, setIntento] = useState(0);
+  const [abierto, setAbierto] = useState('');
+  const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
+  useEffect(() => {
+    let vivo = true;
+    setError(null);
+    Backend.sms({ op: 'reporte', desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
+    return () => { vivo = false; };
+  }, [desde, intento]);
+
+  const envios = (datos && datos.envios) || [];
+  const t = envios.reduce((a, e) => ({ clientes: a.clientes + e.enviados, sms: a.sms + (e.sms || 0), problemas: a.problemas + e.errores + e.dudosos, control: a.control + e.control }),
+    { clientes: 0, sms: 0, problemas: 0, control: 0 });
+  const fallas = new Set(envios.map((e) => e.id)).size;
+  const porPersona = Object.entries(envios.reduce((m, e) => { const p = m[e.por] || (m[e.por] = { envios: 0, clientes: 0 }); p.envios++; p.clientes += e.enviados; return m; }, {}))
+    .sort((a, b) => b[1].clientes - a[1].clientes);
+  const fecha = (x) => (x ? U.dia(x) + ' ' + U.hora(x).replace(/ /g, ' ') : '');
+  const quien = (n) => html`<span class="persona"><span class="avatar chico">${iniciales(n)}</span>${n}</span>`;
+  function descargar() {
+    U.descargarCsv('SMS Notificame ' + new Date(s.now).toISOString().slice(0, 10) + '.csv', [
+      ['Fecha', 'Terminó', 'Falla', 'ID de Alertas', 'Motivo', 'Nodos', 'Aviso', 'Mensaje', 'Texto', 'Envió', 'Clientes', 'Enviados', 'Con error', 'En duda', 'Sin enviar', 'Números de control', 'Partes por SMS', 'SMS (partes)']
+    ].concat(envios.map((e) => [fecha(e.en), fecha(e.fin), e.falla, e.id, e.motivo, e.nodos, e.aviso, e.mensaje, e.texto, e.por, e.clientes, e.enviados, e.errores, e.dudosos, e.sinEnviar,
+      e.control, e.partes || '', e.sms || ''])));
+  }
+
+  return html`<div>
+    <div class="reporte-barra">
+      <div class="seg" role="group" aria-label="Periodo">${PERIODOS_SMS.map(([v, x]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => setPer(v)} key=${v}>${x}</button>`)}</div>
+      <button class="btn btn-borde btn-chico" disabled=${!envios.length} onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button>
+    </div>
+    ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
+        <p>${/no válida|desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
+        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setIntento(intento + 1)}>Intentar de nuevo</button></div></div>`
+      : !datos ? html`<div class="panel vacio"><b>Cargando…</b>Revisando los envíos de SMS.</div>` : html`
+      <div class="panel kpis conex-kpis">
+        <div class="kpi"><div class="l">Envíos</div><div class="v">${U.n(envios.length)}</div><div class="d">${U.plural(fallas, 'de 1 falla', 'de ' + U.n(fallas) + ' fallas')}</div></div>
+        <div class="kpi"><div class="l">Clientes avisados</div><div class="v">${U.n(t.clientes)}</div><div class="d">${U.n(t.control)} a números de control</div></div>
+        <div class="kpi"><div class="l">Partes de SMS</div><div class="v">${U.n(t.sms)}</div><div class="d">un mensaje de más de 160 caracteres son 2 partes</div></div>
+        <div class="kpi"><div class="l">Con error o en duda</div><div class="v">${U.n(t.problemas)}</div><div class="d">${t.clientes + t.problemas ? U.pct(t.problemas, t.clientes + t.problemas) + ' % de lo que se intentó' : 'Ninguno'}</div></div>
+      </div>
+      ${porPersona.length > 0 && html`<div class="sms-personas">${porPersona.map(([n, p]) => html`<span class="chip" key=${n}><span>${n}: <b class="num">${U.plural(p.envios, '1 envío', p.envios + ' envíos')}</b>, ${U.n(p.clientes)} clientes</span></span>`)}</div>`}
+      <section class="panel">
+        <div class="panel-cuerpo tabla-envoltura">
+          ${envios.length ? html`<table class="tabla sms-tabla"><thead><tr>
+              <th>Fecha</th><th>Falla</th><th>Mensaje</th><th>Envió</th><th class="der">Clientes</th><th class="der">Error o duda</th><th class="der">Control</th><th class="der">Partes</th></tr></thead>
+            <tbody>${envios.map((e, k) => {
+              const clave = e.envio || e.id + ':' + e.en;
+              return html`<tr key=${clave}>
+                <td class="nowrap">${U.dia(e.en)}<div class="sub">${U.hora(e.en)}</div></td>
+                <td><b class="fuerte">${e.falla}</b><div class="sub">${e.motivo}${e.nodos ? ' · ' + e.nodos : ''}</div></td>
+                <td><span>${e.mensaje}</span>${e.aviso && e.aviso !== 'Aviso de falla' && html`<div class="sub">${e.aviso}</div>`}
+                  ${e.texto && html`<div><button class="enlace sms-ver" aria-expanded=${abierto === clave} onClick=${() => setAbierto(abierto === clave ? '' : clave)}>${abierto === clave ? 'Ocultar el texto' : 'Ver el texto'}</button></div>`}
+                  ${abierto === clave && html`<p class="sms-texto-rep">${e.texto}</p>`}</td>
+                <td>${quien(e.por)}</td>
+                <td class="der num"><b>${U.n(e.enviados)}</b><div class="sub">de ${U.n(e.clientes)}${e.sinEnviar ? ', ' + U.n(e.sinEnviar) + ' sin enviar' : ''}</div></td>
+                <td class="der num">${e.errores + e.dudosos ? html`${U.n(e.errores + e.dudosos)}<div class="sub">${[e.errores ? e.errores + ' error' + (e.errores === 1 ? '' : 'es') : '', e.dudosos ? e.dudosos + ' en duda' : ''].filter(Boolean).join(', ')}</div>` : '0'}</td>
+                <td class="der num">${U.n(e.control)}</td>
+                <td class="der num">${e.sms ? html`${U.n(e.sms)}<div class="sub">${e.partes} por número</div>` : html`<span class="sub">Sin dato</span>`}</td>
+              </tr>`;
+            })}</tbody></table>`
+          : html`<div class="vacio"><b>Sin envíos de SMS en este periodo</b>Cuando Workforce mande SMS desde una falla, aparecen aquí.</div>`}
         </div>
       </section>`}
   </div>`;
@@ -6889,7 +7009,7 @@ function BarraSuperior({ mf }) {
   const s = useG();
   const [menu, setMenu] = useState(false);
   const u = s.user, rol = CONFIG.roles[u.rol];
-  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats'], ['conexiones', 'Conexiones', 'equipo']];
+  const NAV = [['consulta', 'Consulta', 'lupa'], ['fallas', 'Fallas', 'fallas'], ['base', 'Base', 'base'], ['stats', 'Estadísticas', 'stats'], ['reportes', 'Reportes', 'reporte']];
   useEffect(() => {
     if (!menu) return;
     const c = (e) => { if (!e.target.closest('.usuario-zona')) setMenu(false); };
@@ -7027,7 +7147,7 @@ function Shell() {
         ${ruta === 'fallas' && html`<${VistaFallas} />`}
         ${ruta === 'base' && html`<${VistaBase} />`}
         ${ruta === 'stats' && html`<${VistaStats} />`}
-        ${ruta === 'conexiones' && html`<${VistaConexiones} />`}`}
+        ${ruta === 'reportes' && html`<${VistaReportes} />`}`}
     </main>
     ${!puerta && veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />

@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.3',                // se ve en la pestaña INICIO
+  VERSION: '3.4',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -56,7 +56,7 @@ const ALERTAS = {
   AVISOS_MAX: 8,                 // fallas publicadas, reabiertas o cerradas que guarda "estado" para el aviso de escritorio
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares', accesos: 'Accesos' },
+  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares', accesos: 'Accesos', reporteSms: 'Reporte SMS' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura', supervisor: 'Supervisor' },
   ESCRIBEN: ['workforce', 'jefatura'],
   // Ven las posibles fallas (el aviso de 5 clientes en 60 min) y las pueden reportar; publicar fallas, solo Workforce y Jefatura
@@ -95,6 +95,9 @@ const COL_RESUMEN_AS = ['Día', 'Usuario', 'Nombre', 'Canal', 'Consultas', 'Con 
 const COL_ACCESOS = ['Usuario', 'Nombre', 'Acceso', 'Tienda', 'Primera entrada', 'Última entrada', 'Entradas', 'Avisos de escritorio', 'Avisos al'];
 const COL_DESCARGAS = ['Fecha', 'Usuario', 'Nombre', 'Fallas', 'Nodos', 'Clientes', 'Números en el archivo'];
 const COL_ENVIOS = ['Fecha', 'Falla', 'ID de Alertas', 'Tipo', 'Teléfono', 'Estado', 'Detalle', 'Envío', 'Envió', 'Control'];
+// Un envío de SMS por fila (para el reporte de Notifícame); se guarda siempre, sin teléfonos
+const COL_REPORTE_SMS = ['Fecha', 'Terminó', 'Falla', 'ID de Alertas', 'Motivo', 'Nodos', 'Aviso', 'Mensaje', 'Texto', 'Envió', 'Clientes', 'Enviados',
+  'Con error', 'En duda', 'Sin enviar', 'Números de control', 'Partes por SMS', 'SMS (partes)', 'Envío'];
 const COL_TIENDAS = ['Tienda (una por fila: así aparece en la lista al entrar)'];
 /* Tiendas con las que se crea la hoja Tiendas. Después se agregan o quitan en la hoja, sin tocar el código. */
 const TIENDAS_INICIALES = [
@@ -1671,6 +1674,8 @@ function registrarSmsEnFalla_(m, nota) {
   const h = hoja_(ALERTAS.HOJAS.fallas);
   const f = leerFallas_(h).filter((x) => x.id === m.falla)[0];
   if (!f) return null;
+  let hr = null;
+  try { hr = hojaReporteSms_(); } catch (e) { console.error('No se pudo abrir el Reporte SMS: ' + (e && e.message)); }   // la primera vez, con los envíos de antes
   const ahora = Date.now();
   f.sms = (f.sms || []).concat([{ tipo: m.tipo, enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, total: m.total - (m.ctrl || 0),
     control: m.cEnv || 0, por: m.n, en: ahora }]).slice(-20);
@@ -1682,7 +1687,87 @@ function registrarSmsEnFalla_(m, nota) {
   const fila = fallaAFila_(f);
   h.getRange(f._fila, 1, 1, fila.length).setValues([fila]);
   cache_().remove('fallasRecientes');
+  try {
+    if (hr) hr.appendRow(filaReporteSms_(f, { en: m.en, fin: ahora, tipo: m.tipo, clave: m.aprobado || claveSmsDe_(m.mensaje), texto: m.mensaje, n: m.n,
+      total: m.total - (m.ctrl || 0), enviados: m.enviados, errores: m.errores, dudosos: m.dudosos, control: m.cEnv || 0, envio: m.envio }));
+  } catch (e) { console.error('No se pudo anotar el envío en el Reporte SMS: ' + (e && e.message)); }
   return sinFila_(f);
+}
+
+/* ----- Reporte de SMS (Notifícame) -----
+   Hoja "Reporte SMS" de la base interna: un envío por fila, para siempre y sin teléfonos. Cuándo empezó y terminó,
+   la falla (número, motivo y nodos), si fue aviso de falla, el mensaje aprobado y su texto, quién lo mandó, a
+   cuántos clientes se apartó, cuántos salieron, con error, en duda o sin enviar, los números de control y las
+   partes de SMS (un mensaje de más de 160 caracteres son 2 partes por número). */
+const claveSmsDe_ = (texto) => Object.keys(SMS_APROBADOS).filter((k) => SMS_APROBADOS[k].texto === texto)[0] || '';
+const GSM7_ = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+const GSM7_EXT_ = '^{}\\[~]|€';
+/* Partes de un SMS, como las cuenta la página (U.partesSms): GSM-7 de 160 (153 si son varias); si no, UCS-2 de 70 (67) */
+function partesSms_(texto) {
+  let n = 0, gsm = true;
+  for (const ch of String(texto || '')) {
+    if (GSM7_.indexOf(ch) >= 0) n++; else if (GSM7_EXT_.indexOf(ch) >= 0) n += 2; else { gsm = false; break; }
+  }
+  if (gsm) return n <= 160 ? 1 : Math.ceil(n / 153);
+  const u = String(texto).length;
+  return u <= 70 ? 1 : Math.ceil(u / 67);
+}
+function filaReporteSms_(f, x) {
+  const ap = x.clave ? SMS_APROBADOS[x.clave] : null, partes = x.texto ? partesSms_(x.texto) : 0;
+  const clientes = x.total || 0, env = x.enviados || 0, err = x.errores || 0, dud = x.dudosos || 0, ctrl = x.control || 0;
+  return [new Date(x.en), x.fin ? new Date(x.fin) : '', nombreFalla_(f), f.id, nombreMotivo_(f) || '', f.nodos.slice(0, 40).join(', ') + (f.nodos.length > 40 ? ', …' : ''),
+    TIPOS_SMS[x.tipo] || String(x.tipo || ''), ap ? ap.nombre : x.texto ? 'Otro mensaje' : 'Sin dato (envío de antes de la 3.4)', x.texto || '', x.n || '',
+    clientes, env, err, dud, Math.max(0, clientes - env - err - dud), ctrl, partes || '', partes ? partes * (env + ctrl) : '', x.envio || ''];
+}
+/* La hoja del reporte; la primera vez se arma con los envíos que ya quedaron anotados en cada falla (el mensaje
+   se reconoce por la huella de los números de control en Envíos SMS, que guarda 40 días). Se llama con el
+   candado de los SMS, así nunca se arma dos veces. */
+function hojaReporteSms_() {
+  const libro = libro_();
+  let h = libro.getSheetByName(ALERTAS.HOJAS.reporteSms);
+  if (h) return h;
+  const previas = reporteSmsAnterior_();
+  h = hojaEn_(libro, ALERTAS.HOJAS.reporteSms, COL_REPORTE_SMS);
+  h.getRange(2, 1, Math.max(1, h.getMaxRows() - 1), 2).setNumberFormat('dd/mm/yyyy hh:mm');
+  if (previas.length) h.getRange(2, 1, previas.length, COL_REPORTE_SMS.length).setValues(previas);
+  return h;
+}
+function reporteSmsAnterior_() {
+  const porEnvio = {};
+  const he = libro_().getSheetByName(ALERTAS.HOJAS.envios);
+  if (he && he.getLastRow() >= 2) {
+    he.getRange(2, 1, he.getLastRow() - 1, Math.min(COL_ENVIOS.length, he.getMaxColumns())).getValues().forEach((r) => {
+      const e = String(r[7] || '');
+      if (!e) return;
+      const x = porEnvio[e] || (porEnvio[e] = { envio: e, id: String(r[2] || ''), en: fechaMs_(r[0]) || 0, por: String(r[8] || ''), huella: '' });
+      if (r[9]) x.huella = String(r[9]);
+    });
+  }
+  const deHuella = {};
+  Object.keys(SMS_APROBADOS).forEach((k) => { deHuella[hashSms_(SMS_APROBADOS[k].texto)] = k; });
+  const envios = Object.keys(porEnvio).map((k) => porEnvio[k]);
+  const filas = [];
+  leerFallas_().forEach((f) => (f.sms || []).forEach((sm) => {
+    // El envío de esa falla y de esa persona que empezó antes de anotarse (el más cercano)
+    const e = envios.filter((x) => (x.id === f.id || idFalla_(x.id) === idFalla_(f.id)) && x.por === sm.por && x.en <= sm.en).sort((a, b) => b.en - a.en)[0];
+    const clave = e && e.huella ? deHuella[e.huella] || '' : '';
+    filas.push(filaReporteSms_(f, { en: e ? e.en : sm.en, fin: sm.en, tipo: sm.tipo, clave: clave, texto: clave ? SMS_APROBADOS[clave].texto : '', n: sm.por,
+      total: sm.total, enviados: sm.enviados, errores: sm.errores, dudosos: sm.dudosos, control: sm.control, envio: e ? e.envio : '' }));
+  }));
+  return filas.sort((a, b) => a[0] - b[0]);
+}
+/* El reporte para la página (Workforce y Jefatura): los envíos desde una fecha, del más nuevo al más viejo */
+function smsReporte_(d) {
+  if (!libro_().getSheetByName(ALERTAS.HOJAS.reporteSms)) conCandadoSms_(() => hojaReporteSms_(), 2);
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.reporteSms);
+  const desde = Math.max(0, Number(d.desde) || 0);
+  const filas = h.getLastRow() >= 2 ? h.getRange(2, 1, h.getLastRow() - 1, COL_REPORTE_SMS.length).getValues() : [];
+  const envios = filas.filter((r) => r[0] && fechaMs_(r[0]) >= desde).map((r) => ({
+    en: fechaMs_(r[0]), fin: r[1] ? fechaMs_(r[1]) : null, falla: String(r[2]), id: String(r[3]), motivo: String(r[4]), nodos: String(r[5]), aviso: String(r[6]),
+    mensaje: String(r[7]), texto: String(r[8]), por: String(r[9]), clientes: Number(r[10]) || 0, enviados: Number(r[11]) || 0, errores: Number(r[12]) || 0,
+    dudosos: Number(r[13]) || 0, sinEnviar: Number(r[14]) || 0, control: Number(r[15]) || 0, partes: Number(r[16]) || 0, sms: Number(r[17]) || 0, envio: String(r[18] || '')
+  })).sort((a, b) => b.en - a.en);
+  return { envios: envios, desde: desde, ahora: Date.now() };
 }
 /* Cierra un envío (dentro del candado): lo apartado sin mandar queda Cancelado (disponible para el próximo),
    lo que se estaba mandando cuando se cortó queda Dudoso, y se anota en la falla */
@@ -1713,6 +1798,7 @@ function accionSms_(d, ses) {
   const op = String(d.op || '');
   if (op === 'resumen') return smsResumen_(d, ses);
   if (op === 'iniciar') return smsIniciar_(d, ses);
+  if (op === 'reporte') return smsReporte_(d);
   if (op === 'lote') return smsLote_(d, ses);
   if (op === 'terminar') return smsTerminar_(d, ses);
   throw fallo_('DATOS', 'Operación no válida.');
@@ -1782,7 +1868,7 @@ function smsIniciar_(d, ses) {
     if (!lista.length) return Object.assign({ envio: '', pasos: 0, siguiente: 0, total: 0, enviados: 0, errores: 0, dudosos: 0, error: '', control: 0 }, extra);
     const envio = 'S' + ahora.toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();
     const fecha = new Date(ahora), nombre = nombreFalla_(f);
-    m = { envio: envio, falla: f.id, u: ses.u, n: ses.n, tipo: tipo, mensaje: mensaje, total: ctrl.length + lista.length, siguiente: 0, pasos: 0, cursor: 0,
+    m = { envio: envio, falla: f.id, u: ses.u, n: ses.n, tipo: tipo, mensaje: mensaje, aprobado: String(d.aprobado), total: ctrl.length + lista.length, siguiente: 0, pasos: 0, cursor: 0,
       lote: ALERTAS.SMS_LOTE, problemas: 0, rechazos: 0, enviados: 0, errores: 0, dudosos: 0, error: '', en: ahora, renovado: ahora, vuelo: null,
       ctrl: ctrl.length, cEnv: 0, cErr: 0, cDud: 0 };
     // Primero el envío en curso y después las filas: si algo falla a medias, no quedan filas apartadas sin dueño
