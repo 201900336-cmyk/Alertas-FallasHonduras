@@ -178,6 +178,26 @@ function SelectorTienda({ valor, onCambio, lista }) {
   </div>`;
 }
 
+/* Encabezado del panel de entrada: el saludo según la hora de esta PC y el título */
+function saludoDeHora(h) {
+  return h >= 5 && h < 12 ? ['Buenos días', 'sol'] : h >= 12 && h < 18 ? ['Buenas tardes', 'sol'] : ['Buenas noches', 'luna'];
+}
+function CabezaAcceso({ titulo, children }) {
+  const [saludo, ico] = saludoDeHora(new Date().getHours());
+  return html`<header class="login-cab">
+    <p class="saludo"><${Ico} n=${ico} s=${16} /><span>${saludo}</span></p>
+    <h2 class=${titulo.length > 14 ? 'largo' : null}>${titulo}</h2>
+    ${children}
+  </header>`;
+}
+/* Cada forma de entrar lleva su ícono, su nombre y para quién es */
+function CabezaBloque({ ico, titulo, sub }) {
+  return html`<div class="acceso-cab">
+    <span class="acceso-ico"><${Ico} n=${ico} s=${20} /></span>
+    <div class="acceso-cab-txt"><h3>${titulo}</h3><p class="sub">${sub}</p></div>
+  </div>`;
+}
+
 /* Acceso real: Genesys para Concentrix, Workforce y Jefatura; usuario genérico para Tiendas */
 function Acceso() {
   const s = useG();
@@ -212,17 +232,20 @@ function Acceso() {
   return html`<div class="login">
     <${ArteAcceso} />
     <div class="login-form">
+      <${Portada.Fondo} />
       <div class="login-caja">
-        <div><h2>Entrar</h2></div>
+        <${CabezaAcceso} titulo="Entrar" />
         ${s.avisoAcceso && html`<div class="nota aviso-acceso" role="alert"><${Ico} n="info" s=${18} /><span>${s.avisoAcceso}</span></div>`}
         <section class="acceso-bloque">
-          <h3>Concentrix, Workforce HN y Jefatura</h3>
+          <${CabezaBloque} ico="auricular" titulo="Concentrix, Workforce HN y Jefatura" sub="Con tu usuario de Genesys." />
           <button class="btn btn-primario btn-grande" style="width:100%" disabled=${ocupado || !cfg.genesys.activo} onClick=${genesys}>Entrar con Genesys</button>
           ${!cfg.genesys.activo && html`<p class="sub">Genesys todavía no está conectado.${cfg.temporal ? ' Mientras tanto, Workforce y Jefatura pueden usar el acceso temporal.' : ''}</p>`}
         </section>
+        <div class="acceso-o" aria-hidden="true"><span>o</span></div>
         <form class="acceso-bloque" onSubmit=${entrar}>
           <div class="acceso-titulo">
-            <h3>${esTienda ? 'Tiendas' : 'Acceso temporal'}</h3>
+            <${CabezaBloque} ico=${esTienda ? 'tienda' : 'reloj'} titulo=${esTienda ? 'Tiendas' : 'Acceso temporal'}
+              sub=${esTienda ? 'Con el usuario de tiendas.' : 'Con tu cuenta temporal.'} />
             ${cfg.temporal && html`<div class="seg" role="group" aria-label="Tipo de acceso">
               <button type="button" aria-pressed=${esTienda} onClick=${() => { setModo('tiendas'); setUsuario(leerLS('alertas-usuario-tiendas', RT.usuarioTiendas || 'tiendas')); }}>Tiendas</button>
               <button type="button" aria-pressed=${!esTienda} onClick=${() => { setModo('temporal'); setUsuario(''); }}>Temporal</button>
@@ -238,7 +261,7 @@ function Acceso() {
           <button class="btn btn-borde btn-grande" type="submit" disabled=${!listo || ocupado}>${ocupado ? 'Entrando…' : 'Entrar'}</button>
         </form>
         ${error && html`<div class="nota error-acceso" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>`}
-        <p class="sub pie-acceso">Cada consulta queda registrada con tu nombre.</p>
+        <p class="sub pie-acceso"><${Ico} n="candado" s=${15} /><span>Cada consulta queda registrada con tu nombre.</span></p>
       </div>
     </div>
   </div>`;
@@ -262,8 +285,11 @@ function AccesoDemo() {
   return html`<div class="login">
     <${ArteAcceso} />
     <div class="login-form">
+      <${Portada.Fondo} />
       <form class="login-caja" onSubmit=${entrar}>
-        <div><h2>Entrar a la demostración</h2><p class="sub" style="margin:6px 0 0">${RT.api ? 'Modo demostración: datos inventados y guardados solo en esta PC.' : 'Todavía no hay servidor conectado en config.js, así que la página funciona en modo demostración.'}</p></div>
+        <${CabezaAcceso} titulo="Entrar a la demostración">
+          <p class="sub">${RT.api ? 'Modo demostración: datos inventados y guardados solo en esta PC.' : 'Todavía no hay servidor conectado en config.js, así que la página funciona en modo demostración.'}</p>
+        <//>
         ${s.avisoAcceso && html`<div class="nota aviso-acceso"><${Ico} n="info" s=${18} /><span>${s.avisoAcceso}</span></div>`}
         <div class="campo"><span>Acceso</span>
           <div class="roles" role="group" aria-label="Acceso">

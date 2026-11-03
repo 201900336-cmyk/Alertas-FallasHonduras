@@ -735,10 +735,12 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .login-arte h1 { font-size: clamp(40px, 5vw, 72px); font-weight: 850; font-stretch: 125%; letter-spacing: -0.03em; line-height: 0.95; margin: 0; }
 .login-arte p { max-width: 42ch; font-size: 16px; opacity: 0.8; margin: 18px 0 0; }
 
-/* ---------- Portada: Honduras de noche, la red, la tormenta y las alertas ----------
-   Colores fijos (no cambian con el tema): negro, grises y el rojo de alerta. El rojo solo marca fallas. */
+/* ---------- Portada: Honduras de noche, la red, las antenas, las cuadrillas, la tormenta y las alertas ----------
+   Colores fijos (no cambian con el tema): negro, grises y el rojo de alerta. El rojo solo marca fallas;
+   el ámbar, solo la baliza de la cuadrilla que va a atender una. */
 .portada {
   --pt-rojo: #e3241b; --pt-blanco: #f4f5f6; --pt-niebla: #c9cdd2; --pt-gris: #8a9099; --pt-grafito: #2b3036; --pt-asfalto: #0d0f12;
+  --pt-ambar: #ffb22e;
   background: radial-gradient(120% 70% at 32% 16%, #171a1e 0%, #000 64%) #000; color: var(--pt-blanco);
   padding: 30px 48px 40px; gap: 18px; isolation: isolate; justify-content: flex-start;
 }
@@ -805,11 +807,38 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pt-ruta { fill: none; stroke: #d9dce0; stroke-width: 1.7; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0.55;
   animation: pt-trazo 18s linear infinite both; animation-delay: var(--d); }
 .pt-viaje { transform: translate(var(--x0), var(--y0)); animation: pt-viaje 18s cubic-bezier(0.45, 0.05, 0.3, 1) infinite both; animation-delay: var(--d); }
-.pt-insignia { fill: #0b0d10; stroke: #d9dce0; stroke-width: 1.4; }
-.pt-camion .pt-insignia { stroke: var(--pt-rojo); stroke-width: 1.8; }
-.pt-insignia-icono { fill: var(--pt-blanco); }
-.pt-tecnico { opacity: 0; animation: pt-trabajando 18s linear infinite both; animation-delay: var(--d); }
-.pt-chispa { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; animation: pt-chispa 0.42s steps(2, end) infinite; }
+/* La camioneta de la cuadrilla (de lado, con la escalera en el techo y los faros encendidos) */
+.pt-camion-cuerpo { fill: #e4e7ea; stroke: #000; stroke-width: 0.7; stroke-linejoin: round; }
+.pt-camion-vidrio { fill: #22272e; }
+.pt-camion-linea { fill: none; stroke: #9aa0a8; stroke-width: 0.6; }
+.pt-camion-soporte { fill: none; stroke: #8a9099; stroke-width: 0.9; }
+.pt-escalera path { fill: none; stroke: #c9cdd2; stroke-width: 0.85; stroke-linecap: round; }
+.pt-rueda circle { fill: #0b0d10; stroke: #5d646d; stroke-width: 0.7; }
+.pt-rin circle { fill: #8a9099; }
+.pt-faro { fill: #fff; }
+.pt-faro-luz { fill: url(#pt-haz); }
+.pt-baliza-luz { fill: var(--pt-ambar); }
+.pt-baliza-halo { fill: url(#pt-destello-ambar); animation: pt-baliza 0.9s steps(1, end) infinite; }
+/* En el sitio sube la escalera (11.5 % a 14 % del ciclo), el técnico trabaja arriba y saltan chispas */
+.pt-escalera.sube { transform-box: fill-box; transform-origin: 0% 100%; animation: pt-sube 18s cubic-bezier(0.23, 1, 0.32, 1) infinite both; animation-delay: var(--d); }
+.pt-obrero { opacity: 0; animation: pt-obrero 18s linear infinite both; animation-delay: var(--d); }
+.pt-obrero-cuerpo { fill: var(--pt-ambar); stroke: #000; stroke-width: 0.5; }
+.pt-obrero-cara { fill: #c9cdd2; }
+.pt-obrero-casco { fill: #fff; }
+.pt-chispas { opacity: 0; animation: pt-chispas 18s linear infinite both; animation-delay: var(--d); }
+.pt-chispa { fill: none; stroke: #fff; stroke-width: 1.2; stroke-linecap: round; animation: pt-chispa 0.42s steps(2, end) infinite; }
+.pt-poste { fill: none; stroke: #8a9099; stroke-width: 1.3; stroke-linecap: round; }
+/* Las antenas: la señal sale en ondas a los dos lados y la luz de arriba parpadea */
+.pt-torre-reja { fill: none; stroke: #5d646d; stroke-width: 0.85; stroke-linejoin: round; }
+.pt-torre-panel { fill: #9aa0a8; }
+.pt-arco { fill: none; stroke: #e9ebee; stroke-width: 1.25; stroke-linecap: round; opacity: 0; animation: pt-arco 2.4s ease-out infinite; animation-delay: var(--t); }
+.pt-arco.a1 { animation-delay: calc(var(--t) + 0.28s); }
+.pt-arco.a2 { animation-delay: calc(var(--t) + 0.56s); }
+.pt-torre-luz { fill: var(--pt-blanco); animation: pt-luz 2s steps(1, end) infinite; animation-delay: var(--t); }
+/* La antena de una falla se queda sin señal y en rojo; al restablecerse, vuelve con un destello */
+.pt-torre.con-falla .pt-senal { animation: pt-sin-senal 18s linear infinite both; animation-delay: var(--d); }
+.pt-torre-falla { fill: var(--pt-rojo); opacity: 0; animation: pt-luz-falla 18s linear infinite both; animation-delay: var(--d); }
+.pt-torre-vuelve { fill: none; stroke: #fff; stroke-width: 1.4; opacity: 0; transform-box: fill-box; transform-origin: center; animation: pt-vuelve 18s ease-out infinite both; animation-delay: var(--d); }
 .pt-activo { animation: pt-activo 18s linear infinite both; animation-delay: var(--d); }
 .pt-ok { opacity: 0; animation: pt-restablecido 18s linear infinite both; animation-delay: var(--d); }
 .pt-ok-fondo { fill: var(--pt-blanco); stroke: #000; stroke-width: 1.5; }
@@ -837,6 +866,15 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @keyframes pt-activo { 0%, 20% { opacity: 1; } 21%, 100% { opacity: 0; } }
 @keyframes pt-tinte { 0%, 2.4% { opacity: 0; } 4.6%, 20.5% { opacity: 1; } 23%, 100% { opacity: 0; } }
 @keyframes pt-chispa { 0% { opacity: 1; } 50% { opacity: 0.15; } }
+@keyframes pt-sube { 0%, 11.5% { transform: rotate(0deg); } 14%, 100% { transform: rotate(-55deg); } }
+@keyframes pt-obrero { 0%, 13.6% { opacity: 0; } 14.4%, 100% { opacity: 1; } }
+@keyframes pt-chispas { 0%, 14.6% { opacity: 0; } 15%, 20.5% { opacity: 1; } 21%, 100% { opacity: 0; } }
+@keyframes pt-baliza { 0% { opacity: 1; } 50% { opacity: 0.12; } }
+@keyframes pt-arco { 0% { opacity: 0; } 16% { opacity: 0.9; } 62%, 100% { opacity: 0; } }
+@keyframes pt-luz { 0% { opacity: 1; } 14% { opacity: 0.2; } }
+@keyframes pt-sin-senal { 0%, 1.7% { opacity: 1; } 2.2%, 21.5% { opacity: 0; } 22.3%, 100% { opacity: 1; } }
+@keyframes pt-luz-falla { 0%, 1.7% { opacity: 0; } 2.2%, 21.5% { opacity: 1; } 22.3%, 100% { opacity: 0; } }
+@keyframes pt-vuelve { 0%, 21.5% { opacity: 0; transform: scale(0.5); } 22% { opacity: 1; transform: scale(0.5); } 27.5%, 100% { opacity: 0; transform: scale(2.8); } }
 @keyframes pt-deriva { from { transform: translateX(-34px); } to { transform: translateX(42px); } }
 @keyframes pt-escena { 0%, 2.4% { opacity: 0; } 4.6%, 30% { opacity: 1; } 33.3%, 100% { opacity: 0; } }
 @keyframes pt-rayo { 0%, 1.1% { opacity: 0; } 1.7% { opacity: 1; } 2.3% { opacity: 0.15; } 2.9% { opacity: 1; } 3.8% { opacity: 0.3; } 5%, 100% { opacity: 0; } }
@@ -844,16 +882,43 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @keyframes pt-onda { from { transform: scale(1); opacity: 0.9; } to { transform: scale(4.2); opacity: 0; } }
 @keyframes pt-lluvia-1 { from { transform: rotate(14deg) translate3d(0, -160px, 0); } to { transform: rotate(14deg) translate3d(0, 0, 0); } }
 @keyframes pt-lluvia-2 { from { transform: rotate(14deg) translate3d(0, -112px, 0); } to { transform: rotate(14deg) translate3d(0, 0, 0); } }
-.login-form { display: grid; place-items: center; padding: 40px 24px; background: var(--surface); }
-.login-caja { width: min(460px, 100%); display: flex; flex-direction: column; gap: 18px; }
-.acceso-bloque { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; border-top: 1px solid var(--line); }
-.acceso-bloque h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--ink-2); }
-.acceso-bloque .sub { margin: 0; }
-.acceso-titulo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* ---------- Panel de entrada ----------
+   La antena del mapa, chica, en la esquina de arriba a la derecha, y su señal en ondas tenues que cruzan el
+   panel (con los colores del tema). Cada forma de entrar lleva su ícono y dice para quién es. */
+.login-form { position: relative; overflow: hidden; isolation: isolate; display: grid; place-items: center; padding: 40px 24px;
+  background: radial-gradient(560px 460px at 100% 0%, var(--surface-2), transparent 72%), var(--surface); }
+.acceso-fondo { position: absolute; z-index: -1; top: -262px; right: -262px; width: 640px; height: 640px; pointer-events: none; }
+.af-onda { fill: none; stroke: color-mix(in srgb, var(--ink) 7%, transparent); stroke-width: 1; }
+.af-ping { fill: none; stroke: color-mix(in srgb, var(--ink) 13%, transparent); stroke-width: 1.2; vector-effect: non-scaling-stroke; opacity: 0;
+  transform-box: fill-box; transform-origin: center; animation: af-ping 5.5s cubic-bezier(0.2, 0.6, 0.35, 1) infinite; }
+.af-reja { fill: none; stroke: var(--ink-3); stroke-width: 0.85; stroke-linejoin: round; }
+.af-panel { fill: var(--ink-3); }
+.af-arco { fill: none; stroke: var(--ink-2); stroke-width: 1.15; stroke-linecap: round; opacity: 0; animation: pt-arco 2.4s ease-out infinite; }
+.af-arco.a1 { animation-delay: 0.28s; }
+.af-arco.a2 { animation-delay: 0.56s; }
+@keyframes af-ping { 0% { transform: scale(1); opacity: 0; } 6% { opacity: 1; } 100% { transform: scale(7.5); opacity: 0; } }
+.login-caja { width: min(440px, 100%); display: flex; flex-direction: column; gap: 20px; }
+.login-cab { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
+.login-cab .sub { margin: 0; }
+.saludo { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 14px; font-weight: 600; color: var(--ink-3); }
+.login-caja h2 { margin: 0; font-size: 38px; line-height: 1; font-weight: 850; font-stretch: 125%; letter-spacing: -0.02em; }
+.login-caja h2.largo { font-size: 30px; line-height: 1.05; }
+.acceso-bloque { display: flex; flex-direction: column; gap: 14px; }
+.acceso-bloque > .sub { margin: 0; }
+.acceso-cab { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.acceso-ico { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.acceso-cab-txt { min-width: 0; }
+.acceso-cab h3 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--ink); }
+.acceso-cab .sub { margin: 2px 0 0; font-size: 13.5px; line-height: 1.35; }
+.acceso-titulo { display: flex; align-items: center; justify-content: space-between; gap: 10px 12px; }
+.acceso-titulo .acceso-cab { flex: 1 1 auto; }
+.acceso-titulo .seg { flex: none; }
+.acceso-o { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--ink-3); }
+.acceso-o::before, .acceso-o::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .aviso-acceso { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .error-acceso { background: var(--falla-soft); color: var(--falla-text); }
-.pie-acceso { margin: 0; }
-.login-caja h2 { margin: 0; font-size: 26px; font-weight: 800; font-stretch: 115%; }
+.pie-acceso { margin: 0; display: flex; align-items: center; gap: 7px; }
+.pie-acceso svg { flex: none; }
 .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rol { text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); transition: border-color 150ms ease, background-color 150ms ease; }
 .rol b { display: block; font-size: 14px; }
@@ -981,6 +1046,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .senal { display: none; }
   .fallas-lista { grid-template-columns: minmax(0, 1fr); }
   .opciones-inicio, .roles, .fila-campos { grid-template-columns: 1fr; }
+  .login-caja h2 { font-size: 32px; }
   .kpi + .kpi { border-left: 0; }
   .mini-kpis { grid-template-columns: 1fr; }
   .mini-kpis > div + div { border-left: 0; border-top: 1px solid var(--line); }
@@ -995,6 +1061,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .hist-etiquetas:empty { display: none; }
 }
 @media (max-width: 480px) {
+  .acceso-titulo { flex-wrap: wrap; }
   .marca > div:last-child { display: none; }
   .datos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
   .resumen-base { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -1014,6 +1081,16 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   /* Primera alerta quieta: la cuadrilla ya en el sitio y los técnicos trabajando */
   .portada .pt-viaje { animation: none !important; transform: translate(var(--x1), var(--y1)); }
   .portada .pt-ruta { animation: none !important; stroke-dashoffset: 0; }
-  .portada .pt-tecnico, .portada .pt-e-trabajo, .portada .pt-activo { animation: none !important; opacity: 1; }
-  .portada .pt-e-camino, .portada .pt-e-listo, .portada .pt-ok, .portada .pt-chispa { animation: none !important; opacity: 0; }
+  .portada .pt-e-trabajo, .portada .pt-activo, .portada .pt-obrero, .portada .pt-chispas, .portada .pt-chispa { animation: none !important; opacity: 1; }
+  .portada .pt-escalera.sube { animation: none !important; transform: rotate(-55deg); }
+  .portada .pt-e-camino, .portada .pt-e-listo, .portada .pt-ok, .portada .pt-torre-vuelve { animation: none !important; opacity: 0; }
+  /* Las antenas dan señal quieta, salvo la de la primera falla (sin señal y con la luz en rojo); la baliza
+     queda encendida y las cuadrillas que recorren la red se quedan en su punto de salida */
+  .portada .pt-arco, .portada .pt-torre-luz, .portada .pt-baliza-halo, .portada .pt-senal, .portada .pt-torre-falla { animation: none !important; }
+  .portada .pt-arco { opacity: 0.6; }
+  .portada .pt-torre-falla, .portada .pt-torre.f1 .pt-senal { opacity: 0; }
+  .portada .pt-torre.f1 .pt-torre-falla { opacity: 1; }
+  .portada .pt-ronda { animation: none !important; }
+  .af-arco { animation: none !important; opacity: 1; }
+  .af-ping { display: none; }
 }

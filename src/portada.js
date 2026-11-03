@@ -1,9 +1,11 @@
 /* ==========================================================================
    ALERTAS · Portada (pantalla de entrada)
-   Honduras de noche: la red entre ciudades, una tormenta eléctrica sobre la
-   costa norte y, en ciclo de 18 s, tres fallas de ejemplo. En cada una: el rayo,
-   el nodo en rojo y el departamento marcado; una cuadrilla que sale de una ciudad
-   cercana, los técnicos trabajando en el sitio y el servicio restablecido.
+   Honduras de noche: la red entre ciudades, las antenas dando señal, las
+   cuadrillas que recorren la red y una tormenta eléctrica sobre la costa norte.
+   En ciclo de 18 s, tres fallas de ejemplo. En cada una: el rayo, el nodo en
+   rojo, el departamento marcado y la antena sin señal; una cuadrilla sale de una
+   ciudad cercana con la baliza encendida, sube la escalera, el técnico trabaja
+   y el servicio queda restablecido (la antena vuelve a dar señal).
    A la derecha del mapa, el zoom a Tegucigalpa y sus colonias.
    Es una ilustración: no muestra datos reales ni conteos.
    ========================================================================== */
@@ -12,7 +14,7 @@ const Portada = (() => {
   /* Ciudades sobre el mapa (proyección del mapa: x = (lon + 89.35) * 160.77, y = (16.52 - lat) * 166.38).
      [x, y, nombre visible, posición de la etiqueta]. Tegucigalpa va sin nombre: lo lleva el zoom de abajo. */
   const N = {
-    teg: [346.9, 407.2, '', 'izq'], sps: [213.0, 169.0, 'San Pedro Sula', 'izq'], lce: [412.8, 126.5, 'La Ceiba', 'arriba-izq'],
+    teg: [346.9, 407.2, '', 'izq'], sps: [213.0, 169.0, 'San Pedro Sula', 'izq'], lce: [412.8, 126.5, 'La Ceiba', 'abajo-izq'],
     cho: [347.1, 535.6, 'Choluteca', 'der'], roa: [452.2, 34.0, 'Roatán', 'der'], jut: [503.3, 308.4, 'Juticalpa', 'der'],
     ple: [897.6, 208.5, 'Puerto Lempira', 'izq'],
     src: [91.1, 291.7], com: [274.9, 342.7], dan: [444.8, 413.7], pro: [249.2, 186.3], tru: [546.6, 100.4], tel: [302.8, 122.6],
@@ -26,19 +28,57 @@ const Portada = (() => {
     ['src', 'gra', 's'], ['gra', 'esp', 's'], ['esp', 'sig', 's'], ['sps', 'sig', 'f'], ['sig', 'com', 'f'], ['com', 'lpz', 's'], ['com', 'teg', 'f'],
     ['teg', 'dan', 's'], ['teg', 'nac', 'f'], ['nac', 'cho', 'f'], ['teg', 'jut', 'f'], ['jut', 'cat', 's'], ['cat', 'ple', 'r']
   ];
-  /* Las tres escenas del ciclo. desde: la ciudad de donde sale la cuadrilla; tec: dónde trabajan los técnicos (respecto al nodo) */
+  /* Antenas: [x, y del pie]. Las dos primeras son las de las fallas de La Ceiba y San Pedro Sula. */
+  const TORRES = [[384, 130], [247, 138], [482, 292], [640, 240], [850, 302], [300, 305], [138, 258]];
+  /* Las tres escenas del ciclo. desde: la ciudad de donde sale la cuadrilla; torre: la antena que se queda sin
+     señal (la cuadrilla se estaciona al pie y sube la escalera). Sin torre, la cuadrilla llega al nodo. */
   const ESCENAS = [
-    { n: 'lce', depto: 'ATLANTIDA', motivo: 'Falla de energía comercial', lugar: 'La Ceiba, Atlántida', pos: 'der', desde: 'tel', tec: [-4, 30],
-      rayo: [[380, -38], [392, -6], [382, 18], [400, 44], [392, 68], [409, 92], [402, 110], [412, 124]], rama: [[400, 44], [422, 58], [415, 80]] },
-    { n: 'sps', depto: 'CORTES', motivo: 'Reemplazo de equipo', lugar: 'San Pedro Sula, Cortés', pos: 'abajo', desde: 'pro', tec: [-12, -28],
-      rayo: [[254, -38], [240, 0], [249, 26], [229, 58], [238, 86], [220, 114], [228, 138], [213, 166]], rama: [[238, 86], [256, 100], [250, 122]] },
-    { n: 'teg', depto: 'FRANCISCO MORAZAN', motivo: 'Corte de fibra óptica', lugar: 'Tegucigalpa, Col. Kennedy', pos: 'izq', desde: 'dan', tec: [4, 32] }
+    { n: 'lce', depto: 'ATLANTIDA', motivo: 'Falla de energía comercial', lugar: 'La Ceiba, Atlántida', pos: 'der', desde: 'tel', torre: 0,
+      rayo: [[372, -38], [386, -10], [375, 12], [392, 34], [381, 52], [391, 64], [384, 76]], rama: [[392, 34], [412, 48], [406, 66]] },
+    { n: 'sps', depto: 'CORTES', motivo: 'Reemplazo de equipo', lugar: 'San Pedro Sula, Cortés', pos: 'abajo', desde: 'tel', torre: 1,
+      rayo: [[262, -38], [250, -6], [260, 18], [244, 42], [256, 60], [242, 72], [247, 84]], rama: [[244, 42], [226, 58], [232, 76]] },
+    { n: 'teg', depto: 'FRANCISCO MORAZAN', motivo: 'Corte de fibra óptica', lugar: 'Tegucigalpa, Col. Kennedy', pos: 'izq', desde: 'dan' }
   ];
   const ESTADOS = [['Cuadrilla en camino', 'pt-e-camino'], ['Técnicos trabajando', 'pt-e-trabajo'], ['Servicio restablecido', 'pt-e-listo']];
   const retraso = (i) => (1.2 + i * 6) + 's';
+  /* Tamaño de las antenas y de las camionetas sobre el mapa (en el zoom de Tegucigalpa van más grandes) */
+  const ESC_TORRE = 1.25, ESC_CAMION = 1.3, ESC_URBE = 1.5;
+  /* Cuadrillas que recorren la red todo el tiempo, de ida y vuelta (puntos o ciudades). No pasan por donde salen
+     los rótulos de las fallas. desfase: en qué parte del recorrido arrancan, para que no salgan todas juntas. */
+  const RONDAS = [
+    { p: [[414.5, 364.5], 'jut', 'cat'], vel: 16, desfase: 0.3 },
+    { p: ['sig', 'esp', 'gra', 'src', [135.3, 279.3]], vel: 16, desfase: 0.62 },
+    { p: ['nac', [333.2, 524.4]], vel: 8, desfase: 0.1 }
+  ];
 
   const linea = (a, b) => 'M' + N[a][0] + ' ' + N[a][1] + 'L' + N[b][0] + ' ' + N[b][1];
   const trazo = (pts) => 'M' + pts.map((p) => p.join(' ')).join('L');
+  const punto = (p) => (typeof p === 'string' ? N[p].slice(0, 2) : p);
+
+  /* Ida y vuelta a velocidad constante, con una pausa en cada punta. Al cambiar de sentido la camioneta da la
+     vuelta (0.3 s). Devuelve la duración y los fotogramas [segundo, x, y, sentido]. */
+  function recorrido(pts, vel, pausa) {
+    const ev = [];
+    let t = 0, s = pts[1][0] >= pts[0][0] ? 1 : -1;
+    const inicial = s;
+    ev.push([0, pts[0][0], pts[0][1], s]);
+    const tramo = (lista) => {
+      for (let i = 1; i < lista.length; i++) {
+        const a = lista[i - 1], b = lista[i];
+        const ns = b[0] > a[0] + 0.5 ? 1 : b[0] < a[0] - 0.5 ? -1 : s;
+        if (ns !== s) { t += 0.3; s = ns; ev.push([t, a[0], a[1], s]); }
+        t += Math.hypot(b[0] - a[0], b[1] - a[1]) / vel;
+        ev.push([t, b[0], b[1], s]);
+      }
+      const fin = lista[lista.length - 1];
+      t += pausa; ev.push([t, fin[0], fin[1], s]);
+    };
+    tramo(pts); tramo(pts.slice().reverse());
+    if (s !== inicial) { t += 0.3; ev.push([t, pts[0][0], pts[0][1], inicial]); }
+    return { dur: t, ev };
+  }
+  const fotogramas = (nombre, r) => '@keyframes ' + nombre + '{' + r.ev.map(([t, x, y, s]) =>
+    (t / r.dur * 100).toFixed(3) + '%{transform:translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) scaleX(' + s + ')}').join('') + '}';
 
   function Reticula() {
     // Paralelos y meridianos de cada grado, apenas visibles
@@ -70,29 +110,86 @@ const Portada = (() => {
     </g>`;
   }
 
-  /* Insignias de 23 unidades: camión de la cuadrilla y casco de técnico */
-  const CAMION = 'M-7.5 -4.5h8.5v7.5h-8.5zM1.6 -2.2h3.4l2.5 2.8v2.9h-5.9zM-4.4 3.2a1.7 1.7 0 1 0 0.01 0zM4.3 3.2a1.7 1.7 0 1 0 0.01 0z';
-  const CASCO = 'M-6.8 1.2a6.8 6.6 0 0 1 13.6 0zM-8.6 1.4h17.2v2.4h-17.2zM-1 -5.3h2v3.2h-2z';
-  function Insignia({ icono, clase }) {
-    return html`<g class=${clase}><circle class="pt-insignia" r="11.5" /><path class="pt-insignia-icono" d=${icono} /></g>`;
+  /* Antena de telecomunicaciones: torre de celosía con sus paneles y la señal que sale a los dos lados.
+     (0, 0) es el pie. La de una falla se queda sin señal, con la luz en rojo, hasta que se restablece. */
+  const arco = (r) => {
+    const c = (r * 0.788).toFixed(2), a = (34 + r * 0.616).toFixed(2), b = (34 - r * 0.616).toFixed(2);
+    return 'M' + c + ' -' + a + 'A' + r + ' ' + r + ' 0 0 1 ' + c + ' -' + b + 'M-' + c + ' -' + a + 'A' + r + ' ' + r + ' 0 0 0 -' + c + ' -' + b;
+  };
+  const ARCOS = [6.5, 10.5, 14.5].map(arco);
+  const REJA = 'M-5 0L-1.3 -30M5 0L1.3 -30M-5 0L4.38 -5L-3.77 -10L3.15 -15L-2.53 -20L1.92 -25L-1.3 -30'
+    + 'M5 0L-4.38 -5L3.77 -10L-3.15 -15L2.53 -20L-1.92 -25L1.3 -30M-3.2 -30H3.2M0 -30V-40.5';
+  const PANELES = 'M-4.3 -36.4h1.7v5.6h-1.7zM2.6 -36.4h1.7v5.6h-1.7zM-1.9 -23.6a2.1 2.1 0 0 0 0 4.2z';
+  function Torre({ t, i }) {
+    const esc = ESCENAS.findIndex((e) => e.torre === i);
+    return html`<g class=${'pt-torre' + (esc >= 0 ? ' con-falla f' + (esc + 1) : '')} transform=${'translate(' + t[0] + ' ' + t[1] + ') scale(' + ESC_TORRE + ')'}
+      style=${'--t:-' + ((i * 0.83) % 2.4).toFixed(2) + 's' + (esc >= 0 ? ';--d:' + retraso(esc) : '')}>
+      <path class="pt-torre-reja" d=${REJA} />
+      <path class="pt-torre-panel" d=${PANELES} />
+      <g class="pt-senal">${ARCOS.map((d, k) => html`<path class=${'pt-arco a' + k} d=${d} key=${k} />`)}</g>
+      <circle class="pt-torre-luz" cy="-41.6" r="1.2" />
+      ${esc >= 0 && html`<circle class="pt-torre-falla" cy="-41.6" r="1.7" /><circle class="pt-torre-vuelve" cy="-34" r="7" />`}
+    </g>`;
   }
 
-  /* La cuadrilla: sale de una ciudad cercana por la red, llega al sitio y los técnicos trabajan */
+  /* Camioneta de la cuadrilla, vista de lado y mirando a la derecha; (0, 0) es el suelo entre las ruedas.
+     Lleva la escalera en el techo; en el sitio la sube y el técnico trabaja arriba (chispas). */
+  const ESCALONES = Array.from({ length: 8 }, (_, i) => 'M' + (-16 + i * 3) + ' -14.2V-16.4').join('');
+  function Camion({ baliza, sube }) {
+    return html`<g class="pt-camion">
+      <path class="pt-faro-luz" d="M17.6 -7.4L44 -13V-0.6L17.6 -5.2z" />
+      <path class="pt-camion-soporte" d="M-15.5 -12V-14.2M0.5 -12V-14.2" />
+      <path class="pt-camion-cuerpo" d="M-17.5 -5.2V-11a1 1 0 0 1 1-1H2.5V-4.2H-16.5a1 1 0 0 1-1-1zM2.5 -4.2V-12.6H9.6L13.2 -8.4H16.4a1.2 1.2 0 0 1 1.2 1.2V-5.4a1.2 1.2 0 0 1-1.2 1.2z" />
+      <path class="pt-camion-vidrio" d="M4.2 -11.2H9L11.5 -8.4H4.2z" />
+      <path class="pt-camion-linea" d="M-17.5 -7.6H2.5M-11 -11.2V-4.8M-4.5 -11.2V-4.8" />
+      <circle class="pt-faro" cx="17" cy="-6.4" r="0.95" />
+      <g class="pt-rueda"><circle cx="-9.5" cy="-2.9" r="2.9" /><circle cx="10" cy="-2.9" r="2.9" /></g>
+      <g class="pt-rin"><circle cx="-9.5" cy="-2.9" r="1" /><circle cx="10" cy="-2.9" r="1" /></g>
+      <g class=${'pt-escalera' + (sube ? ' sube' : '')}><path d=${'M-18.5 -14.2H6.5M-18.5 -16.4H6.5' + ESCALONES} /></g>
+      ${baliza && html`<g class="pt-baliza"><circle class="pt-baliza-halo" cx="8.5" cy="-13.2" r="6" /><path class="pt-baliza-luz" d="M7.2 -12.6a1.3 1.3 0 0 1 2.6 0z" /></g>`}
+      ${sube && html`<g class="pt-obrero">
+        <path class="pt-obrero-cuerpo" d="M-10.4 -25.6l0.9 -5.2h2.6l0.2 5.2z" />
+        <circle class="pt-obrero-cara" cx="-8.1" cy="-32.6" r="1.3" />
+        <path class="pt-obrero-casco" d="M-9.9 -32.9a1.8 1.8 0 0 1 3.6 0z" />
+        <g class="pt-chispas"><path class="pt-chispa" d="M-1.6 -36.6l2.4 -2.6M-0.6 -34.2h3.4M-3.4 -38.2v-3.2M-0.8 -31.6l2.4 1.8" /></g>
+      </g>`}
+    </g>`;
+  }
+
+  /* La cuadrilla de una falla: sale de una ciudad cercana con la baliza encendida, se estaciona al pie de la
+     antena (o junto al nodo), sube la escalera y el técnico trabaja hasta que el servicio queda restablecido */
   function Cuadrilla(e, i) {
-    const [x0, y0] = N[e.desde], [x1, y1] = N[e.n];
-    const dx = x1 - x0, dy = y1 - y0, largo = Math.hypot(dx, dy), k = Math.max(0, (largo - 24) / largo);
-    const xs = +(x0 + dx * k).toFixed(1), ys = +(y0 + dy * k).toFixed(1);
-    const [tx, ty] = [x1 + e.tec[0], y1 + e.tec[1]];
+    const [x0, y0] = N[e.desde];
+    let xs, ys;
+    if (e.torre >= 0) {
+      // La escalera subida queda contra la antena: la camioneta un poco adelante del pie
+      const [tx, ty] = TORRES[e.torre], d = 2.6 * ESC_CAMION;
+      xs = tx + (tx >= x0 ? d : -d); ys = ty;
+    } else {
+      const [x1, y1] = N[e.n], dx = x1 - x0, dy = y1 - y0, largo = Math.hypot(dx, dy), k = Math.max(0, (largo - 24) / largo);
+      xs = +(x0 + dx * k).toFixed(1); ys = +(y0 + dy * k).toFixed(1);
+    }
     return html`<g class=${'pt-cuadrilla esc esc-' + (i + 1)} style=${'--d:' + retraso(i)}>
       <path class="pt-ruta" d=${'M' + x0 + ' ' + y0 + 'L' + xs + ' ' + ys} pathLength="100" />
       <g class="pt-viaje" style=${'--x0:' + x0 + 'px;--y0:' + y0 + 'px;--x1:' + xs + 'px;--y1:' + ys + 'px'}>
-        <${Insignia} icono=${CAMION} clase="pt-camion" />
-      </g>
-      <g class="pt-tecnico" transform=${'translate(' + tx + ' ' + ty + ')'}>
-        <${Insignia} icono=${CASCO} clase="" />
-        <path class="pt-chispa" d="M10 -10l5 -5M13 -4h6M4 -13v-6" />
+        <g transform=${'scale(' + (xs < x0 ? -ESC_CAMION : ESC_CAMION) + ' ' + ESC_CAMION + ')'}><${Camion} baliza=${true} sube=${e.torre >= 0} /></g>
       </g>
     </g>`;
+  }
+
+  /* Las cuadrillas que recorren la red */
+  function Rondas({ lista, prefijo, escala }) {
+    return html`<g>${lista.map((r, i) => {
+      const pts = r.p.map(punto), rec = recorrido(pts, r.vel, 1.6), nombre = prefijo + i;
+      const s0 = pts[1][0] >= pts[0][0] ? 1 : -1;
+      return html`<g key=${nombre}>
+        <style>${fotogramas(nombre, rec)}</style>
+        <g class="pt-ronda" transform=${'translate(' + pts[0][0] + ' ' + pts[0][1] + ')' + (s0 < 0 ? ' scale(-1 1)' : '')}
+          style=${'animation:' + nombre + ' ' + rec.dur.toFixed(2) + 's linear infinite;animation-delay:-' + (rec.dur * r.desfase).toFixed(2) + 's'}>
+          <g transform=${'scale(' + escala + ')'}><${Camion} /></g>
+        </g>
+      </g>`;
+    })}</g>`;
   }
 
   function Ciudad() {
@@ -102,6 +199,8 @@ const Portada = (() => {
     for (let j = 0; j <= 16; j++) calles.push('M620 ' + (430 + j * 21) + 'H1050');
     const rio = 'M736 486C760 540 720 575 770 610S793 668 761 693';
     const colonias = [['Comayagüela', 698, 650], ['El Centro', 786, 548], ['Palmira', 852, 536], ['Miraflores', 910, 572], ['Loarque', 790, 684]];
+    // En el zoom todo se ve más cerca: la camioneta va más grande
+    const [xa, ya, xb, yb] = [792, 560, 884, 618];
     // Dibujado en 680..990 x 440..705 y llevado a la derecha del mapa (Nicaragua), donde no tapa ningún departamento
     return html`<g class="pt-urbe" transform="translate(712 345) scale(0.9) translate(-680 -440)">
       <rect class="pt-urbe-marco" x="680" y="440" width="310" height="265" rx="14" />
@@ -117,6 +216,7 @@ const Portada = (() => {
         <path class="pt-urbe-rio" d=${rio} />
         ${colonias.map(([t, x, y]) => html`<text class="pt-urbe-colonia" x=${x} y=${y}>${t}</text>`)}
         <text class="pt-urbe-colonia" x="872" y="682">Col. Kennedy</text>
+        <${Rondas} lista=${[{ p: [[812, 518], [900, 507.5], [956, 501]], vel: 14, desfase: 0.55 }]} prefijo="pt-ronda-urbe-" escala=${ESC_URBE} />
         <g class="esc esc-3" style=${'--d:' + retraso(2)}>
           <g class="pt-activo">
             <circle class="pt-onda" cx="910" cy="629" r="7" />
@@ -124,11 +224,10 @@ const Portada = (() => {
             <circle class="pt-foco" cx="910" cy="629" r="5.5" />
           </g>
           <text class="pt-urbe-colonia roja" x="872" y="682">Col. Kennedy</text>
-          <path class="pt-ruta" d="M792 560L884 618" pathLength="100" />
-          <g class="pt-viaje" style="--x0:792px;--y0:560px;--x1:884px;--y1:618px"><${Insignia} icono=${CAMION} clase="pt-camion" /></g>
-          <g class="pt-tecnico" transform="translate(934 610)">
-            <${Insignia} icono=${CASCO} clase="" />
-            <path class="pt-chispa" d="M10 -10l5 -5M13 -4h6M4 -13v-6" />
+          <path class="pt-ruta" d=${'M' + xa + ' ' + ya + 'L' + xb + ' ' + yb} pathLength="100" />
+          <g transform=${'translate(' + (xb - 2.6 * ESC_URBE) + ' ' + yb + ') scale(' + ESC_URBE + ')'}><path class="pt-poste" d="M0 0V-41M-6 -37.4H6M-4.6 -37.4v1.8M4.6 -37.4v1.8" /></g>
+          <g class="pt-viaje" style=${'--x0:' + xa + 'px;--y0:' + ya + 'px;--x1:' + xb + 'px;--y1:' + yb + 'px'}>
+            <g transform=${'scale(' + ESC_URBE + ')'}><${Camion} baliza=${true} sube=${true} /></g>
           </g>
         </g>
       </g>
@@ -144,6 +243,8 @@ const Portada = (() => {
         <radialGradient id="pt-nube"><stop offset="0" stop-color="#c9cdd2" stop-opacity=".2" /><stop offset=".6" stop-color="#8a9099" stop-opacity=".08" /><stop offset="1" stop-color="#8a9099" stop-opacity="0" /></radialGradient>
         <radialGradient id="pt-nucleo"><stop offset="0" stop-color="#e3241b" stop-opacity=".42" /><stop offset="1" stop-color="#e3241b" stop-opacity="0" /></radialGradient>
         <radialGradient id="pt-desvanecer"><stop offset="0" stop-color="#fff" /><stop offset=".65" stop-color="#fff" stop-opacity=".45" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></radialGradient>
+        <radialGradient id="pt-destello-ambar"><stop offset="0" stop-color="#ffb22e" stop-opacity=".95" /><stop offset=".4" stop-color="#ffb22e" stop-opacity=".35" /><stop offset="1" stop-color="#ffb22e" stop-opacity="0" /></radialGradient>
+        <linearGradient id="pt-haz"><stop offset="0" stop-color="#f4f5f6" stop-opacity=".42" /><stop offset="1" stop-color="#f4f5f6" stop-opacity="0" /></linearGradient>
         <pattern id="pt-gotas" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(16)"><rect width="1.3" height="5.5" fill="#d6dadf" /></pattern>
         <mask id="pt-mascara-nube"><ellipse cx="300" cy="38" rx="270" ry="112" fill="url(#pt-desvanecer)" /></mask>
         <clipPath id="pt-recorte-urbe"><rect x="692" y="486" width="286" height="207" rx="8" /></clipPath>
@@ -164,15 +265,21 @@ const Portada = (() => {
         <circle cx=${tx} cy=${ty} r="27" />
         <path d=${'M' + (tx + 22) + ' ' + (ty - 16) + 'L712 356M' + (tx + 20) + ' ' + (ty + 18) + 'L712 572'} />
       </g>
+      <g>${TORRES.map((t, i) => html`<${Torre} t=${t} i=${i} key=${i} />`)}</g>
       <g>${Object.keys(N).map((k) => {
         const [x, y, nombre, pos] = N[k];
         return html`<g>
           ${pos && html`<circle class="pt-halo" cx=${x} cy=${y} r="9.5" />`}
           <circle class=${'pt-nodo' + (pos ? ' mayor' : '')} cx=${x} cy=${y} r=${pos ? 4.6 : 3.1} />
-          ${nombre && html`<text class="pt-ciudad" x=${pos === 'izq' ? x - 16 : pos === 'der' ? x + 15 : pos === 'arriba-izq' ? x - 4 : x}
-            y=${pos === 'abajo' ? y + 30 : pos === 'arriba' || pos === 'arriba-izq' ? y - 16 : y + 5}
-            text-anchor=${pos === 'izq' || pos === 'arriba-izq' ? 'end' : pos === 'der' ? 'start' : 'middle'}>${nombre}</text>`}
         </g>`;
+      })}</g>
+      <${Rondas} lista=${RONDAS} prefijo="pt-ronda-" escala=${ESC_CAMION} />
+      <g>${Object.keys(N).filter((k) => N[k][2]).map((k) => {
+        const [x, y, nombre, pos] = N[k];
+        const izq = pos === 'izq' || pos === 'arriba-izq' || pos === 'abajo-izq';
+        return html`<text class="pt-ciudad" x=${pos === 'izq' ? x - 16 : pos === 'der' ? x + 15 : pos === 'arriba-izq' ? x - 4 : pos === 'abajo-izq' ? x - 6 : x}
+          y=${pos === 'abajo' ? y + 30 : pos === 'abajo-izq' ? y + 27 : pos === 'arriba' || pos === 'arriba-izq' ? y - 16 : y + 5}
+          text-anchor=${izq ? 'end' : pos === 'der' ? 'start' : 'middle'}>${nombre}</text>`;
       })}</g>
       <${Ciudad} />
       ${ESCENAS.map((e, i) => e.rayo && html`<g class=${'pt-rayo rayo-' + (i + 1)}>
@@ -184,7 +291,21 @@ const Portada = (() => {
     </svg>`;
   }
 
-  return { Escena };
+  /* En el panel de entrada: la misma antena, chica, en la esquina de arriba a la derecha, y su señal en ondas
+     tenues que cruzan el panel (con los colores del tema). La antena queda en (320, 320) del dibujo. */
+  function Fondo() {
+    return html`<svg class="acceso-fondo" viewBox="0 0 640 640" aria-hidden="true" focusable="false">
+      ${[56, 112, 168, 224, 280].map((r) => html`<circle class="af-onda" cx="320" cy="320" r=${r} key=${r} />`)}
+      <circle class="af-ping" cx="320" cy="320" r="40" />
+      <g transform="translate(320 366) scale(1.35)">
+        <path class="af-reja" d=${REJA} />
+        <path class="af-panel" d=${PANELES} />
+        ${ARCOS.map((d, k) => html`<path class=${'af-arco a' + k} d=${d} key=${k} />`)}
+      </g>
+    </svg>`;
+  }
+
+  return { Escena, Fondo };
 })();
 
 /* Panel izquierdo de la entrada (acceso real y demostración) */
