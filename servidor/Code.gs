@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '2.7',                // se ve en la pestaña INICIO
+  VERSION: '2.8',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 36,             // una falla cerrada sigue visible para los asesores
@@ -106,9 +106,9 @@ const TIENDAS_INICIALES = [
 const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
-  telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_
+  telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_, monitoreo: accionMonitoreo_
 };
-const PUBLICAS = { config: true, login: true };
+const PUBLICAS = { config: true, login: true, monitoreo: true };
 const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, alerta: true, estadisticas: true, telefonos: true, sms: true };
 
 /* ============================================================================
@@ -229,6 +229,40 @@ function accionConfig_() {
     temporal: roles.some((r) => r !== 'tiendas'),
     listaTiendas: tiendas_()
   };
+}
+
+/* Monitoreo en vivo de la pantalla de entrada (pública, sin sesión): el nodo con más clientes de cada
+   departamento (sin los TAP VIRTUAL) y si está en una falla activa. Solo el código del nodo: ni cantidades
+   ni datos de clientes. Se guarda en caché por versión: al publicar o cerrar una falla, o al subir la base,
+   la versión cambia y la próxima visita lo calcula de nuevo. Nunca falla: sin base, va vacío. */
+function accionMonitoreo_() {
+  const e = estado_(), clave = 'mon:' + e.version + ':' + e.baseVersion;
+  const c = cache_().get(clave);
+  if (c) return JSON.parse(c);
+  const r = { en: Date.now(), nodos: [] };
+  try {
+    const cat = catalogo_();
+    if (cat) {
+      const activos = {};
+      fallasRecientes_().forEach((f) => { if (f.estado === 'ACTIVA') (f.nodos || []).forEach((n) => { activos[n] = true; }); });
+      r.nodos = nodosPrincipales_(cat).map((x) => ({ d: x[0], n: x[1], falla: !!activos[x[1]] }));
+    }
+  } catch (err) { r.nodos = []; }
+  cache_().put(clave, JSON.stringify(r), 600);
+  return r;
+}
+/* [departamento, nodo] del nodo con más clientes de cada departamento, en orden alfabético. Con empate,
+   el primero del catálogo (igual que Model.monitoreo en la página). */
+function nodosPrincipales_(cat) {
+  const mejor = {};
+  cat.nodos.forEach((n) => {
+    if (esVirtual_(n[0])) return;
+    for (let i = 0; i < n[6].length; i += 2) {
+      const dep = cat.deps[n[6][i]], k = n[6][i + 1];
+      if (dep && (!mejor[dep] || k > mejor[dep][1])) mejor[dep] = [n[0], k];
+    }
+  });
+  return Object.keys(mejor).sort().map((d) => [d, mejor[d][0]]);
 }
 
 /* Las tiendas que se eligen al entrar con la cuenta de Tiendas: la hoja Tiendas, una por fila.

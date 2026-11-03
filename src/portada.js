@@ -89,7 +89,8 @@ const Portada = (() => {
 
   function Alerta(e, i) {
     const [x, y] = N[e.n];
-    const w = Math.round(Math.max(e.motivo.length * 9.7, e.lugar.length * 7.8, 172) + 34), h = 84;
+    // A la derecha del título va "Ejemplo": la portada también muestra datos reales (el monitoreo en vivo)
+    const w = Math.round(Math.max(e.motivo.length * 9.7, e.lugar.length * 7.8, 172) + 34 + 70), h = 84;
     const bx = e.pos === 'der' ? x + 20 : e.pos === 'izq' ? x - 20 - w : x - 46;
     const by = e.pos === 'abajo' ? y + 22 : y - 29;
     return html`<g class=${'pt-alerta esc esc-' + (i + 1)} style=${'--d:' + retraso(i)}>
@@ -105,13 +106,18 @@ const Portada = (() => {
       <rect class="pt-rotulo" x=${bx} y=${by} width=${w} height=${h} rx="8" />
       <rect class="pt-rotulo-barra" x=${bx} y=${by + 10} width="3.5" height=${h - 20} rx="1.75" />
       <text class="pt-rotulo-m" x=${bx + 17} y=${by + 25}>${e.motivo}</text>
+      <rect class="pt-rotulo-ej-caja" x=${bx + w - 72} y=${by + 11} width="60" height="19" rx="9.5" />
+      <text class="pt-rotulo-ej" x=${bx + w - 42} y=${by + 24.5} text-anchor="middle">Ejemplo</text>
       <text class="pt-rotulo-l" x=${bx + 17} y=${by + 45}>${e.lugar}</text>
       ${ESTADOS.map(([t, c]) => html`<text class=${'pt-rotulo-e ' + c} x=${bx + 17} y=${by + 69} key=${c}>${t}</text>`)}
     </g>`;
   }
 
-  /* Antena de telecomunicaciones: torre de celosía con sus paneles y la señal que sale a los dos lados.
-     (0, 0) es el pie. La de una falla se queda sin señal, con la luz en rojo, hasta que se restablece. */
+  /* Antena de telecomunicaciones: torre de celosía pintada en franjas rojas y blancas, como las de Honduras
+     (norma de aviación: 7 franjas iguales, las de los extremos del color oscuro), con sus paneles y la señal
+     que sale a los dos lados. (0, 0) es el pie. La de una falla se queda sin señal, con la luz en rojo, hasta
+     que se restablece. */
+  const FRANJAS = Array.from({ length: 7 }, (_, k) => [k / 7, (k + 1) / 7, k % 2 ? '#eef0f2' : '#e0412b']);
   const arco = (r) => {
     const c = (r * 0.788).toFixed(2), a = (34 + r * 0.616).toFixed(2), b = (34 - r * 0.616).toFixed(2);
     return 'M' + c + ' -' + a + 'A' + r + ' ' + r + ' 0 0 1 ' + c + ' -' + b + 'M-' + c + ' -' + a + 'A' + r + ' ' + r + ' 0 0 0 -' + c + ' -' + b;
@@ -124,11 +130,13 @@ const Portada = (() => {
     const esc = ESCENAS.findIndex((e) => e.torre === i);
     return html`<g class=${'pt-torre' + (esc >= 0 ? ' con-falla f' + (esc + 1) : '')} transform=${'translate(' + t[0] + ' ' + t[1] + ') scale(' + ESC_TORRE + ')'}
       style=${'--t:-' + ((i * 0.83) % 2.4).toFixed(2) + 's' + (esc >= 0 ? ';--d:' + retraso(esc) : '')}>
+      <path class="pt-torre-cuerpo" d="M-5 0L-1.3 -30H1.3L5 0z" />
       <path class="pt-torre-reja" d=${REJA} />
       <path class="pt-torre-panel" d=${PANELES} />
       <g class="pt-senal">${ARCOS.map((d, k) => html`<path class=${'pt-arco a' + k} d=${d} key=${k} />`)}</g>
       <circle class="pt-torre-luz" cy="-41.6" r="1.2" />
-      ${esc >= 0 && html`<circle class="pt-torre-falla" cy="-41.6" r="1.7" /><circle class="pt-torre-vuelve" cy="-34" r="7" />`}
+      ${esc >= 0 && html`<g class="pt-torre-falla"><circle class="pt-torre-falla-halo" cy="-41.6" r="6" /><circle cy="-41.6" r="1.9" /></g>
+        <circle class="pt-torre-vuelve" cy="-34" r="7" />`}
     </g>`;
   }
 
@@ -245,6 +253,10 @@ const Portada = (() => {
         <radialGradient id="pt-desvanecer"><stop offset="0" stop-color="#fff" /><stop offset=".65" stop-color="#fff" stop-opacity=".45" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></radialGradient>
         <radialGradient id="pt-destello-ambar"><stop offset="0" stop-color="#ffb22e" stop-opacity=".95" /><stop offset=".4" stop-color="#ffb22e" stop-opacity=".35" /><stop offset="1" stop-color="#ffb22e" stop-opacity="0" /></radialGradient>
         <linearGradient id="pt-haz"><stop offset="0" stop-color="#f4f5f6" stop-opacity=".42" /><stop offset="1" stop-color="#f4f5f6" stop-opacity="0" /></linearGradient>
+        <linearGradient id="pt-franjas" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="-30">
+          ${FRANJAS.map(([a, b, c], k) => html`<stop offset=${a} stop-color=${c} key=${'a' + k} /><stop offset=${b} stop-color=${c} key=${'b' + k} />`)}
+        </linearGradient>
+        <radialGradient id="pt-brillo-rojo"><stop offset="0" stop-color="#e3241b" stop-opacity=".85" /><stop offset=".45" stop-color="#e3241b" stop-opacity=".3" /><stop offset="1" stop-color="#e3241b" stop-opacity="0" /></radialGradient>
         <pattern id="pt-gotas" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(16)"><rect width="1.3" height="5.5" fill="#d6dadf" /></pattern>
         <mask id="pt-mascara-nube"><ellipse cx="300" cy="38" rx="270" ry="112" fill="url(#pt-desvanecer)" /></mask>
         <clipPath id="pt-recorte-urbe"><rect x="692" y="486" width="286" height="207" rx="8" /></clipPath>
@@ -295,9 +307,15 @@ const Portada = (() => {
      tenues que cruzan el panel (con los colores del tema). La antena queda en (320, 320) del dibujo. */
   function Fondo() {
     return html`<svg class="acceso-fondo" viewBox="0 0 640 640" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="af-franjas" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="-30">
+          ${FRANJAS.map(([a, b, c], k) => html`<stop offset=${a} style=${'stop-color:' + (k % 2 ? 'var(--ink-3)' : c)} key=${'a' + k} /><stop offset=${b} style=${'stop-color:' + (k % 2 ? 'var(--ink-3)' : c)} key=${'b' + k} />`)}
+        </linearGradient>
+      </defs>
       ${[56, 112, 168, 224, 280].map((r) => html`<circle class="af-onda" cx="320" cy="320" r=${r} key=${r} />`)}
       <circle class="af-ping" cx="320" cy="320" r="40" />
       <g transform="translate(320 366) scale(1.35)">
+        <path class="af-cuerpo" d="M-5 0L-1.3 -30H1.3L5 0z" />
         <path class="af-reja" d=${REJA} />
         <path class="af-panel" d=${PANELES} />
         ${ARCOS.map((d, k) => html`<path class=${'af-arco a' + k} d=${d} key=${k} />`)}
@@ -305,17 +323,72 @@ const Portada = (() => {
     </svg>`;
   }
 
-  return { Escena, Fondo };
+  /* Monitoreo en vivo, con datos reales del servidor: el nodo con más clientes de cada departamento y si está en
+     una falla activa (sin cantidades). Una mira recorre los departamentos de oeste a este (los que tienen falla,
+     primero) y el panel de arriba dice qué nodo es y cómo está. La mira va en un SVG aparte, encima del mapa y
+     con el mismo encuadre, para que cada paso no vuelva a armar el mapa. */
+  const claveDep = (d) => U.sinAcentos(String(d || '')).toUpperCase().replace(/\s+/g, ' ').trim();
+  function ordenMonitoreo(mon) {
+    const lista = ((mon && mon.nodos) || []).filter((x) => x && x.n).map((x) => Object.assign({}, x, { dk: claveDep(x.d) })).filter((x) => HN_NOMBRES[x.dk]);
+    return lista.sort((a, b) => (Number(!!b.falla) - Number(!!a.falla)) || (HN_NOMBRES[a.dk][0] - HN_NOMBRES[b.dk][0]));
+  }
+  const nombreDep = (x) => HN_NOMBRES[x.dk].slice(2).join(' ');
+  function Mira({ nodo }) {
+    const deps = (typeof HN_MAPA !== 'undefined' && HN_MAPA.deps) || {};
+    const [x, y] = HN_NOMBRES[nodo.dk];
+    return html`<svg class="pt-monitor" viewBox="0 -12 1000 612" preserveAspectRatio="xMidYMax meet" focusable="false" aria-hidden="true">
+      ${deps[nodo.dk] && html`<path class=${'pt-mon-depto' + (nodo.falla ? ' falla' : '')} d=${deps[nodo.dk].d} key=${nodo.dk + nodo.n} />`}
+      <g class=${'pt-mira' + (nodo.falla ? ' falla' : '')} style=${'transform:translate(' + x + 'px,' + y + 'px)'}>
+        <circle class="pt-mira-pulso" r="11" />
+        <circle class="pt-mira-aro" r="9" />
+        <path class="pt-mira-marcas" d="M-14 0h-6M14 0h6M0 -14v-6M0 14v6" />
+        <circle class="pt-mira-centro" r="2.2" />
+      </g>
+    </svg>`;
+  }
+  function Panel({ nodo, conFalla }) {
+    return html`<div class=${'monitor' + (nodo.falla ? ' falla' : '')}>
+      <div class="monitor-cab"><span class="monitor-punto"></span>Monitoreo en vivo</div>
+      <div class="monitor-nodo" key=${nodo.dk + nodo.n}>
+        <b>${nodo.n}</b>
+        <span>${nombreDep(nodo)}<i class="monitor-estado">${nodo.falla ? 'Falla activa' : 'En línea'}</i></span>
+      </div>
+      <div class=${'monitor-pie' + (conFalla ? ' hay' : '')}>${conFalla ? U.plural(conFalla, '1 nodo principal con falla activa', conFalla + ' nodos principales con falla activa') : 'Nodo con más clientes de cada departamento'}</div>
+    </div>`;
+  }
+
+  return { Escena, Fondo, Mira, Panel, ordenMonitoreo };
 })();
 
 /* Panel izquierdo de la entrada (acceso real y demostración) */
+/* El monitoreo se pide al abrir la entrada y cada minuto mientras sigue abierta; la mira pasa a otro
+   departamento cada 2.8 s. Si el servidor no lo tiene (Code.gs anterior) o no hay base, no se muestra. */
+const PASO_MONITOREO = 2800;
 function ArteAcceso() {
+  const [mon, setMon] = useState(null);
+  const [paso, setPaso] = useState(0);
+  useEffect(() => {
+    let vivo = true;
+    const traer = () => Backend.monitoreo().then((r) => { if (vivo && r && Array.isArray(r.nodos)) setMon(r); }).catch(() => {});
+    traer();
+    const t = setInterval(traer, 60000);
+    return () => { vivo = false; clearInterval(t); };
+  }, []);
+  const lista = useMemo(() => Portada.ordenMonitoreo(mon), [mon]);
+  useEffect(() => {
+    if (lista.length < 2) return undefined;
+    const t = setInterval(() => setPaso((k) => k + 1), PASO_MONITOREO);
+    return () => clearInterval(t);
+  }, [lista.length]);
+  const actual = lista.length ? lista[paso % lista.length] : null;
+  const escena = useMemo(() => html`<${Portada.Escena} />`, []);
   return html`<div class="login-arte portada">
     <div class="portada-lluvia" aria-hidden="true"><i class="capa-1"></i><i class="capa-2"></i></div>
     <div class="portada-destello d1" aria-hidden="true"></div>
     <div class="portada-destello d2" aria-hidden="true"></div>
     <div class="marca"><div class="marca-glifo"><${Ico} n="marca" s=${20} /></div><div><div class="marca-nombre">${CONFIG.app}</div><div class="marca-bajada" style="color:inherit;opacity:.7">${CONFIG.bajada}</div></div></div>
-    <div class="portada-escena" aria-hidden="true"><${Portada.Escena} /></div>
+    ${actual && html`<${Portada.Panel} nodo=${actual} conFalla=${lista.filter((x) => x.falla).length} />`}
+    <div class="portada-escena" aria-hidden="true">${escena}${actual && html`<${Portada.Mira} nodo=${actual} />`}</div>
     <div class="portada-texto">
       <h1>Fallas de red, al instante.</h1>
       <p>Certifica en segundos si el cliente está dentro de una falla general de la red fija, y le da a quien atiende las palabras para explicárselo.</p>

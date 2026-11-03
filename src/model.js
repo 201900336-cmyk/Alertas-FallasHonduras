@@ -142,6 +142,23 @@ const Model = (() => {
     }
     return { formato: 1, deps, munis, olts: olts.map((b) => [b, U.oltNombre(b)]), nodos, resumen: Object.assign({}, ix.resumen) };
   }
+  /* Monitoreo de la pantalla de entrada: el nodo con más clientes de cada departamento (sin TAP VIRTUAL) y si
+     está en una falla activa, sin cantidades. Igual que nodosPrincipales_ del servidor: con empate, el primero
+     del catálogo. Lo usa la demostración (con el servidor, lo calcula Code.gs). */
+  function monitoreo(json, fallas) {
+    if (!json || !Array.isArray(json.nodos)) return [];
+    const mejor = new Map();
+    for (const n of json.nodos) {
+      if (U.esVirtual(n[0])) continue;
+      for (let i = 0; i < n[6].length; i += 2) {
+        const dep = json.deps[n[6][i]], k = n[6][i + 1];
+        if (dep && (!mejor.has(dep) || k > mejor.get(dep)[1])) mejor.set(dep, [n[0], k]);
+      }
+    }
+    const activos = new Set();
+    (fallas || []).forEach((f) => { if (f.estado === 'ACTIVA') (f.nodos || []).forEach((x) => activos.add(x)); });
+    return [...mejor.keys()].sort().map((d) => ({ d, n: mejor.get(d)[0], falla: activos.has(mejor.get(d)[0]) }));
+  }
   /* Convierte el catálogo (JSON) en mapas fáciles de usar */
   function cargarCatalogo(json) {
     if (!json || !Array.isArray(json.nodos)) return null;
@@ -573,6 +590,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

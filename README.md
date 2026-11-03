@@ -62,7 +62,7 @@ Esto crea las hojas **Base**, **Fallas**, **Usuarios**, **Cargas** y **Tiendas**
 2. **Ejecutar como: Yo.** **Quién tiene acceso: Cualquier usuario.**
 3. **Implementar** y copia la URL que termina en `/exec`. (Después la puedes volver a ver en **Alertas > Ver dirección del servidor**.)
 
-"Cualquier usuario" permite que los asesores usen Alertas sin cuenta de Google. Igual nadie entra sin sesión: el servidor exige una sesión firmada en cada acción, menos para entrar.
+"Cualquier usuario" permite que los asesores usen Alertas sin cuenta de Google. Igual nadie entra sin sesión: el servidor exige una sesión firmada en cada acción, menos para entrar y para el monitoreo de la pantalla de entrada (el código del nodo con más clientes de cada departamento y si está en una falla activa, sin cantidades ni datos de clientes).
 
 ### Paso 3. La página en GitHub Pages
 
@@ -329,7 +329,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 273 pruebas del servidor en un emulador de Apps Script
+npm test                           # 280 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

@@ -139,6 +139,8 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(!r.ok && r.codigo === 'PERMISO', 'Tiendas no puede subir la base', r);
   r = g.post({ accion: 'base', token: tAgente, datos: { op: 'iniciar', total: 10, columnas: Model.columnasCarga(base) } });
   ok(!r.ok && r.codigo === 'PERMISO', 'Concentrix no puede subir la base', r);
+  r = g.post({ accion: 'monitoreo' });
+  ok(r.ok && Array.isArray(r.datos.nodos) && r.datos.nodos.length === 0, 'sin base, el monitoreo de la entrada responde vacío (sin sesión)', r);
 
   /* ---------- Carga de la base ---------- */
   console.log('\n3. Subir la base completa por partes');
@@ -1197,6 +1199,24 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(pestanas().every((h) => deAlertas(h).length === 1) && /Siguen protegidas/.test(toast), 'y siguen protegidas', toast);
   C2.onOpen();
   ok(JSON.stringify(visibles(g2.E.activo)) === '["INICIO"]' && g2.E.activo.getActiveSheet().getName() === 'INICIO', 'al abrir el archivo se vuelven a ocultar solas y queda INICIO', visibles(g2.E.activo));
+
+  /* ---------- Monitoreo de la pantalla de entrada ---------- */
+  console.log('\n14. Monitoreo en vivo de la pantalla de entrada');
+  const esperadoM = Model.monitoreo(catc, []);
+  let mon = g2.post({ accion: 'monitoreo' });
+  ok(mon.ok && mon.datos.nodos.length > 0 && mon.datos.nodos.length === esperadoM.length && mon.datos.nodos.every((x, k) => x.d === esperadoM[k].d && x.n === esperadoM[k].n),
+    `sin sesión trae el nodo con más clientes de cada departamento (${esperadoM.length}), igual que la demostración`, [mon.datos && mon.datos.nodos, esperadoM]);
+  ok(mon.datos.nodos.every((x) => Object.keys(x).sort().join() === 'd,falla,n' && !U.esVirtual(x.n)), 'solo el departamento, el código del nodo y si tiene falla: sin cantidades ni TAP VIRTUAL', mon.datos.nodos[0]);
+  const principal = mon.datos.nodos.find((x) => !x.falla).n;
+  r = g2.post({ accion: 'falla', token: tw3, datos: { op: 'publicar', falla: { nodos: [principal], motivo: 'ENERGIA' } } });
+  const fMon = r.datos && r.datos.falla;
+  mon = g2.post({ accion: 'monitoreo' });
+  ok(r.ok && mon.datos.nodos.find((x) => x.n === principal).falla === true, 'al publicar una falla en un nodo principal, el monitoreo lo marca enseguida (no espera la caché)', mon.datos.nodos);
+  ok(mon.datos.nodos.filter((x) => x.falla).every((x) => x.n === principal || x.n === nodoF), 'y solo marca los nodos que están en una falla activa', mon.datos.nodos.filter((x) => x.falla));
+  r = g2.post({ accion: 'falla', token: tw3, datos: { op: 'cerrar', id: fMon.id } });
+  mon = g2.post({ accion: 'monitoreo' });
+  ok(r.ok && mon.datos.nodos.find((x) => x.n === principal).falla === false, 'al cerrarla vuelve a En línea', mon.datos.nodos.find((x) => x.n === principal));
+  ok(!/clientes|total|hfc|gpon/i.test(JSON.stringify(mon.datos)), 'no manda cantidades de clientes ni tecnologías');
 
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);

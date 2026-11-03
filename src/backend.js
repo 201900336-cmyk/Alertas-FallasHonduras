@@ -96,6 +96,8 @@ function BackendRemoto() {
       cfg = await llamar('config', {});
       return cfg;
     },
+    /* Monitoreo de la pantalla de entrada (público): sin reintentos; si falla, la portada va sin él */
+    async monitoreo() { return llamarUnaVez('monitoreo', {}, 20000); },
     usuario() { return ses ? ses.usuario : null; },
     alExpirar(fn) { alExpirarFn = fn; },
 
@@ -253,6 +255,11 @@ function BackendLocal() {
   return {
     modo: 'local',
     async iniciar() { const r = await Store.init(); return { demo: true, persistente: r.persistente }; },
+    async monitoreo() {
+      const c = await indice();
+      const d = await Store.leerTodo({ sinBase: true });
+      return { en: Date.now(), nodos: Model.monitoreo(c.catJson, d.fallas) };
+    },
     usuario() { return ses ? ses.usuario : null; },
     alExpirar() {},
     async genesysVolver() { return null; },

@@ -16,6 +16,9 @@ def ok(c, t, extra=''):
     if not c: fallos.append(t)
 def http(path):
     return json.loads(urllib.request.urlopen(f'http://localhost:{PUERTO}{path}').read())
+def http_post(cuerpo):
+    req = urllib.request.Request(f'http://localhost:{PUERTO}/exec', data=json.dumps(cuerpo).encode(), headers={'Content-Type': 'text/plain'})
+    return json.loads(urllib.request.urlopen(req).read())
 
 with sync_playwright() as p:
     b = p.chromium.launch()
@@ -33,6 +36,14 @@ with sync_playwright() as p:
 
     print('1. Tiendas con usuario genérico')
     t = pagina(); t.goto(APP); t.wait_for_selector('text=Entrar con Genesys')
+    # Monitoreo en vivo de la portada: el nodo con más clientes de un departamento, con su estado real
+    t.wait_for_selector('.monitor-nodo b', timeout=15000)
+    mon = http_post({'accion': 'monitoreo'})['datos']['nodos']
+    cod, estado = t.evaluate("() => { const m = document.querySelector('.monitor'); return [m.querySelector('.monitor-nodo b').textContent.trim(), m.querySelector('.monitor-estado').textContent.trim()]; }")
+    nodo = next((x for x in mon if x['n'] == cod), None)
+    ok(nodo is not None and estado == ('Falla activa' if nodo['falla'] else 'En línea') and t.locator('.pt-mira').count() == 1,
+       'la portada muestra el monitoreo en vivo: un nodo principal del servidor con su estado real y la mira en su departamento', [cod, estado])
+    ok(t.locator('.pt-rotulo-ej').count() == 3, 'las alertas de la animación dicen "Ejemplo"')
     t.screenshot(path=OUT + 'e01_acceso.png')
     ok('tiendas' == t.locator('input[autocomplete=username]').input_value(), 'el usuario de Tiendas viene sugerido')
     t.fill('input[type=password]', 'mala-clave'); t.fill('input[autocomplete=name]', 'Pedro Mejía')
