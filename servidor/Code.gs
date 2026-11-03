@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.0',                // se ve en la pestaña INICIO
+  VERSION: '3.1',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -54,7 +54,7 @@ const ALERTAS = {
   // y el ingreso con Genesys también usa (2 por ingreso). Con Google Workspace (100 mil al día) se puede subir.
   SMS_POR_DIA: 15000,
   SMS_CONTROL_MAX: 40,           // números de control del equipo (menú Alertas > 5. Números de control)
-  AVISOS_MAX: 5,                 // fallas publicadas o reabiertas que guarda "estado" para el aviso de escritorio
+  AVISOS_MAX: 8,                 // fallas publicadas, reabiertas o cerradas que guarda "estado" para el aviso de escritorio
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
   HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares' },
@@ -208,9 +208,10 @@ function estado_() {
   cache_().put('estado', JSON.stringify(e), 21600);
   return e;
 }
-/* aviso: las últimas fallas publicadas o reabiertas quedan en "avisos" (hasta 5) para el aviso de escritorio
-   de todos. Al cerrar una falla se quita su aviso: una página que todavía no lo vio ya no avisa de una falla
-   que terminó. */
+/* aviso: lo último que pasó con cada falla (publicada, reabierta, resuelta o descartada) queda en "avisos"
+   (las últimas 8) para el aviso de escritorio de todos. Cada falla tiene un solo aviso, el más reciente: al
+   cerrarla, el de publicada cambia por el de resuelta, y una página que todavía no avisó la publicación ya
+   no avisa de una falla que terminó. Un aviso sin tipo solo quita el de esa falla. */
 function subirVersion_(cambio, extra, aviso) {
   const raw = props_().getProperty('ESTADO');
   const e = raw ? JSON.parse(raw) : { version: 1, baseVersion: 0, cambio: null };
@@ -812,7 +813,7 @@ function accionFalla_(d, ses) {
     else h.appendRow(fila);
     cache_().remove('fallasRecientes');
     cache_().remove('alertas');
-    const aviso = tipo === 'FALLA_PUBLICADA' || tipo === 'FALLA_REABIERTA' ? avisoFalla_(f, tipo, ahora, por) : tipo === 'FALLA_CERRADA' ? { id: f.id } : null;
+    const aviso = tipo === 'FALLA_EDITADA' ? null : avisoFalla_(f, tipo, ahora, por);
     const e = subirVersion_({ tipo: tipo, texto: texto, por: por, en: ahora }, null, aviso);
     return { falla: sinFila_(f), version: e.version };
   } finally {
@@ -861,14 +862,18 @@ function nuevoId_(todas, ahora) {
   todas.forEach((f) => { const id = idFalla_(f.id); if (id.indexOf(pref) === 0) max = Math.max(max, Number(id.slice(pref.length)) || 0); });
   return pref + String(max + 1).padStart(2, '0');
 }
-/* El aviso de escritorio de una falla publicada o reabierta: lo mismo que ya ven los asesores de ella
-   (número, motivo, nodos y clientes), sin referencia, notas internas ni correos */
+/* El aviso de escritorio de una falla publicada, reabierta o cerrada (resuelta, o descartada si era una posible
+   falla general): lo mismo que ya ven los asesores de ella (número, motivo, nodos, clientes y la hora de
+   solución), sin referencia, notas internas ni correos. "por" es quien la publicó, reabrió o cerró. */
 function avisoFalla_(f, tipo, ahora, por) {
   const p = fallaPublica_(f);
-  return {
-    id: p.id, tipo: tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : 'PUBLICADA', numero: p.numero, motivo: p.motivo, motivoTexto: p.motivoTexto || '',
+  const t = tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : tipo === 'FALLA_CERRADA' ? (descartada_(f) ? 'DESCARTADA' : 'CERRADA') : 'PUBLICADA';
+  const x = {
+    id: p.id, tipo: t, numero: p.numero, motivo: p.motivo, motivoTexto: p.motivoTexto || '',
     nodos: p.nodos.slice(0, 4), n: p.nodos.length, clientes: (p.impacto && p.impacto.total) || 0, en: ahora, por: por.nombre
   };
+  if (t === 'CERRADA' || t === 'DESCARTADA') x.cerradaEn = p.cerradaEn;
+  return x;
 }
 function nombreMotivo_(f) { return f.motivo === 'OTRO' ? (f.motivoTexto || 'Otro motivo') : ALERTAS.MOTIVOS[f.motivo]; }
 function lista_(arr, max) {

@@ -8,7 +8,7 @@
 - **Los supervisores de Call Center** ven el mismo panel de los asesores y además reciben el aviso de **posibles fallas**: la reportan al VOC o le avisan a Workforce. No crean fallas.
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
-- **Todos** pueden activar los avisos en el escritorio: cuando Workforce publica una falla, les llega al instante aunque Alertas esté minimizado.
+- **Todos** pueden activar los avisos en el escritorio: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
 
 ---
 
@@ -162,7 +162,11 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 - Si una falla todavía no tiene número de falla, sale con el ID que le pone Alertas: **F**, la fecha (año, mes y día) y el número del día, sin guiones, por ejemplo `F26110201`. La tarjeta avisa "Sin número todavía" y se agrega con **Editar**. Las publicadas antes del 2 nov se guardaron con guiones (`F-261030-05`) y salen sin ellos (`F26103005`). El historial encuentra una falla por su número de falla o por su ID, y el CSV trae los dos.
 - Una falla cerrada sigue visible para los asesores **72 horas (3 días)** y luego sale de su panel. Workforce la conserva en el historial.
 - Cuando Workforce publica, edita, cierra o sube una base, los demás ven el aviso **"Workforce HN hizo una actualización"** en alrededor de un minuto. Lo que diga cada búsqueda siempre está al día: el servidor responde con las fallas del momento.
-- **Aviso de falla nueva en el escritorio (todos)**: quien activa los avisos (la invitación arriba de la página o **Activar avisos en el escritorio** en el menú de su nombre) recibe una notificación de Windows cuando Workforce publica o reabre una falla, con su número, motivo, nodos y clientes, aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto). Llega en alrededor de un minuto, una vez por falla; a quien la publicó no le llega. Al tocarla, Alertas se pone al día y muestra la falla.
+- **Avisos de fallas en el escritorio (todos)**: quien activa los avisos (la invitación arriba de la página o **Activar avisos en el escritorio** en el menú de su nombre) recibe una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto):
+  - **Nueva falla publicada** (o reabierta): número, motivo, nodos, clientes y quién la publicó.
+  - **Falla resuelta**: lo mismo, con la hora en que se restableció el servicio y quién la cerró.
+  - **Se descartó la posible falla**: cuando una posible falla general no se confirma, para que dejen de decirle al cliente que se está validando.
+  - Llega en alrededor de un minuto, una vez por cada cosa; a quien hizo el cambio no le llega. Al tocarla, Alertas se pone al día y muestra el panel de fallas.
 - **Posibles fallas** (Workforce, Jefatura y supervisores): cuando **5 clientes distintos** de un nodo sin falla publicada consultan en **60 minutos**, o 2 asesores lo reportan con **Reportar posible falla**, el nodo aparece en **Fallas > Posibles fallas** (a los supervisores, arriba de su consulta). Solo cuentan las búsquedas de Concentrix y Tiendas (las de Workforce y los supervisores revisando no suman, y un cliente que vuelve a llamar cuenta una vez). Con 3 o 4 clientes el nodo queda **en observación**.
   - **Aviso**: una barra arriba en cualquier vista y, con **Avisarme en el escritorio**, una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto). Cada posible falla se avisa una vez por PC, y otra vez si sigue después de 2 horas.
   - **Ver clientes y correo**: los clientes que consultaron (hora, contrato, nombre, nodo, tecnología, OLT, NAP/TAP, colonia, municipio, categoría y canal, con la tienda) y el correo listo para el VOC o el personal interno. **Copiar correo** lo deja para pegarlo en Outlook con Ctrl+V, con la tabla y su formato; también se puede copiar solo la tabla o el asunto.
@@ -335,7 +339,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 310 pruebas del servidor en un emulador de Apps Script
+npm test                           # 312 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

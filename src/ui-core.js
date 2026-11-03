@@ -111,7 +111,7 @@ const A = {
         const e = await Backend.estado();
         G.set({ sinConexion: false });
         if (e.version > G.s.meta.version && (!G.s.remoto || G.s.remoto.version < e.version)) G.set({ remoto: e });
-        A.avisarPublicadas(e);
+        A.avisarFallas(e);
       } catch (err) { if (err.codigo === 'RED') G.set({ sinConexion: true }); }
       ocupado = false;
     };
@@ -123,10 +123,10 @@ const A = {
     // así llega el aviso de escritorio. Son pocas personas, no cargan al servidor.
     setInterval(() => { if (G.s.user && veAlertas()) A.revisarAlertas(); }, 60000);
   },
-  /* Fallas que Workforce publicó (o reabrió) desde la última revisión: aviso de escritorio una vez por falla,
-     a todos los que lo activaron, si Alertas no está a la vista (a la vista ya sale la barra de cambios).
-     No avisa lo que publicó esta misma página, lo que ya estaba al entrar ni lo de hace más de 30 minutos. */
-  avisarPublicadas(e) {
+  /* Fallas que Workforce publicó, reabrió o cerró desde la última revisión: aviso de escritorio a todos los
+     que lo activaron, una vez por cada cosa, si Alertas no está a la vista (a la vista ya sale la barra de
+     cambios). No avisa lo que hizo esta misma página, lo que ya estaba al entrar ni lo de hace más de 30 minutos. */
+  avisarFallas(e) {
     if (A.pub.visto == null) return;   // todavía no termina de cargar al entrar
     const nuevas = (e.avisos || []).filter((x) => x && x.v > A.pub.visto);
     if (!nuevas.length) return;
@@ -135,8 +135,8 @@ const A = {
     const lista = nuevas.filter((x) => !A.pub.propias.has(x.v) && ahora - x.en < 30 * U.MIN);
     if (lista.length && Avisos.activos() && (document.hidden || !document.hasFocus())) lista.slice(-3).forEach((x) => Avisos.falla(x));
   },
-  // Al tocar el aviso de una falla nueva: la página trae las fallas al día y muestra la consulta (con sus fallas)
-  verFallaNueva() { ir('consulta'); window.scrollTo({ top: 0 }); A.recargar().catch(() => {}); },
+  // Al tocar el aviso de una falla (nueva o resuelta): la página trae las fallas al día y muestra la consulta (con sus fallas)
+  verAvisoFalla() { ir('consulta'); window.scrollTo({ top: 0 }); A.recargar().catch(() => {}); },
   async revisarAlertas() {
     let r;
     try { r = await Backend.alertas(); } catch (e) { return; /* se intenta de nuevo luego */ }
@@ -353,18 +353,27 @@ const Avisos = {
     Avisos.crear(m ? m.por + ' avisa: posible falla en ' + a.nodo : 'Posible falla en ' + a.nodo,
       (m && m.nota ? '«' + m.nota + '» · ' : '') + partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
   },
-  /* Una falla que Workforce acaba de publicar o reabrir (lo que trae "estado" en avisos) */
+  /* Lo que Workforce acaba de hacer con una falla (lo que trae "estado" en avisos): publicarla, reabrirla,
+     cerrarla (resuelta) o descartarla (una posible falla general que no se confirmó) */
   falla(x) {
     const resto = x.n - x.nodos.length;
     const nodos = x.nodos.join(', ') + (resto > 0 ? ' y ' + U.plural(resto, '1 nodo más', resto + ' nodos más') : '');
-    const cuerpo = nombreMotivo(x) + ' en ' + nodos + (x.clientes ? ' · ' + U.plural(x.clientes, '1 cliente', U.n(x.clientes) + ' clientes') : '')
-      + '. ' + (x.tipo === 'REABIERTA' ? 'La reabrió ' : 'La publicó ') + x.por + '. Clic para verla.';
-    Avisos.crear((x.tipo === 'REABIERTA' ? 'Se reabrió la falla ' : 'Nueva falla publicada: ') + U.numeroFalla(x), cuerpo, 'alertas-falla-' + x.id, A.verFallaNueva);
+    const donde = nombreMotivo(x) + ' en ' + nodos + (x.clientes ? ' · ' + U.plural(x.clientes, '1 cliente', U.n(x.clientes) + ' clientes') : '');
+    const num = U.numeroFalla(x);
+    const [titulo, cuerpo] = x.tipo === 'CERRADA'
+      ? ['Falla resuelta: ' + num, donde + '. Servicio restablecido ' + U.cuando(x.cerradaEn || x.en, Date.now()) + '; la cerró ' + x.por + '. Clic para verla.']
+      : x.tipo === 'DESCARTADA'
+        ? ['Se descartó la posible falla ' + num, 'No se confirmó falla en ' + nodos + '. Si llama un cliente de ' + (x.n === 1 ? 'ese nodo' : 'esos nodos') + ', sigue el flujo normal. La descartó ' + x.por + '.']
+        : x.tipo === 'REABIERTA'
+          ? ['Se reabrió la falla ' + num, donde + '. La reabrió ' + x.por + '. Clic para verla.']
+          : ['Nueva falla publicada: ' + num, donde + '. La publicó ' + x.por + '. Clic para verla.'];
+    // Etiqueta por falla y por tipo: la de resuelta no reemplaza en silencio a la de publicada
+    Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo, A.verAvisoFalla);
   },
   prueba() {
     const um = umbralAlertas();
-    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla nueva'
-      + (veAlertas() ? ' y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba');
+    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
+      + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba');
   }
 };
 const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();

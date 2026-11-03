@@ -395,14 +395,14 @@ async function cambiarAvisos(activar) {
   if (p === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); }
   else if (p === 'denied') tostada('El navegador bloqueó los avisos de esta página. Permítelos en el candado junto a la dirección.');
 }
-/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla nueva que publica Workforce.
+/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla que Workforce publica y de cuando se resuelve.
    Sale mientras el navegador no haya preguntado; "Ahora no" la esconde 7 días (el menú del usuario siempre los activa). */
 function OfertaAvisos() {
   const s = useG();
   if (s.ofertaCerrada || !Avisos.soportado() || s.permisoAvisos !== 'default') return null;
   return html`<div class="oferta-avisos" role="region" aria-label="Avisos en el escritorio">
     <span class="oferta-ico"><${Ico} n="campana" s=${18} /></span>
-    <p><b>Entérate al instante de cada falla nueva.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla${veAlertas() ? ' o haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
+    <p><b>Entérate al instante de cada falla.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla y cuando se resuelva${veAlertas() ? ', y cuando haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
     <div class="oferta-acc">
       <button class="btn btn-primario btn-chico" onClick=${() => cambiarAvisos(true)}>Activar avisos</button>
       <button class="btn btn-fantasma btn-chico" onClick=${() => { guardarLS('alertas-oferta-avisos', Date.now()); G.set({ ofertaCerrada: true }); }}>Ahora no</button>

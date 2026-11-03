@@ -208,11 +208,11 @@ with sync_playwright() as p:
     ok('Sofía Mejía' in s.locator('.usuario-txt').inner_text() and 'Supervisor' in s.locator('.usuario-txt').inner_text() and s.locator('.nav').count() == 0,
        'la supervisora entra con Genesys (rol de la hoja Usuarios) y ve el panel de los asesores, sin el menú de Workforce', s.locator('.usuario-txt').inner_text())
     s.wait_for_selector('.oferta-avisos', timeout=5000)
-    ok('publique una falla o haya una posible falla' in s.locator('.oferta-avisos').inner_text(), 'la invita a activar los avisos de escritorio (fallas nuevas y posibles fallas)')
+    ok('publique una falla y cuando se resuelva, y cuando haya una posible falla' in s.locator('.oferta-avisos').inner_text(), 'la invita a activar los avisos de escritorio (fallas nuevas, resueltas y posibles fallas)')
     s.screenshot(path=OUT + 'e06s_supervisor_inicio.png')
     s.click('.oferta-avisos button:has-text("Activar avisos")'); s.wait_for_timeout(400)
     av = s.evaluate('() => window.__avisos')
-    ok(s.locator('.oferta-avisos').count() == 0 and any(x['t'] == 'Avisos de Alertas activados' and 'publique una falla nueva' in x['b'] for x in av), 'al activarlos se va la invitación y llega el aviso de prueba', av)
+    ok(s.locator('.oferta-avisos').count() == 0 and any(x['t'] == 'Avisos de Alertas activados' and 'publique una falla y cuando se resuelva' in x['b'] for x in av), 'al activarlos se va la invitación y llega el aviso de prueba', av)
     s.wait_for_selector(f'.posibles .pf-tarjeta:has-text("{nodoPF}")', timeout=20000)
     tarjeta_s = s.locator('.pf-tarjeta', has_text=nodoPF)
     ok('Reportada al VOC por Ana López' in tarjeta_s.inner_text() and tarjeta_s.locator('button:has-text("Crear falla")').count() == 0,
@@ -310,6 +310,11 @@ with sync_playwright() as p:
     # Descartarla: el VOC no encontró falla
     tarjeta_pf.locator('button:has-text("Descartar")').click(); x.wait_for_selector('.modal:has-text("Descartar la posible falla")', timeout=5000)
     x.fill('.modal input[placeholder^="Ejemplo: El VOC"]', 'El VOC no encontró falla'); x.click('.modal .btn-peligro'); x.wait_for_timeout(1500)
+    # Aviso de escritorio de la descartada: a la supervisora le llega que ya no hay posible falla en ese nodo
+    s.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))'); s.wait_for_timeout(300)
+    av = [v for v in s.evaluate('() => window.__avisos') if v['t'].startswith('Se descartó la posible falla')]
+    ok(len(av) == 1 and 'No se confirmó falla en ' + nodoPF in av[0]['b'] and 'sigue el flujo normal' in av[0]['b'] and 'El VOC no encontró' not in av[0]['b'],
+       'al descartarla, a la supervisora le llega el aviso de que se descartó: ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
     a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
     a.fill('.buscador-caja input', contratosPF[2]); a.keyboard.press('Enter'); a.wait_for_selector(f'.cliente-ids:has-text("{contratosPF[2]}")', timeout=20000)
     a.wait_for_selector('.historial-cliente', timeout=15000)
@@ -320,6 +325,11 @@ with sync_playwright() as p:
     # Llamó: Tiendas consultó a c_falla durante F1254585; al cerrarla, el historial lo marca
     f_energia = x.evaluate("() => G.s.fallas.find((f) => f.numero === 'F1254585').id")
     x.evaluate("(id) => A.cerrarFalla(id, Date.now(), 'Energía restablecida')", f_energia); x.wait_for_timeout(1000)
+    # Aviso de escritorio de la falla resuelta
+    s.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))'); s.wait_for_timeout(300)
+    av = [v for v in s.evaluate('() => window.__avisos') if v['t'] == 'Falla resuelta: F1254585']
+    ok(len(av) == 1 and av[0]['b'].startswith('Falla de energía comercial en ') and 'Servicio restablecido hoy a las' in av[0]['b'] and 'la cerró Mario Rivera' in av[0]['b'],
+       'al cerrar una falla, a la supervisora le llega "Falla resuelta: F1254585": ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
     a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
     a.fill('.buscador-caja input', c_falla); a.keyboard.press('Enter'); a.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)
     a.wait_for_selector('.hist-etiquetas .llamo', timeout=15000)
@@ -342,13 +352,13 @@ with sync_playwright() as p:
       window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted', avisosEscritorio: true }); }""")
     x.evaluate("(n) => A.publicarFalla({ nodos: n, motivo: 'POSTES', numero: 'F1254600' })", ejemplos[:2]); x.wait_for_timeout(800)
     # Aviso de escritorio de la falla nueva: le llega a todos los que lo activaron (aquí, la supervisora), no a quien la publicó
-    for pg in (s, x): pg.evaluate('() => Backend.estado().then((e) => A.avisarPublicadas(e))')
+    for pg in (s, x): pg.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))')
     s.wait_for_timeout(300)
     av = [v for v in s.evaluate('() => window.__avisos') if 'F1254600' in v['t']]
     ok(len(av) == 1 and av[0]['t'] == 'Nueva falla publicada: F1254600' and 'Caída de postes en ' + ejemplos[0] in av[0]['b'] and 'Mario Rivera' in av[0]['b'],
        'al publicar una falla, a la supervisora le llega el aviso de escritorio: ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
     ok(not [v for v in x.evaluate('() => window.__avisos') if 'Nueva falla' in v['t']], 'a quien la publicó no le llega su propio aviso')
-    s.evaluate('() => Backend.estado().then((e) => A.avisarPublicadas(e))'); s.wait_for_timeout(300)
+    s.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))'); s.wait_for_timeout(300)
     ok(len([v for v in s.evaluate('() => window.__avisos') if 'F1254600' in v['t']]) == 1, 'y el aviso llega una sola vez')
     a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)   # Concentrix recibe el aviso de la falla nueva
     def abrir_sms():

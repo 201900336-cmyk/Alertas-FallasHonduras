@@ -3333,14 +3333,18 @@ function BackendLocal() {
           tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.numeroFalla(f);
         }
       }
-      // Igual que el servidor: las últimas fallas publicadas o reabiertas, para el aviso de escritorio; al cerrar se quita
+      // Igual que el servidor: lo último de cada falla (publicada, reabierta, resuelta o descartada), las últimas 8,
+      // para el aviso de escritorio
       const meta = await Store.leerMeta();
-      let avisos = (meta.avisos || []).filter((x) => x.id !== f.id);
-      if (tipo === 'FALLA_PUBLICADA' || tipo === 'FALLA_REABIERTA') {
-        avisos = avisos.concat({ v: (meta.version || 0) + 1, id: f.id, tipo: tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : 'PUBLICADA', numero: f.numero || '', motivo: f.motivo,
-          motivoTexto: f.motivoTexto || '', nodos: f.nodos.slice(0, 4), n: f.nodos.length, clientes: (f.impacto && f.impacto.total) || 0, en: ahora, por: por.nombre }).slice(-5);
+      let avisos;
+      if (tipo !== 'FALLA_EDITADA') {
+        const t = tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : tipo === 'FALLA_CERRADA' ? (Model.descartada(f) ? 'DESCARTADA' : 'CERRADA') : 'PUBLICADA';
+        const x = { v: (meta.version || 0) + 1, id: f.id, tipo: t, numero: f.numero || '', motivo: f.motivo, motivoTexto: f.motivoTexto || '',
+          nodos: f.nodos.slice(0, 4), n: f.nodos.length, clientes: (f.impacto && f.impacto.total) || 0, en: ahora, por: por.nombre };
+        if (t === 'CERRADA' || t === 'DESCARTADA') x.cerradaEn = f.cerradaEn;
+        avisos = (meta.avisos || []).filter((y) => y.id !== f.id).concat(x).slice(-8);
       }
-      const version = await confirmar(tipo, texto, { fallas, meta: tipo === 'FALLA_EDITADA' ? undefined : { avisos } });
+      const version = await confirmar(tipo, texto, { fallas, meta: avisos ? { avisos } : undefined });
       return { falla: f, version };
     },
 
@@ -3690,7 +3694,7 @@ const A = {
         const e = await Backend.estado();
         G.set({ sinConexion: false });
         if (e.version > G.s.meta.version && (!G.s.remoto || G.s.remoto.version < e.version)) G.set({ remoto: e });
-        A.avisarPublicadas(e);
+        A.avisarFallas(e);
       } catch (err) { if (err.codigo === 'RED') G.set({ sinConexion: true }); }
       ocupado = false;
     };
@@ -3702,10 +3706,10 @@ const A = {
     // así llega el aviso de escritorio. Son pocas personas, no cargan al servidor.
     setInterval(() => { if (G.s.user && veAlertas()) A.revisarAlertas(); }, 60000);
   },
-  /* Fallas que Workforce publicó (o reabrió) desde la última revisión: aviso de escritorio una vez por falla,
-     a todos los que lo activaron, si Alertas no está a la vista (a la vista ya sale la barra de cambios).
-     No avisa lo que publicó esta misma página, lo que ya estaba al entrar ni lo de hace más de 30 minutos. */
-  avisarPublicadas(e) {
+  /* Fallas que Workforce publicó, reabrió o cerró desde la última revisión: aviso de escritorio a todos los
+     que lo activaron, una vez por cada cosa, si Alertas no está a la vista (a la vista ya sale la barra de
+     cambios). No avisa lo que hizo esta misma página, lo que ya estaba al entrar ni lo de hace más de 30 minutos. */
+  avisarFallas(e) {
     if (A.pub.visto == null) return;   // todavía no termina de cargar al entrar
     const nuevas = (e.avisos || []).filter((x) => x && x.v > A.pub.visto);
     if (!nuevas.length) return;
@@ -3714,8 +3718,8 @@ const A = {
     const lista = nuevas.filter((x) => !A.pub.propias.has(x.v) && ahora - x.en < 30 * U.MIN);
     if (lista.length && Avisos.activos() && (document.hidden || !document.hasFocus())) lista.slice(-3).forEach((x) => Avisos.falla(x));
   },
-  // Al tocar el aviso de una falla nueva: la página trae las fallas al día y muestra la consulta (con sus fallas)
-  verFallaNueva() { ir('consulta'); window.scrollTo({ top: 0 }); A.recargar().catch(() => {}); },
+  // Al tocar el aviso de una falla (nueva o resuelta): la página trae las fallas al día y muestra la consulta (con sus fallas)
+  verAvisoFalla() { ir('consulta'); window.scrollTo({ top: 0 }); A.recargar().catch(() => {}); },
   async revisarAlertas() {
     let r;
     try { r = await Backend.alertas(); } catch (e) { return; /* se intenta de nuevo luego */ }
@@ -3932,18 +3936,27 @@ const Avisos = {
     Avisos.crear(m ? m.por + ' avisa: posible falla en ' + a.nodo : 'Posible falla en ' + a.nodo,
       (m && m.nota ? '«' + m.nota + '» · ' : '') + partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
   },
-  /* Una falla que Workforce acaba de publicar o reabrir (lo que trae "estado" en avisos) */
+  /* Lo que Workforce acaba de hacer con una falla (lo que trae "estado" en avisos): publicarla, reabrirla,
+     cerrarla (resuelta) o descartarla (una posible falla general que no se confirmó) */
   falla(x) {
     const resto = x.n - x.nodos.length;
     const nodos = x.nodos.join(', ') + (resto > 0 ? ' y ' + U.plural(resto, '1 nodo más', resto + ' nodos más') : '');
-    const cuerpo = nombreMotivo(x) + ' en ' + nodos + (x.clientes ? ' · ' + U.plural(x.clientes, '1 cliente', U.n(x.clientes) + ' clientes') : '')
-      + '. ' + (x.tipo === 'REABIERTA' ? 'La reabrió ' : 'La publicó ') + x.por + '. Clic para verla.';
-    Avisos.crear((x.tipo === 'REABIERTA' ? 'Se reabrió la falla ' : 'Nueva falla publicada: ') + U.numeroFalla(x), cuerpo, 'alertas-falla-' + x.id, A.verFallaNueva);
+    const donde = nombreMotivo(x) + ' en ' + nodos + (x.clientes ? ' · ' + U.plural(x.clientes, '1 cliente', U.n(x.clientes) + ' clientes') : '');
+    const num = U.numeroFalla(x);
+    const [titulo, cuerpo] = x.tipo === 'CERRADA'
+      ? ['Falla resuelta: ' + num, donde + '. Servicio restablecido ' + U.cuando(x.cerradaEn || x.en, Date.now()) + '; la cerró ' + x.por + '. Clic para verla.']
+      : x.tipo === 'DESCARTADA'
+        ? ['Se descartó la posible falla ' + num, 'No se confirmó falla en ' + nodos + '. Si llama un cliente de ' + (x.n === 1 ? 'ese nodo' : 'esos nodos') + ', sigue el flujo normal. La descartó ' + x.por + '.']
+        : x.tipo === 'REABIERTA'
+          ? ['Se reabrió la falla ' + num, donde + '. La reabrió ' + x.por + '. Clic para verla.']
+          : ['Nueva falla publicada: ' + num, donde + '. La publicó ' + x.por + '. Clic para verla.'];
+    // Etiqueta por falla y por tipo: la de resuelta no reemplaza en silencio a la de publicada
+    Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo, A.verAvisoFalla);
   },
   prueba() {
     const um = umbralAlertas();
-    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla nueva'
-      + (veAlertas() ? ' y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba');
+    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
+      + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba');
   }
 };
 const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
@@ -6762,14 +6775,14 @@ async function cambiarAvisos(activar) {
   if (p === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); }
   else if (p === 'denied') tostada('El navegador bloqueó los avisos de esta página. Permítelos en el candado junto a la dirección.');
 }
-/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla nueva que publica Workforce.
+/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla que Workforce publica y de cuando se resuelve.
    Sale mientras el navegador no haya preguntado; "Ahora no" la esconde 7 días (el menú del usuario siempre los activa). */
 function OfertaAvisos() {
   const s = useG();
   if (s.ofertaCerrada || !Avisos.soportado() || s.permisoAvisos !== 'default') return null;
   return html`<div class="oferta-avisos" role="region" aria-label="Avisos en el escritorio">
     <span class="oferta-ico"><${Ico} n="campana" s=${18} /></span>
-    <p><b>Entérate al instante de cada falla nueva.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla${veAlertas() ? ' o haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
+    <p><b>Entérate al instante de cada falla.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla y cuando se resuelva${veAlertas() ? ', y cuando haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
     <div class="oferta-acc">
       <button class="btn btn-primario btn-chico" onClick=${() => cambiarAvisos(true)}>Activar avisos</button>
       <button class="btn btn-fantasma btn-chico" onClick=${() => { guardarLS('alertas-oferta-avisos', Date.now()); G.set({ ofertaCerrada: true }); }}>Ahora no</button>

@@ -259,9 +259,12 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.falla.numero === 'F1254590' && hFallas.getRange(2, 20).getValue() === 'F1254590', 'cambiar el número de falla (se guarda sin espacios ni guiones)', r.datos && r.datos.falla && r.datos.falla.numero);
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id, nota: 'Empalme terminado' } });
   ok(r.ok && r.datos.falla.estado === 'CERRADA' && r.datos.falla.cerradaPor.nombre === 'Ana López', 'cerrar la falla');
-  const cerrada = r.datos.falla.cerradaEn;
+  const cerrada = r.datos.falla.cerradaEn, vCierre = r.datos.version;
   r = g.post({ accion: 'estado', token: tAgente });
-  ok(r.ok && !r.datos.avisos.some((x) => x.id === f1.id), 'al cerrarla, su aviso sale de estado (una página que no lo vio ya no avisa de una falla que terminó)', r.datos && r.datos.avisos);
+  const avCierre = r.ok ? r.datos.avisos.filter((x) => x.id === f1.id) : [];
+  ok(avCierre.length === 1 && avCierre[0].tipo === 'CERRADA' && avCierre[0].v === vCierre && avCierre[0].cerradaEn === cerrada && avCierre[0].numero === 'F1254590' && avCierre[0].por === 'Ana López',
+    'al cerrarla, el aviso de esa falla cambia a resuelta, con la hora de solución y quién la cerró (el de publicada ya no sale)', r.datos && r.datos.avisos);
+  ok(!/Empalme terminado/.test(JSON.stringify(r.datos.avisos)), 'sin la nota de cierre, que es interna');
   r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });
   ok(r.ok && r.datos.historial[cli.nodo][0].fin === cerrada, 'el historial se actualiza al cerrar: queda de cuándo a cuándo');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id } });
@@ -296,10 +299,10 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'estado', token: tAgente });
   const avReab = r.ok ? r.datos.avisos.find((x) => x.id === f1.id) : null;
   ok(avReab && avReab.tipo === 'REABIERTA' && avReab.v === vReab && avReab.numero === 'F1254590', 'al reabrirla vuelve a avisar, como reabierta', r.datos && r.datos.avisos);
-  const ultAv = g0.ejecutar("(() => { for (let i = 1; i <= 7; i++) subirVersion_({ tipo: 'FALLA_PUBLICADA' }, null, { id: 'F' + i, tipo: 'PUBLICADA', nodos: ['N' + i], n: 1, en: Date.now() });"
-    + " subirVersion_({ tipo: 'FALLA_CERRADA' }, null, { id: 'F6' }); subirVersion_({ tipo: 'FALLA_EDITADA' }); subirVersion_({ tipo: 'BASE_ACTUALIZADA' }, { baseVersion: 9 });"
-    + " return accionEstado_().avisos.map((x) => x.id + ':' + x.v).join(' '); })()");
-  ok(ultAv === 'F3:4 F4:5 F5:6 F7:8', 'estado guarda solo los últimos 5 avisos, quita el de una falla cerrada y los conserva al editar o subir la base: ' + ultAv);
+  const ultAv = g0.ejecutar("(() => { for (let i = 1; i <= 10; i++) subirVersion_({ tipo: 'FALLA_PUBLICADA' }, null, { id: 'F' + i, tipo: 'PUBLICADA', nodos: ['N' + i], n: 1, en: Date.now() });"
+    + " subirVersion_({ tipo: 'FALLA_CERRADA' }, null, { id: 'F6', tipo: 'CERRADA', nodos: ['N6'], n: 1, en: Date.now() }); subirVersion_({ tipo: 'FALLA_EDITADA' }); subirVersion_({ tipo: 'BASE_ACTUALIZADA' }, { baseVersion: 9 });"
+    + " return accionEstado_().avisos.map((x) => x.id + ':' + x.v + (x.tipo === 'CERRADA' ? 'c' : '')).join(' '); })()");
+  ok(ultAv === 'F3:4 F4:5 F5:6 F7:8 F8:9 F9:10 F10:11 F6:12c', 'estado guarda los últimos 8 avisos, uno por falla (al cerrarla, el de resuelta reemplaza al de publicada), y los conserva al editar o subir la base: ' + ultAv);
   const hf = g.E.activo.getSheetByName('Fallas').getRange(2, 1, 1, 19).getValues()[0];
   ok(hf[1] === 'Activa' && hf[2] === 'Corte de fibra óptica' && Object.prototype.toString.call(hf[6]) === '[object Date]', 'la hoja Fallas se lee bien a simple vista', hf.slice(0, 7));
 
@@ -407,6 +410,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   // La hora que se escribe al cerrar viene con los minutos redondeados (puede quedar antes de las últimas llamadas)
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: fPos.id, nota: 'El VOC no encontró falla en el nodo', cerradaEn: Date.now() - 60000 } });
   ok(r.ok && r.datos.falla.estado === 'CERRADA' && hFallas.getRange(filaPos(), 2).getValue() === 'Descartada', 'cerrarla sin cambiarle el motivo la deja Descartada', r.datos && r.datos.falla);
+  const avDesc = (g.post({ accion: 'estado', token: tAgente }).datos.avisos || []).find((x) => x.id === fPos.id);
+  ok(avDesc && avDesc.tipo === 'DESCARTADA' && avDesc.motivo === 'VALIDACION' && avDesc.nodos[0] === nodoAlerta && !/VOC no encontró/.test(JSON.stringify(avDesc)),
+    'el aviso de escritorio dice que se descartó (para que los asesores dejen de decir que hay una posible falla), sin la nota interna', avDesc);
   pausa();
   r = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: bv } });
   ok(r.ok && !r.datos.fallas.some((f) => f.id === fPos.id), 'los asesores dejan de verla de inmediato (no queda como resuelta)', r.datos && r.datos.fallas.map((f) => f.id));

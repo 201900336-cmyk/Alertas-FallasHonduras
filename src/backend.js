@@ -356,14 +356,18 @@ function BackendLocal() {
           tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.numeroFalla(f);
         }
       }
-      // Igual que el servidor: las últimas fallas publicadas o reabiertas, para el aviso de escritorio; al cerrar se quita
+      // Igual que el servidor: lo último de cada falla (publicada, reabierta, resuelta o descartada), las últimas 8,
+      // para el aviso de escritorio
       const meta = await Store.leerMeta();
-      let avisos = (meta.avisos || []).filter((x) => x.id !== f.id);
-      if (tipo === 'FALLA_PUBLICADA' || tipo === 'FALLA_REABIERTA') {
-        avisos = avisos.concat({ v: (meta.version || 0) + 1, id: f.id, tipo: tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : 'PUBLICADA', numero: f.numero || '', motivo: f.motivo,
-          motivoTexto: f.motivoTexto || '', nodos: f.nodos.slice(0, 4), n: f.nodos.length, clientes: (f.impacto && f.impacto.total) || 0, en: ahora, por: por.nombre }).slice(-5);
+      let avisos;
+      if (tipo !== 'FALLA_EDITADA') {
+        const t = tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : tipo === 'FALLA_CERRADA' ? (Model.descartada(f) ? 'DESCARTADA' : 'CERRADA') : 'PUBLICADA';
+        const x = { v: (meta.version || 0) + 1, id: f.id, tipo: t, numero: f.numero || '', motivo: f.motivo, motivoTexto: f.motivoTexto || '',
+          nodos: f.nodos.slice(0, 4), n: f.nodos.length, clientes: (f.impacto && f.impacto.total) || 0, en: ahora, por: por.nombre };
+        if (t === 'CERRADA' || t === 'DESCARTADA') x.cerradaEn = f.cerradaEn;
+        avisos = (meta.avisos || []).filter((y) => y.id !== f.id).concat(x).slice(-8);
       }
-      const version = await confirmar(tipo, texto, { fallas, meta: tipo === 'FALLA_EDITADA' ? undefined : { avisos } });
+      const version = await confirmar(tipo, texto, { fallas, meta: avisos ? { avisos } : undefined });
       return { falla: f, version };
     },
 
