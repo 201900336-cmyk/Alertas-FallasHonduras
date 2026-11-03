@@ -493,6 +493,21 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const hdes = g.E.activo.getSheetByName('Descargas SMS');
   ok(hdes && hdes.getLastRow() === 2 && hdes.getRange(2, 3).getValue() === 'Ana López' && Number(hdes.getRange(2, 7).getValue()) === espera.size,
     'queda anotado quién descargó y cuántos números');
+  // Índice de celulares por nodo: la primera vez se arma leyendo la base; después sale del índice (rápido)
+  const hCel = g.E.activo.getSheetByName('Celulares');
+  const bvAhora = g.post({ accion: 'estado', token: tWf }).datos.baseVersion;
+  ok(hCel && hCel.isSheetHidden() && String(hCel.getRange(1, 4).getValue()) === 'base ' + bvAhora && hCel.getLastRow() > 1,
+    'la primera vez deja armado el índice de celulares por nodo (pestaña interna, oculta)', hCel && [hCel.getRange(1, 4).getValue(), bvAhora]);
+  const hB = g.E.activo.getSheetByName('Base'), iTB = hB.getRange(1, 1, 1, hB.getLastColumn()).getValues()[0].indexOf('TELEFONO') + 1;
+  const nB = hB.getLastRow() - 1, telsB = hB.getRange(2, iTB, nB, 1).getValues();
+  hB.getRange(2, iTB, nB, 1).setValues(telsB.map(() => ['50499990000']));      // si leyera la base, saldría este número
+  const rIdx = g.post({ accion: 'telefonos', token: tWf, datos: { id: f1.id } });
+  hB.getRange(2, iTB, nB, 1).setValues(telsB);
+  ok(rIdx.ok && rIdx.datos.telefonos.length === espera.size && rIdx.datos.telefonos.every((t) => espera.has(t)) && rIdx.datos.conCelular === eCel && rIdx.datos.soloFijo === eFijo,
+    'la segunda vez sale del índice, sin leer la base completa, y da lo mismo', rIdx.datos && [rIdx.datos.telefonos.length, espera.size]);
+  hCel.getRange(1, 4).setValue('base 0');      // un índice de otra base no se usa: se vuelve a armar
+  const rOtra = g.post({ accion: 'telefonos', token: tWf, datos: { id: f1.id } });
+  ok(rOtra.ok && rOtra.datos.telefonos.length === espera.size && String(hCel.getRange(1, 4).getValue()) === 'base ' + bvAhora, 'un índice de otra base no se usa: se arma de nuevo');
   r = g.post({ accion: 'telefonos', token: tWf, datos: { id: 'activas' } });
   ok(r.ok && r.datos.fallas.includes('F1254590') && r.datos.telefonos.length >= espera.size && /^sms_fallas_activas_/.test(r.datos.archivo), 'todas las fallas activas en un solo archivo', r.datos && r.datos.fallas);
   r = g.post({ accion: 'telefonos', token: tWf, datos: { id: 'F-000000-99' } });
@@ -1052,7 +1067,10 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const antes = hc.getLastRow();
   ok(g.E.triggers.filter((t) => t.fn === 'limpiarConsultas' && t.horas === 1).length === 1, 'el mantenimiento queda programado cada hora');
   g.E.ahora = Date.now() + 31 * 86400000;
-  C.limpiarConsultas();
+  const rMant = C.limpiarConsultas();
+  const bvMant = g.post({ accion: 'estado', token: g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-wf' } }).datos.token }).datos.baseVersion;
+  ok(rMant && rMant.celulares && rMant.celulares.listo && String(g.E.activo.getSheetByName('Celulares').getRange(1, 4).getValue()) === 'base ' + bvMant,
+    'el mantenimiento deja el índice de celulares al día con la base actual' + (rMant && rMant.celulares && rMant.celulares.armado ? ' (lo armó)' : ''), rMant && rMant.celulares);
   const hr1 = g.SpreadsheetApp.openById(g.E.props.get('CONSULTAS_ID')).getSheetByName('Resumen');
   const st1 = g.post({ accion: 'estadisticas', token: g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-wf' } }).datos.token, datos: { desde: 0 } });
   g.E.ahora = null;
@@ -1194,8 +1212,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && tNueva && tNueva.isSheetHidden() && deAlertas(tNueva).length === 1, 'y una pestaña que Alertas vuelve a crear (Tiendas) queda oculta y protegida sola', r.ok);
   C2.mostrarPestanas();
   const toast = (g2.E.toasts[g2.E.toasts.length - 1] || [])[1] || '';
-  ok(visibles(g2.E.activo).length === g2.E.activo.getSheets().length - 1 && g2.E.activo.getSheetByName('Catalogo').isSheetHidden() && visibles(libroC2()).length === libroC2().getSheets().length,
-    'Mostrar las pestañas las pone a la vista en los dos archivos (menos Catalogo, que es interna)', [visibles(g2.E.activo), toast]);
+  const internas = ['Catalogo', 'Celulares'].map((x) => g2.E.activo.getSheetByName(x)).filter(Boolean);
+  ok(visibles(g2.E.activo).length === g2.E.activo.getSheets().length - internas.length && internas.every((x) => x.isSheetHidden()) && visibles(libroC2()).length === libroC2().getSheets().length,
+    'Mostrar las pestañas las pone a la vista en los dos archivos (menos Catalogo y Celulares, que son internas)', [visibles(g2.E.activo), toast]);
   ok(pestanas().every((h) => deAlertas(h).length === 1) && /Siguen protegidas/.test(toast), 'y siguen protegidas', toast);
   C2.onOpen();
   ok(JSON.stringify(visibles(g2.E.activo)) === '["INICIO"]' && g2.E.activo.getActiveSheet().getName() === 'INICIO', 'al abrir el archivo se vuelven a ocultar solas y queda INICIO', visibles(g2.E.activo));

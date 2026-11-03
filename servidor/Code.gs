@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '2.8',                // se ve en la pestaña INICIO
+  VERSION: '2.9',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 36,             // una falla cerrada sigue visible para los asesores
@@ -56,7 +56,7 @@ const ALERTAS = {
   SMS_CONTROL_MAX: 40,           // números de control del equipo (menú Alertas > 5. Números de control)
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas' },
+  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura' },
   ESCRIBEN: ['workforce', 'jefatura'],
   REGIONES: {
@@ -928,6 +928,7 @@ function resumenBase_() {
  * ========================================================================== */
 
 function accionBase_(d, ses) {
+  if (d.op === 'celulares') return prepararIndiceCelulares_();   // la página lo pide al terminar una carga
   if (d.op === 'huella') return baseHuella_(d, ses);
   if (d.op === 'cambios') return baseCambios_(d, ses);
   if (d.op === 'iniciar') return baseIniciar_(d, ses);
@@ -1489,8 +1490,20 @@ function estadosSms_(idFalla) {
   Object.keys(TIPOS_SMS).forEach((t) => { out.clientes[t] = {}; out.control[t] = {}; });
   const h = libro_().getSheetByName(ALERTAS.HOJAS.envios);
   if (!h || h.getLastRow() < 2) return out;
-  const id = idFalla_(idFalla), nc = Math.min(8, Math.max(4, h.getLastColumn() - 2));
-  h.getRange(2, 3, h.getLastRow() - 1, nc).getValues().forEach((x) => {   // ID de Alertas, Tipo, Teléfono, Estado, … Control
+  const id = idFalla_(idFalla), nc = Math.min(8, Math.max(4, h.getLastColumn() - 2)), ult = h.getLastRow();
+  // En la pestaña hay 40 días de envíos de todas las fallas: se leen solo las filas de esta (vienen en bloques,
+  // uno por envío). Si no se pueden ubicar, se lee todo como antes.
+  let filas = null;
+  const partes = /^F(\d{6})(\d+)$/.exec(id);
+  if (partes) {
+    try {
+      const rs = h.getRange(2, 3, ult - 1, 1).createTextFinder('^F-?' + partes[1] + '-?' + partes[2] + '$').useRegularExpression(true)
+        .matchEntireCell(true).findAll().map((r) => r.getRow()).sort((a, b) => a - b);
+      const ts = tramos_(rs);
+      if (ts.length <= 100) { filas = []; ts.forEach((t) => { filas = filas.concat(h.getRange(t[0], 3, t[1] - t[0] + 1, nc).getValues()); }); }
+    } catch (err) { filas = null; }
+  }
+  (filas || h.getRange(2, 3, ult - 1, nc).getValues()).forEach((x) => {   // ID de Alertas, Tipo, Teléfono, Estado, … Control
     if (!Object.prototype.hasOwnProperty.call(TIPOS_SMS, x[1]) || idFalla_(x[0]) !== id) return;
     const c = String(x[7] == null ? '' : x[7]);
     if (!c) out.clientes[x[1]][String(x[2])] = String(x[3]);
@@ -1499,7 +1512,9 @@ function estadosSms_(idFalla) {
   return out;
 }
 function fallaSms_(id) {
-  const f = leerFallas_().filter((x) => x.id === String(id || '') || idFalla_(x.id) === idFalla_(id))[0];
+  // Primero entre las recientes (en caché: las activas siempre están ahí); si no, en la pestaña Fallas
+  const de = (lista) => lista.filter((x) => x.id === String(id || '') || idFalla_(x.id) === idFalla_(id))[0];
+  const f = de(fallasRecientes_()) || de(leerFallas_());
   if (!f) throw fallo_('DATOS', 'No encontré la falla ' + idFalla_(id) + '.');
   return f;
 }
@@ -1799,10 +1814,50 @@ function limpiarHuerfanosSms_() {
 }
 
 /* Los celulares de los clientes de unos nodos: uno por cliente (su primer celular), sin repetir.
-   nodos: { CODIGO: true }. Los fijos (empiezan con 2) no reciben SMS. */
+   nodos: { CODIGO: true }. Los fijos (empiezan con 2) no reciben SMS.
+   Sale del índice de celulares por nodo; si todavía no está listo para esta base, se lee la base completa
+   (tarda) y de paso se deja el índice armado para las próximas veces. */
 function celularesDe_(nodos) {
-  const h = libro_().getSheetByName(ALERTAS.HOJAS.base);
+  let porNodo = null;
+  try { porNodo = leerIndiceCelulares_(nodos); } catch (err) { porNodo = null; }
+  if (!porNodo) porNodo = armarIndiceCelulares_();
+  // Un cliente (contrato) puede tener servicios en varios nodos: vale su primer celular en el orden de la base
+  const porContrato = {};
+  Object.keys(nodos).forEach((nodo) => {
+    const m = porNodo[nodo];
+    if (!m) return;
+    Object.keys(m).forEach((c) => {
+      const e = m[c], antes = porContrato[c];
+      if (antes === undefined || (Array.isArray(e) && (!Array.isArray(antes) || e[0] < antes[0])) || (e === 'F' && antes === '')) porContrato[c] = e;
+    });
+  });
+  const numeros = [], ya = {};
+  let clientes = 0, conCelular = 0, soloFijo = 0, sinTelefono = 0;
+  Object.keys(porContrato).forEach((c) => {
+    clientes++;
+    const e = porContrato[c];
+    if (Array.isArray(e)) { conCelular++; if (!ya[e[1]]) { ya[e[1]] = true; numeros.push(e[1]); } }
+    else if (e === 'F') soloFijo++;
+    else sinTelefono++;
+  });
+  return { numeros: numeros, clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono };
+}
+
+/* ----- Índice de celulares por nodo (pestaña interna "Celulares", oculta y protegida) -----
+   En la base, los servicios de un nodo vienen sueltos entre más de 160 mil filas: para sacar los celulares de
+   una falla había que leer la base entera cada vez que se abría Enviar SMS (y otra vez al enviar). El índice
+   guarda, por nodo, a cada cliente con su primer celular (y la fila de la base donde aparece, para elegir igual
+   que antes si el cliente tiene servicios en varios nodos), "F" si solo tiene fijo o nada si no tiene teléfono.
+   Una fila por nodo: NODO | PARTE | CLIENTES ("contrato|fila|celular", "contrato|F" o "contrato", separados por
+   ";"); un nodo grande ocupa varias partes. En D1, la versión de la base con la que se armó: si la base cambia,
+   el índice ya no vale y se arma de nuevo (al terminar la carga lo pide la página; si no, el mantenimiento de cada
+   hora o la primera vez que se necesita). Nunca sale del servidor. */
+const CELULARES_TROZO = 45000;   // caracteres por celda (Google permite 50 mil)
+function marcaIndiceCelulares_(bv) { return 'base ' + bv; }
+function armarIndiceCelulares_() {
+  const ss = libro_(), h = ss.getSheetByName(ALERTAS.HOJAS.base);
   if (!h || h.getLastRow() < 2) throw fallo_('BASE', 'Todavía no hay base de clientes.');
+  const bv = estado_().baseVersion;   // antes de leer: si la base cambia mientras tanto, el índice queda viejo y no se usa
   const cols = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(String);
   const iC = cols.indexOf('CONTRATO') + 1, iN = cols.indexOf('GRUPO_NODO') + 1, iT = cols.indexOf('TELEFONO') + 1;
   if (!iT) throw fallo_('BASE', 'La base que está subida no trae la columna TELEFONO. Sube la base que incluye los teléfonos.');
@@ -1810,26 +1865,92 @@ function celularesDe_(nodos) {
   const colN = h.getRange(2, iN, n, 1).getValues();
   const colC = h.getRange(2, iC, n, 1).getValues();
   const colT = h.getRange(2, iT, n, 1).getValues();
-
-  // Un cliente (contrato) puede tener varias filas, una por servicio: se juntan sus números
-  const porContrato = {};
+  // Por nodo, por contrato: [fila, celular] con el primer celular (en el orden de la base), 'F' o ''
+  const porNodo = {};
   for (let i = 0; i < n; i++) {
-    if (!nodos[String(colN[i][0])]) continue;
-    const c = String(colC[i][0]);
-    const lista = porContrato[c] || (porContrato[c] = []);
-    String(colT[i][0] || '').split(/\s+/).forEach((t) => { if (/^504\d{8}$/.test(t) && lista.indexOf(t) < 0) lista.push(t); });
+    const nodo = String(colN[i][0]);
+    if (!nodo) continue;
+    const c = String(colC[i][0]), m = porNodo[nodo] || (porNodo[nodo] = {}), antes = m[c];
+    if (Array.isArray(antes)) continue;
+    const nums = String(colT[i][0] || '').split(/\s+/).filter((t) => /^504\d{8}$/.test(t));
+    const cel = nums.filter((t) => /^504[3789]/.test(t))[0];
+    m[c] = cel ? [i, cel] : (nums.length || antes === 'F') ? 'F' : '';
   }
-  const numeros = [], ya = {};
-  let clientes = 0, conCelular = 0, soloFijo = 0, sinTelefono = 0;
-  Object.keys(porContrato).forEach((c) => {
-    clientes++;
-    const lista = porContrato[c];
-    const cel = lista.filter((t) => /^504[3789]/.test(t))[0];
-    if (cel) { conCelular++; if (!ya[cel]) { ya[cel] = true; numeros.push(cel); } }
-    else if (lista.length) soloFijo++;
-    else sinTelefono++;
+  try { guardarIndiceCelulares_(ss, porNodo, bv); } catch (err) { console.error('No se pudo guardar el índice de celulares: ' + (err && err.message)); }
+  return porNodo;
+}
+function guardarIndiceCelulares_(ss, porNodo, bv) {
+  const filas = [];
+  Object.keys(porNodo).sort().forEach((nodo) => {
+    const m = porNodo[nodo];
+    let parte = 1, txt = '';
+    Object.keys(m).forEach((c) => {
+      const e = m[c], s = Array.isArray(e) ? c + '|' + e[0] + '|' + e[1] : e === 'F' ? c + '|F' : c;
+      if (txt && txt.length + s.length + 1 > CELULARES_TROZO) { filas.push([nodo, parte++, txt]); txt = ''; }
+      txt += (txt ? ';' : '') + s;
+    });
+    filas.push([nodo, parte, txt]);
   });
-  return { numeros: numeros, clientes: clientes, conCelular: conCelular, soloFijo: soloFijo, sinTelefono: sinTelefono };
+  let h = ss.getSheetByName(ALERTAS.HOJAS.celulares);
+  if (!h) { h = protegerSiBloqueado_(ss.insertSheet(ALERTAS.HOJAS.celulares)); h.hideSheet(); }
+  h.clear();
+  if (h.getMaxRows() < filas.length + 1) h.insertRowsAfter(h.getMaxRows(), filas.length + 1 - h.getMaxRows());
+  h.getRange(1, 1, 1, 3).setValues([['NODO', 'PARTE', 'CLIENTES']]);
+  if (filas.length) {
+    h.getRange(2, 1, filas.length, 3).setNumberFormat('@');
+    h.getRange(2, 1, filas.length, 3).setValues(filas.map((f) => [f[0], String(f[1]), f[2]]));
+  }
+  h.getRange(1, 4).setValue(marcaIndiceCelulares_(bv));   // al final: hasta aquí el índice no vale
+  return filas.length;
+}
+/* Los clientes de unos nodos según el índice, o null si el índice no está listo para la base actual */
+function leerIndiceCelulares_(nodos) {
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.celulares);
+  if (!h || h.getLastRow() < 2) return null;
+  const marca = marcaIndiceCelulares_(estado_().baseVersion);
+  if (String(h.getRange(1, 4).getValue()) !== marca) return null;
+  const lista = Object.keys(nodos), ult = h.getLastRow();
+  let filas;
+  if (lista.length > 40) filas = h.getRange(2, 1, ult - 1, 3).getValues();   // muchos nodos: todo de una vez
+  else {
+    const rango = h.getRange(2, 1, ult - 1, 1);
+    let celdas;
+    try {
+      celdas = rango.createTextFinder('^(' + lista.map(escaparRegex_).join('|') + ')$').useRegularExpression(true).matchEntireCell(true).findAll();
+    } catch (err) {
+      celdas = [];
+      lista.forEach((x) => { celdas = celdas.concat(rango.createTextFinder(x).matchEntireCell(true).findAll()); });
+    }
+    filas = [];
+    tramos_(celdas.map((r) => r.getRow()).sort((a, b) => a - b)).forEach((t) => {
+      filas = filas.concat(h.getRange(t[0], 1, t[1] - t[0] + 1, 3).getValues());
+    });
+  }
+  const porNodo = {};
+  filas.forEach((f) => {
+    const nodo = String(f[0]);
+    if (!nodos[nodo]) return;
+    const m = porNodo[nodo] || (porNodo[nodo] = {});
+    String(f[2] || '').split(';').forEach((s) => {
+      if (!s) return;
+      const p = s.split('|');
+      m[p[0]] = p.length === 3 ? [Number(p[1]), p[2]] : p[1] === 'F' ? 'F' : '';
+    });
+  });
+  // Si mientras se leía alguien volvió a armar el índice, no se usa lo leído
+  return String(h.getRange(1, 4).getValue()) === marca ? porNodo : null;
+}
+function escaparRegex_(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+/* Si el índice no está listo para la base actual, se arma (lo llama el mantenimiento y la página al terminar la carga) */
+function prepararIndiceCelulares_() {
+  const h = libro_().getSheetByName(ALERTAS.HOJAS.celulares);
+  const marca = marcaIndiceCelulares_(estado_().baseVersion);
+  if (h && String(h.getRange(1, 4).getValue()) === marca) return { listo: true, armado: false };
+  const b = libro_().getSheetByName(ALERTAS.HOJAS.base);
+  if (!b || b.getLastRow() < 2) return { listo: false, armado: false };
+  const cols = b.getRange(1, 1, 1, b.getLastColumn()).getValues()[0].map(String);
+  if (cols.indexOf('TELEFONO') < 0) return { listo: false, armado: false };
+  return { listo: true, armado: true, nodos: Object.keys(armarIndiceCelulares_()).length };
 }
 
 /* ============================================================================
@@ -2370,7 +2491,11 @@ function limpiarConsultas() {
         return he && he.getLastRow() >= 2 ? borrarFilas_(he, filaDesde_(he, Date.now() - ALERTAS.DIAS_ENVIOS_SMS * DIA, he.getLastRow())) : 0;
       });
     } catch (err) { console.error('No se pudieron limpiar los envíos de SMS: ' + (err && err.message)); }
-    return { resumidoHasta: resumido, borradas: borradas, smsBorrados: smsBorrados, smsHuerfanos: smsHuerfanos };
+
+    // 6. El índice de celulares por nodo, si la base cambió y nadie lo pidió todavía (así Enviar SMS no espera)
+    let celulares = null;
+    try { celulares = prepararIndiceCelulares_(); } catch (err) { console.error('No se pudo armar el índice de celulares: ' + (err && err.message)); }
+    return { resumidoHasta: resumido, borradas: borradas, smsBorrados: smsBorrados, smsHuerfanos: smsHuerfanos, celulares: celulares };
   } finally { lock.releaseLock(); }
 }
 
@@ -2500,7 +2625,8 @@ function mostrarPestanas() {
   if (!esDueno_()) { ui.alert('Mostrar las pestañas', 'Solo la cuenta dueña del archivo puede mostrar u ocultar las pestañas.', ui.ButtonSet.OK); return; }
   let n = 0;
   librosAlertas_().forEach((libro) => libro.getSheets().forEach((h) => {
-    if (h.getName() !== ALERTAS.HOJAS.catalogo && h.isSheetHidden()) { h.showSheet(); n++; }   // Catalogo es interna: sigue oculta
+    // Catalogo y Celulares son internas: siguen ocultas
+    if (h.getName() !== ALERTAS.HOJAS.catalogo && h.getName() !== ALERTAS.HOJAS.celulares && h.isSheetHidden()) { h.showSheet(); n++; }
   }));
   SpreadsheetApp.getActiveSpreadsheet().toast((n ? n + ' pestañas a la vista' : 'Las pestañas ya estaban a la vista') + '. Siguen protegidas. Al terminar: Alertas > Ocultar y proteger las pestañas.', 'Alertas', 10);
 }

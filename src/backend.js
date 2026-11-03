@@ -151,21 +151,29 @@ function BackendRemoto() {
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
        servidor dice que la base no coincide con lo que se comparó (COMPLETA). */
     async subirBase(base, catalogoJson, alProgreso) {
-      for (let intento = 0; intento < 2; intento++) {
-        try {
-          const r = await subirCambios(base, catalogoJson, alProgreso);
-          if (r) return r;
-          break;
-        } catch (e) {
-          if (e.codigo === 'COMPLETA') break;
-          // Si se cortó a medias, repetir es seguro: la comparación nueva ve lo que ya quedó guardado
-          if (intento === 0 && /RED|SERVIDOR/.test(e.codigo)) { await esperar(2500); continue; }
-          throw e;
-        }
-      }
-      return subirCompleta(base, catalogoJson, alProgreso);
+      const r = await subirCambiosOCompleta(base, catalogoJson, alProgreso);
+      // Deja armado el índice de celulares de la base nueva, para que Enviar SMS no tenga que leerla entera.
+      // No se espera: el servidor lo termina aunque se cierre la página (y si no, lo arma el mantenimiento).
+      if (base.tieneTelefono) llamar('base', { op: 'celulares' }, 330000).catch(() => {});
+      return r;
     }
   };
+
+  async function subirCambiosOCompleta(base, catalogoJson, alProgreso) {
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        const r = await subirCambios(base, catalogoJson, alProgreso);
+        if (r) return r;
+        break;
+      } catch (e) {
+        if (e.codigo === 'COMPLETA') break;
+        // Si se cortó a medias, repetir es seguro: la comparación nueva ve lo que ya quedó guardado
+        if (intento === 0 && /RED|SERVIDOR/.test(e.codigo)) { await esperar(2500); continue; }
+        throw e;
+      }
+    }
+    return subirCompleta(base, catalogoJson, alProgreso);
+  }
 
   async function subirCambios(base, catalogoJson, alProgreso) {
     alProgreso({ fase: 'comparando' });

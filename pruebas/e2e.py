@@ -306,6 +306,9 @@ with sync_playwright() as p:
     x.locator('.modal').screenshot(path=OUT + 'e06h_sms_listo.png')
     x.click('.modal-pie button:has-text("Listo")'); x.wait_for_timeout(300)
     ok('Aviso de falla a ' + str(n_sms) + ' clientes y 3 de control' in t_sms.locator('dl.meta').inner_text().replace(',', ''), 'la tarjeta muestra el envío, con los de control')
+    marca = t_sms.locator('.marca-sms').inner_text().replace(',', '') if t_sms.locator('.marca-sms').count() else ''
+    ok('Clientes informados' in marca and str(n_sms) + ' por SMS' in marca, 'y a la vista la marca "Clientes informados" con cuántos y a qué hora', marca)
+    t_sms.screenshot(path=OUT + 'e06i_tarjeta_informados.png')
     t_sms.locator('button.enviar-sms').click(); x.wait_for_selector('.sms-cifra', timeout=60000); x.wait_for_timeout(300)
     ok('Ya les llegó a todos' in x.locator('.sms-cifras').inner_text() and x.locator('.modal-pie .btn-primario').is_disabled(), 'al abrirlo otra vez, no se le repite a nadie')
     x.keyboard.press('Escape')

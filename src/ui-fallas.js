@@ -506,6 +506,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
       <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : Model.descartada(f) ? 'SIN_NODO' : 'RESUELTA'}>${activa ? (Model.esPosible(f) ? 'En validación' : 'Activa') : Model.descartada(f) ? 'Descartada' : 'Resuelta'}</span></div>
     </div>
     <div class="lista-nodos" style="margin-top:0">${f.nodos.slice(0, 10).map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}${f.nodos.length > 10 && html`<span class="chip">y ${f.nodos.length - 10} más</span>`}</div>
+    <${MarcaSms} f=${f} now=${now} />
     <div class="cifras">
       <div><b class="num">${U.n(imp.total)}</b><span>clientes</span></div>
       <div><b class="num">${U.n(f.nodos.length)}</b><span>${f.nodos.length === 1 ? 'nodo' : 'nodos'}</span></div>
@@ -537,6 +538,22 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     ${verHist && html`<${ModalHistorialFalla} f=${f} onCerrar=${() => setVerHist(false)} />`}
     ${enviarSms && html`<${ModalSms} f=${f} onCerrar=${() => setEnviarSms(false)} />`}
   </article>`;
+}
+
+/* En la tarjeta, a la vista: los clientes ya recibieron el aviso de falla por SMS. Si después se agregaron nodos,
+   avisa que faltan los clientes de esos nodos (Enviar SMS solo les manda a ellos: nunca repite el aviso). */
+function MarcaSms({ f, now }) {
+  const avisos = (f.sms || []).filter((x) => x.tipo === 'FALLA' && x.enviados > 0);
+  if (!avisos.length) return null;
+  const ult = avisos[avisos.length - 1];
+  const informados = avisos.reduce((a, x) => a + x.enviados, 0);
+  const faltan = f.estado === 'ACTIVA' && (f.historial || []).some((h) => h.accion === 'EDITADA' && h.en > ult.en && /agreg[oó] /i.test(h.detalle || ''));
+  return html`<div class=${'marca-sms' + (faltan ? ' faltan' : '')}>
+    <${Ico} n=${faltan ? 'alerta' : 'enviado'} s=${16} />
+    <b>${faltan ? 'Faltan clientes por informar' : 'Clientes informados'}</b>
+    <span>${faltan ? 'Se agregaron nodos después del SMS: Enviar SMS les manda solo a los que faltan.'
+      : U.n(informados) + ' por SMS, ' + U.cuandoCorto(ult.en, now)}</span>
+  </div>`;
 }
 
 const ACCION = { PUBLICADA: 'Publicó', EDITADA: 'Editó', CERRADA: 'Cerró', REABIERTA: 'Reabrió', SMS: 'Envió SMS de' };
@@ -633,7 +650,7 @@ function ModalSms({ f, onCerrar }) {
   return html`<${Modal} titulo=${'Enviar SMS · ' + U.numeroFalla(f)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3) + '.'} onCerrar=${cerrar} pie=${pie} ancho=${640}>
     <div class="sms-modal">
       ${errorRes ? aviso('alerta', errorRes)
-        : !res ? html`<p class="sub">Contando los clientes de la falla con celular…</p>`
+        : !res ? html`<p class="sub">${fase === 'fin' ? 'Revisando si quedó alguien sin el aviso…' : 'Contando los clientes de la falla con celular…'}</p>`
         : sinServidor ? aviso('alerta', 'Para mandar los mensajes aprobados falta pegar el Code.gs nuevo en Apps Script y publicar una versión nueva de la implementación.')
         : !res.puede ? aviso('info', res.noPuede)
         : html`<div class="sms-cifras">

@@ -966,6 +966,13 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .aviso-acceso { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .error-acceso { background: var(--falla-soft); color: var(--falla-text); }
 .pie-acceso { margin: 0; display: flex; align-items: center; gap: 7px; }
+
+/* Tarjeta de falla: los clientes ya recibieron el aviso por SMS (o faltan los de nodos agregados después) */
+.marca-sms { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; border-radius: 10px; background: var(--ok-soft); color: var(--ok-text); font-size: 13.5px; line-height: 1.35; }
+.marca-sms svg { flex: none; }
+.marca-sms b { font-weight: 700; }
+.marca-sms span { opacity: 0.88; }
+.marca-sms.faltan { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .pie-acceso svg { flex: none; }
 .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rol { text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); transition: border-color 150ms ease, background-color 150ms ease; }
@@ -3104,21 +3111,29 @@ function BackendRemoto() {
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
        servidor dice que la base no coincide con lo que se comparó (COMPLETA). */
     async subirBase(base, catalogoJson, alProgreso) {
-      for (let intento = 0; intento < 2; intento++) {
-        try {
-          const r = await subirCambios(base, catalogoJson, alProgreso);
-          if (r) return r;
-          break;
-        } catch (e) {
-          if (e.codigo === 'COMPLETA') break;
-          // Si se cortó a medias, repetir es seguro: la comparación nueva ve lo que ya quedó guardado
-          if (intento === 0 && /RED|SERVIDOR/.test(e.codigo)) { await esperar(2500); continue; }
-          throw e;
-        }
-      }
-      return subirCompleta(base, catalogoJson, alProgreso);
+      const r = await subirCambiosOCompleta(base, catalogoJson, alProgreso);
+      // Deja armado el índice de celulares de la base nueva, para que Enviar SMS no tenga que leerla entera.
+      // No se espera: el servidor lo termina aunque se cierre la página (y si no, lo arma el mantenimiento).
+      if (base.tieneTelefono) llamar('base', { op: 'celulares' }, 330000).catch(() => {});
+      return r;
     }
   };
+
+  async function subirCambiosOCompleta(base, catalogoJson, alProgreso) {
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        const r = await subirCambios(base, catalogoJson, alProgreso);
+        if (r) return r;
+        break;
+      } catch (e) {
+        if (e.codigo === 'COMPLETA') break;
+        // Si se cortó a medias, repetir es seguro: la comparación nueva ve lo que ya quedó guardado
+        if (intento === 0 && /RED|SERVIDOR/.test(e.codigo)) { await esperar(2500); continue; }
+        throw e;
+      }
+    }
+    return subirCompleta(base, catalogoJson, alProgreso);
+  }
 
   async function subirCambios(base, catalogoJson, alProgreso) {
     alProgreso({ fase: 'comparando' });
@@ -3900,7 +3915,9 @@ const ICONOS = {
   // Diadema de agente (Genesys), tienda y candado: los tres accesos de la entrada
   auricular: '<path d="M4.5 13.5V12a7.5 7.5 0 0 1 15 0v1.5"/><rect x="3.5" y="13" width="4" height="6" rx="1.6"/><rect x="16.5" y="13" width="4" height="6" rx="1.6"/><path d="M18.5 19c0 1.4-1.6 2.3-4.2 2.3h-1.8"/>',
   tienda: '<path d="M4 9.5 5.3 4.5h13.4L20 9.5"/><path d="M4 9.5c0 1.5 1.2 2.6 2.7 2.6S9.3 11 9.3 9.5c0 1.5 1.2 2.6 2.7 2.6s2.7-1.1 2.7-2.6c0 1.5 1.2 2.6 2.6 2.6S20 11 20 9.5"/><path d="M5.5 12v8h13v-8"/><path d="M10 20v-4.5h4V20"/>',
-  candado: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>'
+  candado: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+  // Avión de papel: el aviso ya salió (clientes informados por SMS)
+  enviado: '<path d="M21 3 10.6 13.4"/><path d="M21 3 14.4 21l-3.8-7.6L3 9.6 21 3z"/>'
 };
 function Ico({ n, s }) {
   s = s || 18;
@@ -4974,6 +4991,7 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
       <div class="der"><span class="marca-estado" data-s=${activa ? 'FALLA' : Model.descartada(f) ? 'SIN_NODO' : 'RESUELTA'}>${activa ? (Model.esPosible(f) ? 'En validación' : 'Activa') : Model.descartada(f) ? 'Descartada' : 'Resuelta'}</span></div>
     </div>
     <div class="lista-nodos" style="margin-top:0">${f.nodos.slice(0, 10).map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}${f.nodos.length > 10 && html`<span class="chip">y ${f.nodos.length - 10} más</span>`}</div>
+    <${MarcaSms} f=${f} now=${now} />
     <div class="cifras">
       <div><b class="num">${U.n(imp.total)}</b><span>clientes</span></div>
       <div><b class="num">${U.n(f.nodos.length)}</b><span>${f.nodos.length === 1 ? 'nodo' : 'nodos'}</span></div>
@@ -5005,6 +5023,22 @@ function TarjetaFallaAdmin({ f, onEditar, onCerrar }) {
     ${verHist && html`<${ModalHistorialFalla} f=${f} onCerrar=${() => setVerHist(false)} />`}
     ${enviarSms && html`<${ModalSms} f=${f} onCerrar=${() => setEnviarSms(false)} />`}
   </article>`;
+}
+
+/* En la tarjeta, a la vista: los clientes ya recibieron el aviso de falla por SMS. Si después se agregaron nodos,
+   avisa que faltan los clientes de esos nodos (Enviar SMS solo les manda a ellos: nunca repite el aviso). */
+function MarcaSms({ f, now }) {
+  const avisos = (f.sms || []).filter((x) => x.tipo === 'FALLA' && x.enviados > 0);
+  if (!avisos.length) return null;
+  const ult = avisos[avisos.length - 1];
+  const informados = avisos.reduce((a, x) => a + x.enviados, 0);
+  const faltan = f.estado === 'ACTIVA' && (f.historial || []).some((h) => h.accion === 'EDITADA' && h.en > ult.en && /agreg[oó] /i.test(h.detalle || ''));
+  return html`<div class=${'marca-sms' + (faltan ? ' faltan' : '')}>
+    <${Ico} n=${faltan ? 'alerta' : 'enviado'} s=${16} />
+    <b>${faltan ? 'Faltan clientes por informar' : 'Clientes informados'}</b>
+    <span>${faltan ? 'Se agregaron nodos después del SMS: Enviar SMS les manda solo a los que faltan.'
+      : U.n(informados) + ' por SMS, ' + U.cuandoCorto(ult.en, now)}</span>
+  </div>`;
 }
 
 const ACCION = { PUBLICADA: 'Publicó', EDITADA: 'Editó', CERRADA: 'Cerró', REABIERTA: 'Reabrió', SMS: 'Envió SMS de' };
@@ -5101,7 +5135,7 @@ function ModalSms({ f, onCerrar }) {
   return html`<${Modal} titulo=${'Enviar SMS · ' + U.numeroFalla(f)} sub=${nombreMotivo(f) + ' en ' + U.listaNatural(f.nodos, 3) + '.'} onCerrar=${cerrar} pie=${pie} ancho=${640}>
     <div class="sms-modal">
       ${errorRes ? aviso('alerta', errorRes)
-        : !res ? html`<p class="sub">Contando los clientes de la falla con celular…</p>`
+        : !res ? html`<p class="sub">${fase === 'fin' ? 'Revisando si quedó alguien sin el aviso…' : 'Contando los clientes de la falla con celular…'}</p>`
         : sinServidor ? aviso('alerta', 'Para mandar los mensajes aprobados falta pegar el Code.gs nuevo en Apps Script y publicar una versión nueva de la implementación.')
         : !res.puede ? aviso('info', res.noPuede)
         : html`<div class="sms-cifras">

@@ -954,6 +954,13 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .aviso-acceso { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .error-acceso { background: var(--falla-soft); color: var(--falla-text); }
 .pie-acceso { margin: 0; display: flex; align-items: center; gap: 7px; }
+
+/* Tarjeta de falla: los clientes ya recibieron el aviso por SMS (o faltan los de nodos agregados después) */
+.marca-sms { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; border-radius: 10px; background: var(--ok-soft); color: var(--ok-text); font-size: 13.5px; line-height: 1.35; }
+.marca-sms svg { flex: none; }
+.marca-sms b { font-weight: 700; }
+.marca-sms span { opacity: 0.88; }
+.marca-sms.faltan { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .pie-acceso svg { flex: none; }
 .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rol { text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); transition: border-color 150ms ease, background-color 150ms ease; }
