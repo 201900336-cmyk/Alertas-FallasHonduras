@@ -9,7 +9,7 @@ const CONFIG = {
   equipo: 'Workforce HN',
 
   // Una falla cerrada sigue visible para los asesores durante estas horas.
-  horasVisibleTrasCierre: 36,
+  horasVisibleTrasCierre: 72,
 
   // Cliente reincidente: tantas fallas en su nodo en estos días (desde que es cliente).
   reincidente: { fallas: 3, dias: 90 },
@@ -40,8 +40,10 @@ const CONFIG = {
   roles: {
     concentrix: { nombre: 'Concentrix, Call Center N1 y Redes Sociales', corto: 'Concentrix', canal: 'Concentrix', vistas: ['consulta'], entrada: 'Genesys' },
     tiendas: { nombre: 'Tiendas Claro', corto: 'Tiendas', canal: 'Tiendas', vistas: ['consulta'], entrada: 'Usuario de Tiendas' },
-    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats'], entrada: 'Genesys' },
-    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats'], equipo: true, entrada: 'Genesys' }
+    // Supervisores de Call Center: el panel de los asesores más las posibles fallas (aviso y reporte); no publican fallas
+    supervisor: { nombre: 'Supervisores de Call Center', corto: 'Supervisor', canal: 'Supervisor', vistas: ['consulta'], alertas: true, entrada: 'Genesys' },
+    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats'], alertas: true, entrada: 'Genesys' },
+    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats'], equipo: true, alertas: true, entrada: 'Genesys' }
   },
 
   // "cliente" es la forma en que el asesor le explica el motivo al cliente.

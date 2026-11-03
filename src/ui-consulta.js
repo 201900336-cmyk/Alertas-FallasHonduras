@@ -73,6 +73,7 @@ function VistaConsulta() {
 
   return html`<div class="consulta">
     <section aria-label="Consulta de cliente">
+      ${veAlertas() && !esWorkforce() && html`<${PosiblesFallas} mf=${mf} />`}
       <form class="buscador" role="search" onSubmit=${(e) => { e.preventDefault(); consultar(q); }}>
         <label class="buscador-caja">
           <${Ico} n="lupa" s=${22} />

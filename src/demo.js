@@ -152,12 +152,12 @@ const Demo = (() => {
     const gponCodes = nodos.filter((n) => n.tec === 'GPON').map((n) => n.code);
     const reincidentes = ['CHO02', 'DNLGC04', 'ROAGC02', 'GRA05', 'ALTGC07'];
 
-    // Historial de 30 días (cerradas hace más de 36 h)
+    // Historial de 30 días (cerradas hace más de 72 h, ya no las ven los asesores)
     for (let d = 30; d >= 2; d--) {
       const cuantas = r() < 0.25 ? 0 : ent(1, 2);
       for (let k = 0; k < cuantas; k++) {
         const inicio = now - d * D + ent(6, 21) * H + ent(0, 59) * M;
-        if (now - inicio < 40 * H) continue;
+        if (now - inicio < 84 * H) continue;
         const usarReinc = r() < 0.35;
         const tecG = r() < 0.5;
         const pool = tecG ? gponCodes : hfcCodes;
@@ -176,8 +176,8 @@ const Demo = (() => {
         });
       }
     }
-    // Resuelta hace 33 h (por ocultarse) y hace 14 h
-    crear({ nodos: ['VIC05', 'VIC06'], motivo: 'RUIDO', inicio: now - 38 * H, publicadaEn: now - 37.6 * H, publicadaPor: W[3], estado: 'CERRADA', cerradaEn: now - 33 * H, cerradaPor: W[3], notaCierre: 'Limpieza concluida', referencia: 'Correo NOC #8812' });
+    // Resuelta hace 69 h (por ocultarse) y hace 14 h
+    crear({ nodos: ['VIC05', 'VIC06'], motivo: 'RUIDO', inicio: now - 74 * H, publicadaEn: now - 73.6 * H, publicadaPor: W[3], estado: 'CERRADA', cerradaEn: now - 69 * H, cerradaPor: W[3], notaCierre: 'Limpieza concluida', referencia: 'Correo NOC #8812' });
     crear({ nodos: ['VENGC07'], motivo: 'EQUIPO', inicio: now - 19 * H, publicadaEn: now - 18.7 * H, publicadaPor: W[0], eta: now - 15 * H, estado: 'CERRADA', cerradaEn: now - 14 * H, cerradaPor: W[1], notaCierre: 'Tarjeta reemplazada', referencia: 'Correo NOC #9020' });
     // Activas
     const f1 = crear({ nodos: ['GRA03', 'GRA04', 'GRA07'], motivo: 'ENERGIA', inicio: now - 95 * M, publicadaEn: now - 82 * M, publicadaPor: W[2], eta: now + 65 * M, estado: 'ACTIVA', referencia: 'Correo NOC #9114', detalle: 'ENEE reporta corte en circuito de la zona.' });

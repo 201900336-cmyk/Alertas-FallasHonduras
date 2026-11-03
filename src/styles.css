@@ -434,7 +434,10 @@ button { cursor: pointer; }
 .pf-tarjeta .acc { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .pf-tarjeta[data-reportada="true"] { background: var(--surface); border-color: var(--line); }
 .pf-tarjeta[data-reportada="true"] .ico { background: var(--surface-3); color: var(--ink-2); }
-.pf-reportada { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink) !important; }
+.pf-reportada { display: flex; align-items: flex-start; gap: 6px; font-weight: 600; color: var(--ink) !important; }
+.pf-reportada svg { flex: none; margin-top: 2px; }
+/* Un supervisor le avisó a Workforce: la campana en el color de las posibles fallas */
+.pf-reportada[data-a="WF"] svg, .pf-marca[data-a="WF"] svg { color: var(--resuelta-text); }
 .observacion { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 2px 0; }
 .observacion-t { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); margin-right: 4px; }
 .observacion-t small { font-weight: 500; color: var(--ink-3); font-size: 12.5px; }
@@ -446,6 +449,7 @@ button { cursor: pointer; }
 .pf-cargando { display: flex; align-items: center; gap: 10px; padding: 28px 4px; color: var(--ink-2); font-weight: 600; }
 .pf-marca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
 .pf-marca svg { color: var(--ok); flex: none; }
+.pf-nota small { font-weight: 500; color: var(--ink-3); }
 .pf-datos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; }
 .pf-datos > div { padding: 12px 16px; }
 .pf-datos > div + div { border-left: 1px solid var(--line); }
@@ -466,6 +470,15 @@ button { cursor: pointer; }
 .enlace { border: 0; background: none; padding: 0; color: var(--ink); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .enlace:disabled { opacity: 0.5; cursor: default; }
 .modal-pie .pie-espacio { flex: 1; }
+/* Invitación a activar los avisos de escritorio (arriba del contenido, no se queda pegada al bajar) */
+.oferta-avisos {
+  display: flex; align-items: center; gap: 12px 14px; flex-wrap: wrap; margin: 0 0 18px; padding: 12px 14px 12px 16px;
+  border-radius: 14px; background: var(--surface); border: 1px solid var(--line);
+}
+.oferta-ico { width: 34px; height: 34px; border-radius: 10px; background: var(--resuelta-soft); color: var(--resuelta-text); display: grid; place-items: center; flex: none; }
+.oferta-avisos p { margin: 0; flex: 1 1 360px; min-width: 0; font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
+.oferta-avisos p b { color: var(--ink); font-weight: 700; }
+.oferta-acc { display: flex; gap: 6px; margin-left: auto; }
 /* Los avisos de arriba se apilan (actualización de Workforce y posible falla) y quedan a la vista al bajar */
 .avisos-arriba { position: sticky; top: 60px; z-index: 25; }
 .avisos-arriba .aviso { position: static; }
@@ -963,6 +976,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .marca-sms.faltan { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .pie-acceso svg { flex: none; }
 .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.roles > .rol:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .rol { text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); transition: border-color 150ms ease, background-color 150ms ease; }
 .rol b { display: block; font-size: 14px; }
 .rol span { font-size: 12.5px; color: var(--ink-3); }

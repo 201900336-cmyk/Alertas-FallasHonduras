@@ -396,7 +396,7 @@ const Model = (() => {
   }
 
   /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
-  const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal]);
+  const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal, CONFIG.roles.supervisor.canal]);
   const esInterno = (canal) => INTERNOS.has(canal);
   /* Nodo -> cuándo se registró el cierre de su última falla (resuelta o descartada): lo de antes ya lo explicó esa falla */
   const cierreDe = (f) => (f.historial || []).reduce((t, h) => (h.accion === 'CERRADA' && h.en > t ? h.en : t), f.cerradaEn || 0);
@@ -506,7 +506,8 @@ const Model = (() => {
     if (c.reporte) t += (t ? ', ' : '') + 'reportó posible falla';
     return t;
   }
-  function correoPosibleFalla(d, info, firma, ahora) {
+  function correoPosibleFalla(d, info, firma, ahora, equipo) {
+    equipo = equipo || CONFIG.equipo;
     const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
     const hora = (t) => U.hora(t).replace(/ /g, ' ');
     const h = new Date(ahora).getHours();
@@ -557,8 +558,8 @@ const Model = (() => {
     const parrafo = (t) => '<p style="margin:0 0 10px">' + t + '</p>';
     const html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000000">'
       + parrafo(esc(saludo) + ':') + parrafo(enHtml(p1)) + parrafo(enHtml(p2)) + parrafo(enHtml(p3)) + tablaHtml
-      + '<p style="margin:14px 0 0">Saludos,<br>' + esc(firma) + '<br>' + esc(CONFIG.equipo) + '</p></div>';
-    const texto = [saludo + ':', enTexto(p1), enTexto(p2), enTexto(p3), tablaTexto, 'Saludos,\r\n' + firma + '\r\n' + CONFIG.equipo].join('\r\n\r\n');
+      + '<p style="margin:14px 0 0">Saludos,<br>' + esc(firma) + '<br>' + esc(equipo) + '</p></div>';
+    const texto = [saludo + ':', enTexto(p1), enTexto(p2), enTexto(p3), tablaTexto, 'Saludos,\r\n' + firma + '\r\n' + equipo].join('\r\n\r\n');
     return { asunto, html, texto, tablaHtml, tablaTexto };
   }
 

@@ -198,7 +198,7 @@ function CabezaBloque({ ico, titulo, sub }) {
   </div>`;
 }
 
-/* Acceso real: Genesys para Concentrix, Workforce y Jefatura; usuario genérico para Tiendas */
+/* Acceso real: Genesys para Concentrix, los supervisores, Workforce y Jefatura; usuario genérico para Tiendas */
 function Acceso() {
   const s = useG();
   const cfg = s.config || { genesys: {} };
@@ -237,9 +237,9 @@ function Acceso() {
         <${CabezaAcceso} titulo="Entrar" />
         ${s.avisoAcceso && html`<div class="nota aviso-acceso" role="alert"><${Ico} n="info" s=${18} /><span>${s.avisoAcceso}</span></div>`}
         <section class="acceso-bloque">
-          <${CabezaBloque} ico="auricular" titulo="Concentrix, Workforce HN y Jefatura" sub="Con tu usuario de Genesys." />
+          <${CabezaBloque} ico="auricular" titulo="Concentrix, supervisores, Workforce HN y Jefatura" sub="Con tu usuario de Genesys." />
           <button class="btn btn-primario btn-grande" style="width:100%" disabled=${ocupado || !cfg.genesys.activo} onClick=${genesys}>Entrar con Genesys</button>
-          ${!cfg.genesys.activo && html`<p class="sub">Genesys todavía no está conectado.${cfg.temporal ? ' Mientras tanto, Workforce y Jefatura pueden usar el acceso temporal.' : ''}</p>`}
+          ${!cfg.genesys.activo && html`<p class="sub">Genesys todavía no está conectado.${cfg.temporal ? ' Mientras tanto, quien tenga una cuenta temporal puede usar el acceso temporal.' : ''}</p>`}
         </section>
         <div class="acceso-o" aria-hidden="true"><span>o</span></div>
         <form class="acceso-bloque" onSubmit=${entrar}>
@@ -275,7 +275,8 @@ function AccesoDemo() {
   const [rol, setRol] = useState(prev.rol || 'concentrix');
   const [tienda, setTienda] = useState(() => tiendaDeLista(CONFIG.tiendas, prev.tienda || ''));
   const ok = nombre.trim().length >= 3 && (rol !== 'tiendas' || !!tienda);
-  const DESC = { concentrix: 'Call Center N1 y Redes Sociales, con Genesys', tiendas: 'Usuario genérico de tiendas', workforce: 'Publica y cierra fallas, con Genesys', jefatura: 'Todo, más el desempeño del equipo' };
+  const DESC = { concentrix: 'Call Center N1 y Redes Sociales, con Genesys', tiendas: 'Usuario genérico de tiendas', supervisor: 'Panel de asesor y avisos de posibles fallas',
+    workforce: 'Publica y cierra fallas, con Genesys', jefatura: 'Todo, más el desempeño del equipo' };
   async function entrar(e) {
     e.preventDefault(); if (!ok) return;
     const datos = { nombre: U.titulo(nombre.trim()), rol, tienda: rol === 'tiendas' ? tienda : '' };
@@ -345,6 +346,8 @@ function BarraSuperior({ mf }) {
           <div class="info"><b>${u.nombre}</b>${rol.nombre}${u.tienda ? html`<br />Tienda ${u.tienda}` : ''}<br />${u.origen === 'genesys' ? 'Entró con Genesys' : u.origen === 'demo' ? 'Demostración' : 'Usuario ' + String(u.u).split(':')[0]}</div>
           <hr />
           <button role="menuitem" onClick=${() => { setMenu(false); A.actualizar(); }}><${Ico} n="refrescar" s=${17} />Actualizar datos</button>
+          ${Avisos.soportado() && html`<button role="menuitem" onClick=${() => { setMenu(false); cambiarAvisos(!s.avisosEscritorio); }}>
+            <${Ico} n="campana" s=${17} />${s.avisosEscritorio ? 'Desactivar avisos en el escritorio' : 'Activar avisos en el escritorio'}</button>`}
           <button role="menuitem" onClick=${() => { setMenu(false); A.salir(); }}><${Ico} n="salir" s=${17} />Salir</button>
         </div>`}
       </div>
@@ -365,18 +368,45 @@ function AvisoCambios() {
   </div>`;
 }
 
-/* Una posible falla nueva para Workforce, en cualquier vista menos Fallas (ahí está el panel) */
+/* Una posible falla nueva para Workforce (en cualquier vista menos Fallas, donde está el panel) y para los
+   supervisores de Call Center (su panel está arriba de la consulta). A Workforce también le llega así el aviso
+   de un supervisor. */
 function AvisoPosibleFalla({ mf }) {
   const s = useG();
-  if (!esWorkforce() || s.ruta === 'fallas' || !s.alertasNuevas.length) return null;
-  const lista = posiblesFallas(s, mf).alertas.filter((a) => s.alertasNuevas.includes(a.nodo) && !a.reportada);
+  const wf = esWorkforce();
+  if (!veAlertas() || (wf && s.ruta === 'fallas') || !s.alertasNuevas.length) return null;
+  const lista = posiblesFallas(s, mf).alertas.filter((a) => s.alertasNuevas.includes(a.nodo) && pendienteAlerta(a));
   if (!lista.length) return null;
   const a = lista[0], otras = lista.length - 1;
+  const m = wf && a.reportada && a.reportada.a === 'WF' ? a.reportada : null;
+  const donde = wf ? 'en Fallas' : 'en Posibles fallas';
   return html`<div class="aviso aviso-pf" role="alert">
-    <span class="aviso-icono"><${Ico} n="alerta" s=${17} /></span>
-    <p><b>Posible falla en ${a.nodo}.</b> ${U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos')} en ${lapsoAlerta(a)}${a.reportes ? ', ' + U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : ''}.${otras ? ' Hay ' + U.plural(otras, 'otra más', otras + ' más') + ' en Fallas.' : ''}</p>
+    <span class="aviso-icono"><${Ico} n=${m ? 'campana' : 'alerta'} s=${17} /></span>
+    <p><b>${m ? quienMarca(m) + ' avisa: posible falla en ' + a.nodo : 'Posible falla en ' + a.nodo}.</b> ${m && m.nota ? '«' + m.nota + '» ' : ''}${U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos')} en ${lapsoAlerta(a)}${a.reportes ? ', ' + U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : ''}.${otras ? ' Hay ' + U.plural(otras, 'otra más', otras + ' más') + ' ' + donde + '.' : ''}</p>
     <button class="btn btn-chico" onClick=${() => A.abrirPosibleFalla(a.nodo)}>Ver clientes y correo</button>
-    <button class="btn btn-icono btn-chico aviso-x" aria-label="Cerrar el aviso" title="Cerrar el aviso (la posible falla sigue en Fallas)" onClick=${() => G.set({ alertasNuevas: [] })}><${Ico} n="x" s=${16} /></button>
+    <button class="btn btn-icono btn-chico aviso-x" aria-label="Cerrar el aviso" title=${'Cerrar el aviso (la posible falla sigue ' + donde + ')'} onClick=${() => G.set({ alertasNuevas: [] })}><${Ico} n="x" s=${16} /></button>
+  </div>`;
+}
+
+/* Activar o desactivar los avisos de escritorio desde el menú o la invitación (el navegador pide permiso la primera vez) */
+async function cambiarAvisos(activar) {
+  if (!activar) { Avisos.desactivar(); tostada('Avisos en el escritorio desactivados'); return; }
+  const p = await Avisos.activar();
+  if (p === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); }
+  else if (p === 'denied') tostada('El navegador bloqueó los avisos de esta página. Permítelos en el candado junto a la dirección.');
+}
+/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla nueva que publica Workforce.
+   Sale mientras el navegador no haya preguntado; "Ahora no" la esconde 7 días (el menú del usuario siempre los activa). */
+function OfertaAvisos() {
+  const s = useG();
+  if (s.ofertaCerrada || !Avisos.soportado() || s.permisoAvisos !== 'default') return null;
+  return html`<div class="oferta-avisos" role="region" aria-label="Avisos en el escritorio">
+    <span class="oferta-ico"><${Ico} n="campana" s=${18} /></span>
+    <p><b>Entérate al instante de cada falla nueva.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla${veAlertas() ? ' o haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
+    <div class="oferta-acc">
+      <button class="btn btn-primario btn-chico" onClick=${() => cambiarAvisos(true)}>Activar avisos</button>
+      <button class="btn btn-fantasma btn-chico" onClick=${() => { guardarLS('alertas-oferta-avisos', Date.now()); G.set({ ofertaCerrada: true }); }}>Ahora no</button>
+    </div>
   </div>`;
 }
 
@@ -391,12 +421,13 @@ function Shell() {
     <div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>
     ${Backend.modo === 'local' && html`<div class="demo-cinta">${s.meta.demo ? 'Estás viendo datos de demostración: clientes, fallas y consultas inventados.' : 'Modo demostración: los datos se guardan solo en esta PC.'}${!RT.api ? ' Falta conectar el servidor en config.js.' : ''}</div>`}
     <main class="contenido" id="contenido">
+      <${OfertaAvisos} />
       ${ruta === 'consulta' && html`<${VistaConsulta} />`}
       ${ruta === 'fallas' && html`<${VistaFallas} />`}
       ${ruta === 'base' && html`<${VistaBase} />`}
       ${ruta === 'stats' && html`<${VistaStats} />`}
     </main>
-    ${esWorkforce() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
+    ${veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />
   </div>`;
 }

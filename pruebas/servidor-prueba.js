@@ -24,6 +24,7 @@ C.guardarCuenta('workforce.temporal', 'workforce', 'Workforce2026!');
 const hu = g.E.activo.getSheetByName('Usuarios');
 hu.appendRow(['ana.lopez@claro.com.hn', 'Ana López', 'workforce', 'SÍ', '']);
 hu.appendRow(['gerente.fijo@claro.com.hn', 'Gerencia Fijo', 'jefatura', 'SÍ', '']);
+hu.appendRow(['sofia.mejia@concentrix.com', 'Sofía Mejía', 'supervisor', 'SÍ', '']);
 
 let proximo = { name: 'Karla Zelaya', email: 'karla.zelaya@concentrix.com' };
 let ocupado = { n: 0, modo: 'html' };   // /test/ocupado: las próximas n llamadas fallan como cuando Apps Script está saturado

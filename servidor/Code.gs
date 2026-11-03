@@ -11,7 +11,7 @@
  *  Lo que guarda:
  *    - Base        la base semanal de clientes (se reemplaza completa en cada carga)
  *    - Fallas      las fallas publicadas por Workforce HN y su historial
- *    - Usuarios    correos de Genesys con acceso Workforce o Jefatura
+ *    - Usuarios    correos de Genesys con acceso Workforce, Jefatura o supervisor de Call Center
  *    - Cargas      quién subió cada base y cuándo
  *    - Catalogo    resumen por nodo (sin datos personales), oculta
  *    - "Alertas - Consultas" (archivo aparte) el detalle de cada consulta (30 días)
@@ -26,10 +26,10 @@
  */
 
 const ALERTAS = {
-  VERSION: '2.9',                // se ve en la pestaña INICIO
+  VERSION: '3.0',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
-  HORAS_VISIBLE: 36,             // una falla cerrada sigue visible para los asesores
+  HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
   LIMITE_CONSULTAS_HORA: 400,    // por persona
   LIMITE_TIENDAS_HORA: 8000,     // para toda la cuenta compartida de Tiendas (unas 200 personas)
   INTENTOS_PERSONA: 5,           // contraseñas equivocadas de una misma persona antes de bloquearla 15 minutos
@@ -54,11 +54,14 @@ const ALERTAS = {
   // y el ingreso con Genesys también usa (2 por ingreso). Con Google Workspace (100 mil al día) se puede subir.
   SMS_POR_DIA: 15000,
   SMS_CONTROL_MAX: 40,           // números de control del equipo (menú Alertas > 5. Números de control)
+  AVISOS_MAX: 5,                 // fallas publicadas o reabiertas que guarda "estado" para el aviso de escritorio
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
   HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares' },
-  ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura' },
+  ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura', supervisor: 'Supervisor' },
   ESCRIBEN: ['workforce', 'jefatura'],
+  // Ven las posibles fallas (el aviso de 5 clientes en 60 min) y las pueden reportar; publicar fallas, solo Workforce y Jefatura
+  VEN_ALERTAS: ['workforce', 'jefatura', 'supervisor'],
   REGIONES: {
     'mypurecloud.com': 'Estados Unidos Este (Virginia)', 'use2.us-gov-pure.cloud': 'Estados Unidos Gobierno',
     'usw2.pure.cloud': 'Estados Unidos Oeste (Oregón)', 'cac1.pure.cloud': 'Canadá', 'mxc1.pure.cloud': 'México',
@@ -84,7 +87,7 @@ const COL_OPCIONALES = ['MEGAS', 'TELEFONO', 'HUELLA'];
 const COL_FALLAS = ['ID', 'Estado', 'Motivo', 'Motivo (otro)', 'Explicación al cliente', 'Nodos', 'Inicio', 'Solución estimada',
   'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Nota de cierre', 'Referencia', 'Notas internas', 'Clientes', 'HFC', 'GPON', 'Datos (no editar)',
   'Número de falla'];   // llegó después: va al final para no mover las columnas de las fallas que ya existen
-const COL_USUARIOS = ['Correo de Genesys', 'Nombre', 'Rol (workforce, jefatura, concentrix o bloqueado)', 'Activo (SÍ o NO)', 'Notas'];
+const COL_USUARIOS = ['Correo de Genesys', 'Nombre', 'Rol (workforce, jefatura, supervisor, concentrix o bloqueado)', 'Activo (SÍ o NO)', 'Notas'];
 const COL_CARGAS = ['Fecha', 'Subió', 'Archivo', 'Servicios', 'HFC', 'GPON', 'Nodos', 'Contratos nuevos', 'Ya no aparecen', 'Cambios de nodo'];
 const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo', 'Contrato', 'Nodo', 'Resultado', 'Falla'];
 const COL_RESUMEN = ['Día', 'Consultas', 'Con falla', 'Sin resultado', 'Reportes', 'Datos (no editar)'];
@@ -109,7 +112,8 @@ const ACCIONES = {
   telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_, monitoreo: accionMonitoreo_
 };
 const PUBLICAS = { config: true, login: true, monitoreo: true };
-const SOLO_WORKFORCE = { falla: true, base: true, alertas: true, alerta: true, estadisticas: true, telefonos: true, sms: true };
+const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true };
+const DE_ALERTAS = { alertas: true, alerta: true };   // Workforce, Jefatura y los supervisores de Call Center
 
 /* ============================================================================
  *  Entrada de la aplicación web
@@ -133,6 +137,7 @@ function doPost(e) {
       ses = leerSesion_(req.token);
       if (!ses) throw fallo_('SESION', 'Tu sesión venció. Entra de nuevo.');
       if (SOLO_WORKFORCE[accion]) exigirWorkforce_(ses);
+      else if (DE_ALERTAS[accion]) exigirRol_(ses, ALERTAS.VEN_ALERTAS);
     }
     return json_({ ok: true, datos: fn(req.datos || {}, ses) });
   } catch (err) {
@@ -203,12 +208,19 @@ function estado_() {
   cache_().put('estado', JSON.stringify(e), 21600);
   return e;
 }
-function subirVersion_(cambio, extra) {
+/* aviso: las últimas fallas publicadas o reabiertas quedan en "avisos" (hasta 5) para el aviso de escritorio
+   de todos. Al cerrar una falla se quita su aviso: una página que todavía no lo vio ya no avisa de una falla
+   que terminó. */
+function subirVersion_(cambio, extra, aviso) {
   const raw = props_().getProperty('ESTADO');
   const e = raw ? JSON.parse(raw) : { version: 1, baseVersion: 0, cambio: null };
   e.version = (e.version || 1) + 1;
   e.cambio = cambio;
   if (extra) Object.keys(extra).forEach((k) => { e[k] = extra[k]; });
+  if (aviso) {
+    const otros = (e.avisos || []).filter((x) => x.id !== aviso.id);
+    e.avisos = aviso.tipo ? otros.concat(Object.assign({ v: e.version }, aviso)).slice(-ALERTAS.AVISOS_MAX) : otros;
+  }
   props_().setProperty('ESTADO', JSON.stringify(e));
   cache_().put('estado', JSON.stringify(e), 21600);
   return e;
@@ -452,12 +464,13 @@ function leerSesion_(token) {
   return p;
 }
 
-function exigirWorkforce_(ses) {
-  if (ALERTAS.ESCRIBEN.indexOf(ses.r) < 0) throw fallo_('PERMISO', 'Tu acceso no permite esta acción.');
+function exigirWorkforce_(ses) { exigirRol_(ses, ALERTAS.ESCRIBEN); }
+function exigirRol_(ses, roles) {
+  if (roles.indexOf(ses.r) < 0) throw fallo_('PERMISO', 'Tu acceso no permite esta acción.');
   if (ses.o === 'genesys') {
-    // Si alguien sale de la lista de Usuarios, pierde el permiso de inmediato
+    // Si alguien sale de la lista de Usuarios (o le cambian el rol), pierde el permiso de inmediato
     const reg = usuarios_()[ses.u];
-    if (!reg || !reg.activo || ALERTAS.ESCRIBEN.indexOf(reg.rol) < 0) throw fallo_('PERMISO', 'Tu acceso ya no permite esta acción.');
+    if (!reg || !reg.activo || roles.indexOf(reg.rol) < 0) throw fallo_('PERMISO', 'Tu acceso ya no permite esta acción.');
   }
 }
 
@@ -519,7 +532,7 @@ function limitar_(ses) {
 
 function accionEstado_() {
   const e = estado_();
-  return { version: e.version, baseVersion: e.baseVersion, cambio: e.cambio, ahora: Date.now() };
+  return { version: e.version, baseVersion: e.baseVersion, cambio: e.cambio, avisos: e.avisos || [], ahora: Date.now() };
 }
 
 function accionCargar_(d, ses) {
@@ -738,13 +751,13 @@ function motivoCompatible_(x) {
 function fallasRecientes_() {
   const c = cache_().get('fallasRecientes');
   if (c) return JSON.parse(c);
-  const corte = Date.now() - 48 * 3600000;
+  const corte = Date.now() - (ALERTAS.HORAS_VISIBLE + 12) * 3600000;
   const recientes = leerFallas_().filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && f.cerradaEn >= corte)).map(sinFila_);
   const txt = JSON.stringify(recientes);
   if (txt.length < 95000) cache_().put('fallasRecientes', txt, 600);
   return recientes;
 }
-/* Las fallas que ven los asesores: activas y cerradas hace menos de 36 horas (sin las descartadas) */
+/* Las fallas que ven los asesores: activas y cerradas hace menos de 72 horas (sin las descartadas) */
 function fallasVisibles_() {
   const ahora = Date.now();
   return fallasRecientes_().filter((f) => f.estado === 'ACTIVA' || (f.cerradaEn && !descartada_(f) && ahora - f.cerradaEn < ALERTAS.HORAS_VISIBLE * 3600000)).map(fallaPublica_);
@@ -799,7 +812,8 @@ function accionFalla_(d, ses) {
     else h.appendRow(fila);
     cache_().remove('fallasRecientes');
     cache_().remove('alertas');
-    const e = subirVersion_({ tipo: tipo, texto: texto, por: por, en: ahora });
+    const aviso = tipo === 'FALLA_PUBLICADA' || tipo === 'FALLA_REABIERTA' ? avisoFalla_(f, tipo, ahora, por) : tipo === 'FALLA_CERRADA' ? { id: f.id } : null;
+    const e = subirVersion_({ tipo: tipo, texto: texto, por: por, en: ahora }, null, aviso);
     return { falla: sinFila_(f), version: e.version };
   } finally {
     lock.releaseLock();
@@ -846,6 +860,15 @@ function nuevoId_(todas, ahora) {
   let max = 0;
   todas.forEach((f) => { const id = idFalla_(f.id); if (id.indexOf(pref) === 0) max = Math.max(max, Number(id.slice(pref.length)) || 0); });
   return pref + String(max + 1).padStart(2, '0');
+}
+/* El aviso de escritorio de una falla publicada o reabierta: lo mismo que ya ven los asesores de ella
+   (número, motivo, nodos y clientes), sin referencia, notas internas ni correos */
+function avisoFalla_(f, tipo, ahora, por) {
+  const p = fallaPublica_(f);
+  return {
+    id: p.id, tipo: tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : 'PUBLICADA', numero: p.numero, motivo: p.motivo, motivoTexto: p.motivoTexto || '',
+    nodos: p.nodos.slice(0, 4), n: p.nodos.length, clientes: (p.impacto && p.impacto.total) || 0, en: ahora, por: por.nombre
+  };
 }
 function nombreMotivo_(f) { return f.motivo === 'OTRO' ? (f.motivoTexto || 'Otro motivo') : ALERTAS.MOTIVOS[f.motivo]; }
 function lista_(arr, max) {
@@ -2153,9 +2176,9 @@ function registrarConsulta_(ses, x) {
 
 /* ----- Posibles fallas: la última hora del detalle -----
    Cuenta los clientes distintos de cada nodo que consultaron Concentrix y Tiendas en los últimos
-   60 minutos. Las búsquedas de Workforce y Jefatura no cuentan: son ellos revisando el nodo.
+   60 minutos. Las búsquedas de Workforce, Jefatura y los supervisores no cuentan: son ellos revisando el nodo.
    5 clientes (o 2 reportes de asesores) es una posible falla; 3 o 4, un nodo en observación. */
-const ACCESOS_INTERNOS_ = { 'Workforce HN': true, 'Jefatura': true };
+const ACCESOS_INTERNOS_ = { 'Workforce HN': true, 'Jefatura': true, 'Supervisor': true };
 function consultasPosibleFalla_(filas, enFalla) {
   return filas.filter((f) => {
     const nodo = String(f[7] || ''), res = String(f[8] || '');
@@ -2213,8 +2236,9 @@ function accionAlertas_() {
   return res;
 }
 
-/* Posibles fallas que Workforce ya reportó (al VOC o al personal interno). Las ve todo el equipo,
-   para que nadie mande el mismo correo dos veces, y duran 6 horas. */
+/* Marcas de las posibles fallas: reportada al VOC (a: 'VOC', la pone Workforce o un supervisor) o un supervisor
+   que le avisó a Workforce (a: 'WF', con una nota opcional). Las ve todo el equipo, para que nadie mande el mismo
+   correo dos veces, y duran 6 horas. */
 function alertasReportadas_() {
   let m = {};
   try { m = JSON.parse(props_().getProperty('ALERTAS_REPORTADAS') || '{}') || {}; } catch (e) { m = {}; }
@@ -2271,12 +2295,21 @@ function accionAlerta_(d, ses) {
     let marca = null;
     try {
       const m = alertasReportadas_();
-      if (op === 'reportada') m[nodo] = marca = { por: ses.n, en: Date.now() };
-      else delete m[nodo];
+      const antes = m[nodo] || null, escribe = ALERTAS.ESCRIBEN.indexOf(ses.r) >= 0;
+      if (op === 'reportada') {
+        const a = d.a === 'WF' && !escribe ? 'WF' : 'VOC';
+        // Un aviso a Workforce no tapa una que ya se reportó al VOC
+        if (antes && antes.a !== 'WF' && a === 'WF') marca = antes;
+        else m[nodo] = marca = { por: ses.n, u: ses.u, rol: ses.r, a: a, nota: texto_(d.nota, 140), en: Date.now() };
+      } else {
+        // Un supervisor solo quita las marcas que puso él; Workforce y Jefatura, cualquiera
+        if (antes && !escribe && antes.u !== ses.u) throw fallo_('PERMISO', 'Solo ' + antes.por + ' o Workforce pueden quitar esa marca.');
+        delete m[nodo];
+      }
       props_().setProperty('ALERTAS_REPORTADAS', JSON.stringify(m));
     } finally { lock.releaseLock(); }
     cache_().remove('alertas');
-    return { nodo: nodo, reportada: marca };
+    return { nodo: nodo, reportada: op === 'reportada' ? marca : null };
   }
   if (op !== 'detalle') throw fallo_('DATOS', 'Operación no válida.');
   return detallePosibleFalla_(nodo);
@@ -2587,7 +2620,7 @@ function hojaInicio_(libro, deConsultas) {
     'ALERTAS · Fallas de red de Servicios Fijos HN',
     '',
     'Archivo confidencial. Los datos están en pestañas ocultas y protegidas: solo la cuenta dueña los puede ver y cambiar.',
-    'No compartan este archivo. Concentrix, Tiendas, Workforce HN y Jefatura entran únicamente por la página web de Alertas.',
+    'No compartan este archivo. Concentrix, los supervisores, Tiendas, Workforce HN y Jefatura entran únicamente por la página web de Alertas.',
     '',
     'Para revisar los datos o editar usuarios y tiendas: menú Alertas › Mostrar las pestañas.',
     'Al terminar: menú Alertas › Ocultar y proteger las pestañas. Cada vez que se abre el archivo se vuelven a ocultar solas.',
@@ -2763,7 +2796,7 @@ function dialogoGenesys() {
     '<label>Quién puede entrar con Genesys<select id="rol">' +
     '<option value="concentrix"' + (g.rolPorDefecto !== 'ninguno' ? ' selected' : '') + '>Cualquier usuario de Genesys (entra como Concentrix)</option>' +
     '<option value="ninguno"' + (g.rolPorDefecto === 'ninguno' ? ' selected' : '') + '>Solo quienes estén en la hoja Usuarios</option></select></label>' +
-    '<p class="nota">Workforce y Jefatura se definen en la hoja Usuarios con su correo de Genesys.</p>' +
+    '<p class="nota">Workforce, Jefatura y los supervisores de Call Center se definen en la hoja Usuarios con su correo de Genesys.</p>' +
     '<div class="acc"><button onclick="google.script.host.close()">Cancelar</button>' +
     '<button class="pri" onclick="guardar()">Guardar</button></div><p id="msg"></p>' +
     '<script>function guardar(){var v=function(i){return document.getElementById(i).value;};var d={region:v("region"),clientId:v("clientId"),orgId:v("orgId"),rolPorDefecto:v("rol")};' +
@@ -2891,7 +2924,7 @@ function dialogoClaves() {
     '<h3>Crear o cambiar una contraseña</h3>' +
     '<label>Acceso<select id="rol"><option value="tiendas">Tiendas (usuario genérico)</option>' +
     '<option value="workforce">Workforce HN, temporal mientras se conecta Genesys</option>' +
-    '<option value="jefatura">Jefatura, temporal</option><option value="concentrix">Concentrix, temporal</option></select></label>' +
+    '<option value="jefatura">Jefatura, temporal</option><option value="supervisor">Supervisor de Call Center, temporal</option><option value="concentrix">Concentrix, temporal</option></select></label>' +
     '<label>Usuario<input id="usuario" value="tiendas" autocomplete="off"></label>' +
     '<label>Contraseña (mínimo 10 caracteres)<input id="c1" type="password" autocomplete="new-password"></label>' +
     '<label>Repite la contraseña<input id="c2" type="password" autocomplete="new-password"></label>' +

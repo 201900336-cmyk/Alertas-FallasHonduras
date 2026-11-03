@@ -47,9 +47,10 @@ function VistaFallas() {
   </div>`;
 }
 
-/* ---------- Posibles fallas: aviso temprano para Workforce ----------
+/* ---------- Posibles fallas: aviso temprano para Workforce y los supervisores de Call Center ----------
    Nodos sin falla publicada con 5 clientes distintos en 60 min (o 2 reportes de asesores).
-   Con 3 o 4 clientes quedan en observación. Cada una trae el correo listo para reportarla. */
+   Con 3 o 4 clientes quedan en observación. Cada una trae el correo listo para reportarla.
+   Los supervisores la reportan al VOC o le avisan a Workforce; crear la falla, solo Workforce. */
 function PosiblesFallas({ mf }) {
   const s = useG();
   const { alertas, observacion } = posiblesFallas(s, mf);
@@ -75,22 +76,23 @@ function PosiblesFallas({ mf }) {
 function TarjetaPosibleFalla({ a }) {
   const s = useG();
   const info = Model.infoNodo(s.cat, a.nodo);
+  const m = a.reportada, pendiente = pendienteAlerta(a);
   const datos = [
     U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos') + ' en ' + lapsoAlerta(a),
     a.reportes ? U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : '',
     info && info.muni ? U.lugar(info.muni) : '',
     info ? U.n(info.total) + ' clientes en el nodo' : ''
   ].filter(Boolean);
-  return html`<div class="pf-tarjeta" data-reportada=${!!a.reportada}>
-    <div class="ico"><${Ico} n=${a.reportada ? 'check' : 'alerta'} s=${20} /></div>
+  return html`<div class="pf-tarjeta" data-reportada=${!pendiente}>
+    <div class="ico"><${Ico} n=${pendiente ? 'alerta' : 'check'} s=${20} /></div>
     <div>
       <div class="pf-tarjeta-tit"><b>Posible falla en <span class="codigo">${a.nodo}</span></b>${info && !info.virtual && html`<${Tec} t=${info.tecnologia} />`}</div>
       <p>${datos.join(' · ')}. Última consulta ${U.hace(a.ultimo, s.now)}.</p>
-      ${a.reportada && html`<p class="pf-reportada"><${Ico} n="check" s=${15} />${U.conPunto('Reportada por ' + a.reportada.por + ' ' + U.cuando(a.reportada.en, s.now))}</p>`}
+      ${m && html`<p class="pf-reportada" data-a=${m.a || 'VOC'}><${Ico} n=${m.a === 'WF' ? 'campana' : 'check'} s=${15} />${U.conPunto(textoMarca(m, s.now))}</p>`}
     </div>
     <div class="acc">
-      <button class=${'btn btn-chico ' + (a.reportada ? 'btn-borde' : 'btn-primario')} onClick=${() => A.abrirPosibleFalla(a.nodo)}><${Ico} n="correo" s=${15} />Ver clientes y correo</button>
-      <button class="btn btn-borde btn-chico" onClick=${() => A.crearFallaCon(a.nodo)}>Crear falla</button>
+      <button class=${'btn btn-chico ' + (pendiente ? 'btn-primario' : 'btn-borde')} onClick=${() => A.abrirPosibleFalla(a.nodo)}><${Ico} n="correo" s=${15} />Ver clientes y correo</button>
+      ${esWorkforce() && html`<button class="btn btn-borde btn-chico" onClick=${() => A.crearFallaCon(a.nodo)}>Crear falla</button>`}
       <button class="btn btn-fantasma btn-chico" title="Ocultarla en esta PC hasta que vuelvan a consultar clientes de este nodo" onClick=${() => A.descartarAlerta(a.nodo)}>Descartar</button>
     </div>
   </div>`;
@@ -101,6 +103,7 @@ function AvisosEscritorio() {
   const s = useG();
   if (!Avisos.soportado()) return null;
   const p = s.permisoAvisos;
+  if (p === 'default' && !s.ofertaCerrada) return null;   // mientras está la invitación de arriba, que hace lo mismo
   if (p === 'denied') return html`<p class="avisos-esc bloqueados"><${Ico} n="info" s=${16} />El navegador bloqueó los avisos de escritorio de esta página. Permítelos en el candado junto a la dirección.</p>`;
   if (p === 'granted' && s.avisosEscritorio) return html`<div class="avisos-esc">
     <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
@@ -120,6 +123,8 @@ function ModalPosibleFalla({ nodo }) {
   const [error, setError] = useState('');
   const [copiado, setCopiado] = useState('');
   const [marcando, setMarcando] = useState(false);
+  const [nota, setNota] = useState('');
+  const wf = esWorkforce();
   const cerrar = () => G.set({ alertaAbierta: null });
   async function traer() {
     setError(''); setD(null);
@@ -131,7 +136,10 @@ function ModalPosibleFalla({ nodo }) {
   const info = Model.infoNodo(s.cat, nodo);
   const enLista = s.alertas.find((x) => x.nodo === nodo);
   const marca = enLista ? enLista.reportada : d && d.reportada;
-  const correo = useMemo(() => (d && d.clientes.length ? Model.correoPosibleFalla(d, info, s.user.nombre, Date.now()) : null), [d]);
+  // Un supervisor solo quita su propia marca; Workforce y Jefatura, cualquiera
+  const puedeQuitar = !!marca && (wf || marca.u === s.user.u);
+  // El correo lo firma quien lo manda: Workforce HN o la supervisión de Call Center
+  const correo = useMemo(() => (d && d.clientes.length ? Model.correoPosibleFalla(d, info, s.user.nombre, Date.now(), wf ? CONFIG.equipo : 'Supervisión de Call Center') : null), [d]);
   const sub = [info && !info.virtual ? info.tecnologia : '', info && info.muni ? [info.muni, info.depto].filter(Boolean).map(U.lugar).filter((x, i, arr) => arr.indexOf(x) === i).join(', ') : '',
     info ? U.n(info.total) + ' clientes en el nodo' : ''].filter(Boolean).join(' · ');
 
@@ -142,19 +150,32 @@ function ModalPosibleFalla({ nodo }) {
     setCopiado(que); setTimeout(() => setCopiado((x) => (x === que ? '' : x)), 2500);
     tostada(que === 'asunto' ? 'Asunto copiado' : que === 'tabla' ? 'Tabla copiada: pégala en el correo con Ctrl+V' : 'Correo copiado: pégalo en Outlook con Ctrl+V');
   }
-  async function marcar(si) {
+  async function marcar(si, tipo) {
     setMarcando(true);
-    try { await A.marcarReportada(nodo, si); tostada(si ? 'Marcada como reportada para todo Workforce' : 'Se quitó la marca'); } catch (e) { tostada(e.message); }
+    try {
+      await A.marcarReportada(nodo, si, tipo, si ? nota.trim() : '');
+      tostada(!si ? 'Se quitó la marca' : tipo === 'WF' ? CONFIG.equipo + ' recibió tu aviso' : wf ? 'Marcada como reportada para todo Workforce' : 'Marcada como reportada al VOC');
+      if (si) setNota('');
+    } catch (e) { tostada(e.message); }
     setMarcando(false);
   }
 
   let porCC = 0, porTienda = 0;
   if (d) d.clientes.forEach((c) => { if ((c.canales || []).some((x) => /^Tiendas/.test(x))) porTienda++; else porCC++; });
-  const pie = html`
+  // Se puede reportar al VOC mientras nadie lo haya hecho (un aviso a Workforce no cuenta como reportada)
+  const porReportar = !marca || marca.a === 'WF';
+  const conClientes = !!d && d.clientes.length > 0;
+  const btnVoc = (txt, titulo) => html`<button class=${'btn ' + (copiado && copiado !== 'asunto' ? 'btn-primario' : 'btn-borde')} disabled=${marcando}
+    onClick=${() => marcar(true, 'VOC')} title=${titulo}><${Ico} n="check" s=${16} />${txt}</button>`;
+  const pie = wf ? html`
     <button class="btn btn-borde" onClick=${() => A.crearFallaCon(nodo)}>Crear falla con este nodo</button>
     <span class="pie-espacio"></span>
-    ${!marca && d && html`<button class=${'btn ' + (copiado && copiado !== 'asunto' ? 'btn-primario' : 'btn-borde')} disabled=${marcando} onClick=${() => marcar(true)}
-        title="El resto de Workforce verá que ya se reportó"><${Ico} n="check" s=${16} />Marcar como reportada</button>`}
+    ${porReportar && d && btnVoc('Marcar como reportada', 'El resto de Workforce verá que ya se reportó')}
+    <button class="btn btn-fantasma" onClick=${cerrar}>Cerrar</button>` : html`
+    <span class="pie-espacio"></span>
+    ${!marca && conClientes && html`<button class="btn btn-borde" disabled=${marcando} onClick=${() => marcar(true, 'WF')}
+        title=${CONFIG.equipo + ' recibe el aviso en Alertas y en su escritorio'}><${Ico} n="campana" s=${16} />Avisar a Workforce</button>`}
+    ${porReportar && conClientes && btnVoc('Reporté al VOC', 'Workforce y los demás supervisores verán que ya se reportó')}
     <button class="btn btn-fantasma" onClick=${cerrar}>Cerrar</button>`;
   return html`<${Modal} titulo=${'Posible falla en ' + nodo} sub=${sub} onCerrar=${cerrar} pie=${pie} ancho=${1120}>
     ${!d && !error && html`<div class="pf-cargando"><span class="punto"></span>Buscando los datos de los clientes…</div>`}
@@ -162,8 +183,8 @@ function ModalPosibleFalla({ nodo }) {
       <div><button class="btn btn-borde btn-chico" onClick=${traer}>Intentar de nuevo</button></div>`}
     ${d && html`
       ${d.enFalla && html`<div class="nota-linea" data-tipo="info"><${Ico} n="info" s=${16} /><span>Ya hay una falla publicada para este nodo.</span></div>`}
-      ${marca && html`<div class="pf-marca"><${Ico} n="check" s=${16} /><span>Reportada por <b>${marca.por}</b> ${U.conPunto(U.cuando(marca.en, s.now))}</span>
-        <button class="enlace" disabled=${marcando} onClick=${() => marcar(false)}>Quitar marca</button></div>`}
+      ${marca && html`<div class="pf-marca" data-a=${marca.a || 'VOC'}><${Ico} n=${marca.a === 'WF' ? 'campana' : 'check'} s=${16} /><span>${U.conPunto(textoMarca(marca, s.now))}</span>
+        ${puedeQuitar && html`<button class="enlace" disabled=${marcando} onClick=${() => marcar(false)}>Quitar marca</button>`}</div>`}
       ${!d.clientes.length ? html`<p class="sub">Ya no hay consultas de clientes de ${nodo} en los últimos ${d.minutos} minutos.</p>` : html`
         <div class="pf-datos">
           <div><b>${d.nClientes}</b><span>${U.plural(d.nClientes, 'cliente', 'clientes distintos')}</span></div>
@@ -171,6 +192,9 @@ function ModalPosibleFalla({ nodo }) {
           <div><b>${d.reportes}</b><span>${U.plural(d.reportes, 'reporte de asesor', 'reportes de asesores')}</span></div>
           <div><b>${porCC} · ${porTienda}</b><span>Call Center · Tiendas</span></div>
         </div>
+        ${!wf && porReportar && html`<label class="campo pf-nota"><span>Nota para ${CONFIG.equipo} <small>(opcional, va con el aviso o la marca)</small></span>
+          <input class="input" maxlength="140" value=${nota} onInput=${(e) => setNota(e.currentTarget.value)}
+            placeholder="Ejemplo: los clientes dicen que no tienen internet ni cable desde las 9" /></label>`}
         <div class="pf-correo">
           <div class="pf-correo-cab">
             <div><h3>Correo para reportar</h3><p>Cópialo y pégalo en Outlook con Ctrl+V: la tabla conserva su formato.</p></div>

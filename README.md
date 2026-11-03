@@ -5,8 +5,10 @@
 **Fallas de red, al instante.** Alertas certifica en segundos si un cliente de Servicios Fijos está dentro de una falla general de red y le da a quien atiende las palabras para explicárselo.
 
 - **Concentrix** (Call Center Nivel 1 y Redes Sociales) y **Tiendas** buscan por contrato o DNI y ven si el nodo del cliente está en falla, con el guion empático listo, y el mapa de Honduras con las fallas activas.
+- **Los supervisores de Call Center** ven el mismo panel de los asesores y además reciben el aviso de **posibles fallas**: la reportan al VOC o le avisan a Workforce. No crean fallas.
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
+- **Todos** pueden activar los avisos en el escritorio: cuando Workforce publica una falla, les llega al instante aunque Alertas esté minimizado.
 
 ---
 
@@ -33,9 +35,10 @@ Navegador (GitHub Pages)             Google (privado)                           
 |---|---|---|
 | **Concentrix** (CC N1 y Redes Sociales) | Botón **Entrar con Genesys** | Consulta, mapa de fallas y guion |
 | **Tiendas** | Usuario genérico y contraseña, más su tienda (de una lista) y su nombre | Lo mismo que Concentrix |
+| **Supervisor** (de Call Center) | Genesys, con su correo en la hoja **Usuarios** y el rol `supervisor` | Lo mismo que Concentrix, más las posibles fallas: las reporta al VOC o le avisa a Workforce. No crea fallas |
 | **Workforce HN** | Genesys, con su correo en la hoja **Usuarios** | Consulta, Fallas (con el envío de SMS por Notifícame), Base y Estadísticas |
 | **Jefatura** | Genesys, con su correo en la hoja **Usuarios** | Todo lo de Workforce |
-| Acceso temporal de Workforce | Usuario y contraseña (para cuando Genesys falle) | Lo mismo que Workforce |
+| Acceso temporal | Usuario y contraseña (para cuando Genesys falle), de Workforce, Jefatura, supervisor o Concentrix | Lo mismo que su rol |
 
 Tiendas pide la tienda y el nombre de la persona para que cada consulta quede a nombre de alguien, aunque la cuenta sea compartida. El usuario genérico ya aparece escrito. La tienda se elige de una lista desplegable: al escribir parte del nombre (por ejemplo "multi") aparecen las que coinciden, sin importar tildes ni mayúsculas, y hay que elegir una; un nombre que no está en la lista no deja entrar. Cada PC recuerda su tienda.
 
@@ -96,12 +99,13 @@ Luego, en el Sheet: **Alertas > 2. Conectar Genesys**.
 
 ### Paso 5. Usuarios y contraseñas
 
-**Hoja Usuarios.** Una fila por persona de Workforce HN y de Jefatura, con su **correo de Genesys**:
+**Hoja Usuarios.** Una fila por persona de Workforce HN, de Jefatura y por cada supervisor de Call Center, con su **correo de Genesys**:
 
 | Correo de Genesys | Nombre | Rol | Activo |
 |---|---|---|---|
 | nombre.apellido@claro.com.hn | Nombre Apellido | `workforce` | SÍ |
 | gerente@claro.com.hn | Nombre Apellido | `jefatura` | SÍ |
+| supervisor@concentrix.com | Nombre Apellido | `supervisor` | SÍ |
 
 - Al configurar, Alertas agrega tu correo de Google como `jefatura`. Si tu correo de Genesys es otro, agrégalo también.
 - Para quitarle el acceso a alguien, pon **NO** en Activo (o el rol `bloqueado`). Aplica de inmediato, aunque ya tenga Alertas abierto. Sirve también para bloquear a un asesor de Concentrix.
@@ -156,12 +160,14 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 - **Workforce HN**: en **Fallas > Nueva falla** escribe los nodos (por ejemplo `NODO01, NODO02`), elige el motivo y la hora estimada, revisa a cuántos clientes afecta y **Publicar falla**. Puede editarla, cerrarla o reabrirla. Los motivos: posible falla general, falla de energía comercial, corte de fibra óptica, corto circuito externo, daño en infraestructura por terceros, caída de postes, eventos en vía pública, reemplazo de equipo, limpieza de ruido, mantenimiento preventivo y otro.
 - En el paso 4 van el **número de falla** (por ejemplo `F1254585`), la referencia del correo o ticket y las notas. El número de falla es como se nombra la falla en todo Alertas y también lo ven los asesores: en el panel de fallas, en el veredicto y en el historial del cliente. Se guarda en mayúsculas, sin espacios ni guiones. La referencia y las notas solo las ve Workforce HN.
 - Si una falla todavía no tiene número de falla, sale con el ID que le pone Alertas: **F**, la fecha (año, mes y día) y el número del día, sin guiones, por ejemplo `F26110201`. La tarjeta avisa "Sin número todavía" y se agrega con **Editar**. Las publicadas antes del 2 nov se guardaron con guiones (`F-261030-05`) y salen sin ellos (`F26103005`). El historial encuentra una falla por su número de falla o por su ID, y el CSV trae los dos.
-- Una falla cerrada sigue visible para los asesores **36 horas** y luego sale de su panel. Workforce la conserva en el historial.
+- Una falla cerrada sigue visible para los asesores **72 horas (3 días)** y luego sale de su panel. Workforce la conserva en el historial.
 - Cuando Workforce publica, edita, cierra o sube una base, los demás ven el aviso **"Workforce HN hizo una actualización"** en alrededor de un minuto. Lo que diga cada búsqueda siempre está al día: el servidor responde con las fallas del momento.
-- **Posibles fallas** (Workforce y Jefatura): cuando **5 clientes distintos** de un nodo sin falla publicada consultan en **60 minutos**, o 2 asesores lo reportan con **Reportar posible falla**, el nodo aparece en **Fallas > Posibles fallas**. Solo cuentan las búsquedas de Concentrix y Tiendas (las de Workforce revisando no suman, y un cliente que vuelve a llamar cuenta una vez). Con 3 o 4 clientes el nodo queda **en observación**.
+- **Aviso de falla nueva en el escritorio (todos)**: quien activa los avisos (la invitación arriba de la página o **Activar avisos en el escritorio** en el menú de su nombre) recibe una notificación de Windows cuando Workforce publica o reabre una falla, con su número, motivo, nodos y clientes, aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto). Llega en alrededor de un minuto, una vez por falla; a quien la publicó no le llega. Al tocarla, Alertas se pone al día y muestra la falla.
+- **Posibles fallas** (Workforce, Jefatura y supervisores): cuando **5 clientes distintos** de un nodo sin falla publicada consultan en **60 minutos**, o 2 asesores lo reportan con **Reportar posible falla**, el nodo aparece en **Fallas > Posibles fallas** (a los supervisores, arriba de su consulta). Solo cuentan las búsquedas de Concentrix y Tiendas (las de Workforce y los supervisores revisando no suman, y un cliente que vuelve a llamar cuenta una vez). Con 3 o 4 clientes el nodo queda **en observación**.
   - **Aviso**: una barra arriba en cualquier vista y, con **Avisarme en el escritorio**, una notificación de Windows aunque Alertas esté minimizado o en otra pestaña (Alertas tiene que estar abierto). Cada posible falla se avisa una vez por PC, y otra vez si sigue después de 2 horas.
   - **Ver clientes y correo**: los clientes que consultaron (hora, contrato, nombre, nodo, tecnología, OLT, NAP/TAP, colonia, municipio, categoría y canal, con la tienda) y el correo listo para el VOC o el personal interno. **Copiar correo** lo deja para pegarlo en Outlook con Ctrl+V, con la tabla y su formato; también se puede copiar solo la tabla o el asunto.
   - **Marcar como reportada**: el resto de Workforce ve quién la reportó y a qué hora, para que nadie mande el mismo correo dos veces (la marca dura 6 horas y se puede quitar).
+  - **Los supervisores** tienen dos botones: **Avisar a Workforce** (con una nota opcional: a Workforce le llega la barra y el aviso de escritorio, y para ellos sigue pendiente) y **Reporté al VOC** (queda como reportada para todos). El correo sale firmado por la supervisión de Call Center. Un supervisor solo quita su propia marca; Workforce, cualquiera. Crear la falla es solo de Workforce.
   - **Crear falla** abre Publicar falla con el nodo, el motivo **Posible falla general** y el inicio en la primera llamada ya puestos. Así se publica mientras el VOC la confirma: los asesores ven «Posible falla general» y le dicen al cliente que se está validando, en vez de mandarlo al soporte normal.
     - Si el VOC **la confirma**: **Editar** y elegir el motivo real (y la hora estimada).
     - Si **no hay falla**: **Descartar** en su tarjeta. Los asesores dejan de verla al instante (no queda como resuelta), no entra al historial de los clientes ni a las estadísticas, y el aviso no vuelve a salir con los mismos clientes: solo cuentan los que llamen después.
@@ -279,7 +285,7 @@ Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-0
 - **Contraseñas equivocadas**: cinco errores bloquean 15 minutos solo a esa persona (por nombre y tienda), no a las demás tiendas. Si llegan 100 intentos fallidos en 15 minutos (alguien probando contraseñas), se bloquea la cuenta de Tiendas; cambiar la contraseña la desbloquea. Para el acceso temporal de Workforce el tope es 20.
 - **No hay búsquedas parciales**: solo contrato o DNI completos, máximo 20 resultados. No se puede listar la base desde la página.
 - **Lo interno de cada falla** (referencia, notas, historial de cambios y correos de Workforce) solo viaja a Workforce y Jefatura. A Concentrix y Tiendas el servidor les manda solo lo que muestra su pantalla, que incluye el número de falla.
-- **Posibles fallas**: la lista y el detalle (con los nombres de los clientes) solo los reciben Workforce y Jefatura, sin teléfonos ni DNI. El correo se copia en la PC de quien lo va a enviar; Alertas no manda correos solo.
+- **Posibles fallas**: la lista y el detalle (con los nombres de los clientes) solo los reciben Workforce, Jefatura y los supervisores, sin teléfonos ni DNI. El correo se copia en la PC de quien lo va a enviar; Alertas no manda correos solo.
 - **Teléfonos**: solo Workforce y Jefatura descargan los celulares, solo de los nodos de una falla, y cada descarga queda anotada en **Descargas SMS**. El archivo tiene datos personales: después de subirlo a Notifícame, conviene borrarlo de la computadora.
 - **SMS por Notifícame**: la API key y la API secret viven solo en las Propiedades del script (las pega la cuenta dueña en **Alertas > 4. Conectar Notifícame**). Al enviar desde Alertas, los números van del servidor a Notifícame y nunca llegan a la página; quién envió, cuándo y a qué números queda en **Envíos SMS** por 40 días. Los mensajes de error de Notifícame llegan a la página sin números de teléfono.
 - **Alertas > Cerrar todas las sesiones** obliga a todos a volver a entrar (por ejemplo, si una contraseña se filtró).
@@ -329,7 +335,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 280 pruebas del servidor en un emulador de Apps Script
+npm test                           # 310 pruebas del servidor en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

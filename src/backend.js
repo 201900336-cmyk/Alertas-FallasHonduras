@@ -141,7 +141,7 @@ function BackendRemoto() {
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
     alertas: () => llamar('alertas', {}),
     alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
-    marcarAlerta: (nodo, reportada) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo }),
+    marcarAlerta: (nodo, reportada, a, nota) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo, a, nota }),
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
@@ -288,7 +288,7 @@ function BackendLocal() {
       if (baseVersion !== c.bv) r.catalogo = c.catJson;
       return r;
     },
-    async estado() { const m = await Store.leerMeta(); return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null }; },
+    async estado() { const m = await Store.leerMeta(); return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null, avisos: m.avisos || [], ahora: Date.now() }; },
 
     async buscar(q) {
       const c = await indice();
@@ -356,7 +356,14 @@ function BackendLocal() {
           tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.numeroFalla(f);
         }
       }
-      const version = await confirmar(tipo, texto, { fallas });
+      // Igual que el servidor: las últimas fallas publicadas o reabiertas, para el aviso de escritorio; al cerrar se quita
+      const meta = await Store.leerMeta();
+      let avisos = (meta.avisos || []).filter((x) => x.id !== f.id);
+      if (tipo === 'FALLA_PUBLICADA' || tipo === 'FALLA_REABIERTA') {
+        avisos = avisos.concat({ v: (meta.version || 0) + 1, id: f.id, tipo: tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : 'PUBLICADA', numero: f.numero || '', motivo: f.motivo,
+          motivoTexto: f.motivoTexto || '', nodos: f.nodos.slice(0, 4), n: f.nodos.length, clientes: (f.impacto && f.impacto.total) || 0, en: ahora, por: por.nombre }).slice(-5);
+      }
+      const version = await confirmar(tipo, texto, { fallas, meta: tipo === 'FALLA_EDITADA' ? undefined : { avisos } });
       return { falla: f, version };
     },
 
@@ -409,11 +416,19 @@ function BackendLocal() {
         reportada: marcasDemo()[nodo] || null, enFalla: (mf.porNodo.get(nodo) || []).some((f) => f.estado === 'ACTIVA')
       };
     },
-    async marcarAlerta(nodo, reportada) {
-      const m = marcasDemo();
-      if (reportada) m[nodo] = { por: ses.usuario.nombre, en: Date.now() }; else delete m[nodo];
+    /* Igual que el servidor: un supervisor reporta al VOC o le avisa a Workforce (con nota); un aviso no tapa una
+       que ya se reportó al VOC, y un supervisor solo quita sus propias marcas */
+    async marcarAlerta(nodo, reportada, a, nota) {
+      const m = marcasDemo(), u = ses.usuario, escribe = u.rol === 'workforce' || u.rol === 'jefatura', antes = m[nodo];
+      if (reportada) {
+        const tipo = a === 'WF' && !escribe ? 'WF' : 'VOC';
+        if (!(antes && antes.a !== 'WF' && tipo === 'WF')) m[nodo] = { por: u.nombre, u: u.u, rol: u.rol, a: tipo, nota: String(nota || '').trim().slice(0, 140), en: Date.now() };
+      } else {
+        if (antes && !escribe && antes.u !== u.u) throw errorAlertas('PERMISO', 'Solo ' + antes.por + ' o Workforce pueden quitar esa marca.');
+        delete m[nodo];
+      }
       guardarLS('alertas-demo-reportadas', m);
-      return { nodo, reportada: m[nodo] || null };
+      return { nodo, reportada: reportada ? m[nodo] || null : null };
     },
 
     async telefonos() {

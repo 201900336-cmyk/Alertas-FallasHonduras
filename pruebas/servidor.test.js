@@ -232,6 +232,12 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'estado', token: tAgente });
   ok(r.ok && r.datos.cambio && r.datos.cambio.tipo === 'FALLA_PUBLICADA' && r.datos.cambio.por.nombre === 'Ana López', 'estado avisa el cambio y quién lo hizo', r.datos);
   ok(r.ok && /publicó la falla F1254585 /.test(r.datos.cambio.texto), 'el aviso nombra la falla con su número de falla: ' + (r.datos && r.datos.cambio && r.datos.cambio.texto));
+  // El aviso de escritorio para todos: la falla publicada queda en "avisos" con lo que ya ven los asesores
+  const avPub = ((r.datos && r.datos.avisos) || []).find((x) => x.id === f1.id);
+  ok(avPub && avPub.tipo === 'PUBLICADA' && avPub.v === r.datos.version && avPub.numero === 'F1254585' && avPub.motivo === 'FIBRA' && avPub.n === nodosPrueba.length
+    && avPub.nodos.length === Math.min(4, nodosPrueba.length) && avPub.clientes === imp.total && avPub.por === 'Ana López' && avPub.en > Date.now() - 60000,
+    'estado trae el aviso de la falla publicada (número, motivo, nodos y clientes) para el aviso de escritorio de todos', r.datos && r.datos.avisos);
+  ok(!/NOC #9150|ENEE reporta|@claro|historial|referencia|"u"/.test(JSON.stringify(r.datos.avisos)), 'el aviso no trae la referencia, las notas internas ni correos');
   const cli = enNodo(nodosPrueba[0]);
   r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });
   ok(r.ok && r.datos.fallas.some((f) => f.id === f1.id), 'la búsqueda trae la falla del nodo del cliente');
@@ -254,6 +260,8 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id, nota: 'Empalme terminado' } });
   ok(r.ok && r.datos.falla.estado === 'CERRADA' && r.datos.falla.cerradaPor.nombre === 'Ana López', 'cerrar la falla');
   const cerrada = r.datos.falla.cerradaEn;
+  r = g.post({ accion: 'estado', token: tAgente });
+  ok(r.ok && !r.datos.avisos.some((x) => x.id === f1.id), 'al cerrarla, su aviso sale de estado (una página que no lo vio ya no avisa de una falla que terminó)', r.datos && r.datos.avisos);
   r = g.post({ accion: 'buscar', token: tAgente, datos: { q: String(cli.contrato) } });
   ok(r.ok && r.datos.historial[cli.nodo][0].fin === cerrada, 'el historial se actualiza al cerrar: queda de cuándo a cuándo');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'cerrar', id: f1.id } });
@@ -264,14 +272,34 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: bv } });
   ok(!r.ok && r.codigo === 'SESION', 'la sesión vence a las 12 horas', r);
   const tAg37 = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-agente' } }).datos.token;
-  const tWf37 = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-wf' } }).datos.token;
+  g.cache.remove('fallasRecientes');
   r = g.post({ accion: 'cargar', token: tAg37, datos: { baseVersion: bv } });
-  ok(r.ok && !r.datos.fallas.some((f) => f.id === f1.id), 'después de 36 horas ya no la ven los asesores', r.datos && r.datos.fallas.map((f) => f.id));
-  r = g.post({ accion: 'cargar', token: tWf37, datos: { baseVersion: bv } });
+  ok(r.ok && r.datos.fallas.some((f) => f.id === f1.id && f.estado === 'CERRADA'), 'a las 37 horas de cerrada los asesores todavía la ven (son 72 horas)', r.datos && r.datos.fallas.map((f) => f.id));
+  g.E.ahora = Date.now() + 71 * 3600000;
+  const tAg71 = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-agente' } }).datos.token;
+  g.cache.remove('fallasRecientes');
+  r = g.post({ accion: 'cargar', token: tAg71, datos: { baseVersion: bv } });
+  ok(r.ok && r.datos.fallas.some((f) => f.id === f1.id), 'y a las 71 horas también', r.datos && r.datos.fallas.map((f) => f.id));
+  g.E.ahora = Date.now() + 73 * 3600000;
+  const tAg73 = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-agente' } }).datos.token;
+  const tWf73 = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-wf' } }).datos.token;
+  g.cache.remove('fallasRecientes');
+  r = g.post({ accion: 'cargar', token: tAg73, datos: { baseVersion: bv } });
+  ok(r.ok && !r.datos.fallas.some((f) => f.id === f1.id), 'después de 72 horas ya no la ven los asesores', r.datos && r.datos.fallas.map((f) => f.id));
+  r = g.post({ accion: 'cargar', token: tWf73, datos: { baseVersion: bv } });
   ok(r.ok && r.datos.fallas.some((f) => f.id === f1.id), 'Workforce la conserva en el historial');
   g.E.ahora = null;
+  g.cache.remove('fallasRecientes');
   r = g.post({ accion: 'falla', token: tWf, datos: { op: 'reabrir', id: f1.id } });
   ok(r.ok && r.datos.falla.estado === 'ACTIVA', 'reabrir la falla');
+  const vReab = r.datos.version;
+  r = g.post({ accion: 'estado', token: tAgente });
+  const avReab = r.ok ? r.datos.avisos.find((x) => x.id === f1.id) : null;
+  ok(avReab && avReab.tipo === 'REABIERTA' && avReab.v === vReab && avReab.numero === 'F1254590', 'al reabrirla vuelve a avisar, como reabierta', r.datos && r.datos.avisos);
+  const ultAv = g0.ejecutar("(() => { for (let i = 1; i <= 7; i++) subirVersion_({ tipo: 'FALLA_PUBLICADA' }, null, { id: 'F' + i, tipo: 'PUBLICADA', nodos: ['N' + i], n: 1, en: Date.now() });"
+    + " subirVersion_({ tipo: 'FALLA_CERRADA' }, null, { id: 'F6' }); subirVersion_({ tipo: 'FALLA_EDITADA' }); subirVersion_({ tipo: 'BASE_ACTUALIZADA' }, { baseVersion: 9 });"
+    + " return accionEstado_().avisos.map((x) => x.id + ':' + x.v).join(' '); })()");
+  ok(ultAv === 'F3:4 F4:5 F5:6 F7:8', 'estado guarda solo los últimos 5 avisos, quita el de una falla cerrada y los conserva al editar o subir la base: ' + ultAv);
   const hf = g.E.activo.getSheetByName('Fallas').getRange(2, 1, 1, 19).getValues()[0];
   ok(hf[1] === 'Activa' && hf[2] === 'Corte de fibra óptica' && Object.prototype.toString.call(hf[6]) === '[object Date]', 'la hoja Fallas se lee bien a simple vista', hf.slice(0, 7));
 
@@ -394,6 +422,75 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(pa && pa.nivel === 'alerta' && pa.nClientes === 5, 'si después de descartarla llaman 5 clientes, vuelve a avisar (solo cuenta lo nuevo)', pa);
   r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'detalle', nodo: nodoAlerta } });
   ok(r.ok && r.datos.clientes.length === 5 && !r.datos.enFalla, 'y el correo trae solo esos 5 clientes', r.datos && r.datos.clientes && r.datos.clientes.length);
+
+  /* Supervisores de Call Center: el panel de los asesores más las posibles fallas; reportan al VOC o le avisan
+     a Workforce, pero no crean fallas */
+  console.log('\n7c. Supervisores de Call Center');
+  hu.appendRow(['sofia.mejia@concentrix.com', 'Sofía Mejía', 'supervisor', 'SÍ', '']);
+  hu.appendRow(['luis.paz@concentrix.com', 'Luis Paz', 'Supervisor', 'SÍ', '']);
+  C.onEdit({ range: hu.getRange(hu.getLastRow(), 3) });
+  g.E.genesys.tokens.set('tok-sup', { name: 'Sofia Mejia', email: 'sofia.mejia@concentrix.com' });
+  g.E.genesys.tokens.set('tok-sup2', { name: 'Luis Paz', email: 'luis.paz@concentrix.com' });
+  r = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-sup' } });
+  ok(r.ok && r.datos.usuario.rol === 'supervisor' && r.datos.usuario.nombre === 'Sofía Mejía' && r.datos.usuario.acceso === 'Supervisor', 'un supervisor de la hoja Usuarios entra con Genesys como Supervisor', r);
+  const tSup = r.datos.token;
+  r = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-sup2' } });
+  ok(r.ok && r.datos.usuario.rol === 'supervisor', 'el rol se reconoce aunque lo escriban con mayúscula', r);
+  const tSup2 = r.datos.token;
+  C.guardarCuenta('supervision.temporal', 'supervisor', 'SupervisionPrueba2026');
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'supervision.temporal', clave: 'SupervisionPrueba2026', nombre: 'Marta Díaz' } });
+  ok(r.ok && r.datos.usuario.rol === 'supervisor', 'y hay acceso temporal para supervisores', r);
+  r = g.post({ accion: 'cargar', token: tSup, datos: { baseVersion: -1 } });
+  const paraSup = JSON.stringify(r.ok ? r.datos.fallas : '');
+  ok(r.ok && r.datos.catalogo && paraSup.includes(f1.id) && !paraSup.includes('NOC #9150') && !paraSup.includes('historial') && !r.datos.cargas,
+    'carga lo mismo que un asesor: las fallas sin referencia ni notas internas, y sin las cargas de la base', paraSup.slice(0, 200));
+  pa = deNodo(posibles(tSup), nodoAlerta);
+  ok(pa && pa.nivel === 'alerta' && pa.nClientes === 5 && !pa.reportada, 've las posibles fallas (' + nodoAlerta + ')', pa);
+  r = g.post({ accion: 'alerta', token: tSup, datos: { op: 'detalle', nodo: nodoAlerta } });
+  ok(r.ok && r.datos.clientes.length === 5 && !/"(telefono|dni)"/.test(JSON.stringify(r.datos)), 'y el detalle con los clientes para el correo (sin teléfonos ni DNI)', r.datos && r.datos.clientes && r.datos.clientes.length);
+  // Solo Workforce crea y cierra fallas, sube la base, manda SMS, descarga teléfonos y ve estadísticas
+  const negado = (accion, datos) => { const x = g.post({ accion, token: tSup, datos }); return !x.ok && x.codigo === 'PERMISO'; };
+  ok(negado('falla', { op: 'publicar', falla: { nodos: [nodoAlerta], motivo: 'VALIDACION' } }) && negado('falla', { op: 'cerrar', id: f1.id })
+    && negado('base', { op: 'iniciar', total: 10, columnas: Model.columnasCarga(base) }) && negado('sms', { op: 'resumen', id: f1.id })
+    && negado('telefonos', { id: f1.id }) && negado('estadisticas', {}), 'no puede crear ni cerrar fallas, subir la base, mandar SMS, descargar teléfonos ni ver estadísticas');
+  // Sus búsquedas no cuentan para las posibles fallas: es el supervisor revisando el nodo
+  const nodoSup = [...ix.nodoIdx.keys()].find((n) => !U.esVirtual(n) && contratosDe(n).length >= 6 && n !== nodoAlerta && n !== nodoRep && !nodosPrueba.includes(n));
+  const llamadas = (c) => g.post({ accion: 'contactos', token: tAgente, datos: { contrato: c } }).datos.veces.length;
+  const antesSup = contratosDe(nodoSup).slice(0, 5).map(llamadas);
+  contratosDe(nodoSup).slice(0, 5).forEach((c) => g.post({ accion: 'buscar', token: tSup, datos: { q: c } }));
+  ok(!deNodo(posibles(), nodoSup), 'las búsquedas de los supervisores no cuentan para las posibles fallas');
+  ok(contratosDe(nodoSup).slice(0, 5).map(llamadas).join() === antesSup.join(), 'ni para las llamadas del cliente', antesSup);
+  // Le avisa a Workforce con una nota: Workforce la ve y sigue pendiente para ellos
+  r = g.post({ accion: 'alerta', token: tSup, datos: { op: 'reportada', nodo: nodoAlerta, a: 'WF', nota: '  Clientes sin internet ni cable desde las 9 '.padEnd(200, '.') } });
+  const mSup = r.ok ? r.datos.reportada : {};
+  ok(r.ok && mSup.a === 'WF' && mSup.rol === 'supervisor' && mSup.por === 'Sofía Mejía' && mSup.nota.length === 140 && /^Clientes sin internet/.test(mSup.nota),
+    'el supervisor le avisa a Workforce, con una nota (hasta 140 letras)', mSup);
+  pa = deNodo(posibles(tWf), nodoAlerta);
+  ok(pa && pa.reportada && pa.reportada.a === 'WF' && pa.reportada.nota === mSup.nota && pa.reportada.por === 'Sofía Mejía', 'Workforce ve el aviso del supervisor con su nota', pa);
+  r = g.post({ accion: 'alerta', token: tSup2, datos: { op: 'quitar', nodo: nodoAlerta } });
+  ok(!r.ok && r.codigo === 'PERMISO' && /Sofía Mejía/.test(r.error), 'otro supervisor no puede quitar esa marca', r);
+  // Después lo reporta al VOC: queda reportada para Workforce y los demás supervisores
+  r = g.post({ accion: 'alerta', token: tSup, datos: { op: 'reportada', nodo: nodoAlerta, a: 'VOC' } });
+  ok(r.ok && r.datos.reportada.a === 'VOC' && r.datos.reportada.por === 'Sofía Mejía' && !r.datos.reportada.nota, 'después lo reporta al VOC', r.datos);
+  r = g.post({ accion: 'alerta', token: tSup2, datos: { op: 'reportada', nodo: nodoAlerta, a: 'WF', nota: 'Otra vez' } });
+  ok(r.ok && r.datos.reportada.a === 'VOC' && r.datos.reportada.por === 'Sofía Mejía', 'un aviso a Workforce ya no tapa la que se reportó al VOC', r.datos);
+  pa = deNodo(posibles(tSup2), nodoAlerta);
+  ok(pa && pa.reportada && pa.reportada.a === 'VOC', 'los demás supervisores ven que ya se reportó', pa);
+  r = g.post({ accion: 'alerta', token: tSup, datos: { op: 'quitar', nodo: nodoAlerta } });
+  ok(r.ok && !r.datos.reportada && !deNodo(posibles(), nodoAlerta).reportada, 'quien la puso sí puede quitar su marca', r);
+  // Workforce: al marcar siempre queda reportada al VOC (encima del aviso de un supervisor) y quita la de cualquiera
+  g.post({ accion: 'alerta', token: tSup2, datos: { op: 'reportada', nodo: nodoAlerta, a: 'WF' } });
+  r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'reportada', nodo: nodoAlerta, a: 'WF' } });
+  ok(r.ok && r.datos.reportada.a === 'VOC' && r.datos.reportada.por === 'Ana López', 'Workforce al marcarla la deja reportada al VOC, encima del aviso del supervisor', r.datos);
+  g.post({ accion: 'alerta', token: tSup2, datos: { op: 'reportada', nodo: nodoAlerta, a: 'WF' } });
+  r = g.post({ accion: 'alerta', token: tWfTemp, datos: { op: 'quitar', nodo: nodoAlerta } });
+  ok(r.ok && !deNodo(posibles(), nodoAlerta).reportada, 'y cualquiera de Workforce quita la marca de quien sea', r);
+  // Al quitarle el rol en Usuarios, pierde las posibles fallas al instante
+  const filaLuis = hu.getLastRow();
+  hu.getRange(filaLuis, 3).setValue('concentrix'); C.onEdit({ range: hu.getRange(filaLuis, 3) });
+  r = g.post({ accion: 'alertas', token: tSup2 });
+  ok(!r.ok && r.codigo === 'PERMISO', 'si en Usuarios le cambian el rol a concentrix, deja de ver las posibles fallas al instante', r);
+  hu.getRange(filaLuis, 3).setValue('supervisor'); C.onEdit({ range: hu.getRange(filaLuis, 3) });
   g.ejecutar('ALERTAS.LIMITE_CONSULTAS_HORA = 3');
   const tLim = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-agente' } }).datos.token;
   g.cache.remove('limite:karla.zelaya@concentrix.com:' + Math.floor(Date.now() / 3600000));

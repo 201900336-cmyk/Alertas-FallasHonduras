@@ -194,6 +194,77 @@ with sync_playwright() as p:
     ok('Ana López' in w.locator('.pf-marca').inner_text(), 'se marca como reportada')
     w.click('.modal-pie button:has-text("Cerrar")')
 
+    print('5b. Supervisor de Call Center')
+    http('/test/genesys?correo=sofia.mejia@concentrix.com&nombre=Sofia%20Mejia')
+    s = pagina()
+    # Avisos de escritorio simulados desde antes de abrir la página: el navegador todavía no ha preguntado
+    s.add_init_script("""window.__avisos = []; document.hasFocus = () => false;
+      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {}
+        static requestPermission() { window.Notification.permission = 'granted'; return Promise.resolve('granted'); } };
+      window.Notification.permission = 'default';""")
+    s.goto(APP); s.wait_for_selector('text=Entrar con Genesys')
+    ok('supervisores' in s.locator('.acceso-bloque h3').first.inner_text(), 'la entrada con Genesys dice que es también para los supervisores', s.locator('.acceso-bloque h3').first.inner_text())
+    s.click('text=Entrar con Genesys'); s.wait_for_selector('.buscador-caja input', timeout=15000)
+    ok('Sofía Mejía' in s.locator('.usuario-txt').inner_text() and 'Supervisor' in s.locator('.usuario-txt').inner_text() and s.locator('.nav').count() == 0,
+       'la supervisora entra con Genesys (rol de la hoja Usuarios) y ve el panel de los asesores, sin el menú de Workforce', s.locator('.usuario-txt').inner_text())
+    s.wait_for_selector('.oferta-avisos', timeout=5000)
+    ok('publique una falla o haya una posible falla' in s.locator('.oferta-avisos').inner_text(), 'la invita a activar los avisos de escritorio (fallas nuevas y posibles fallas)')
+    s.screenshot(path=OUT + 'e06s_supervisor_inicio.png')
+    s.click('.oferta-avisos button:has-text("Activar avisos")'); s.wait_for_timeout(400)
+    av = s.evaluate('() => window.__avisos')
+    ok(s.locator('.oferta-avisos').count() == 0 and any(x['t'] == 'Avisos de Alertas activados' and 'publique una falla nueva' in x['b'] for x in av), 'al activarlos se va la invitación y llega el aviso de prueba', av)
+    s.wait_for_selector(f'.posibles .pf-tarjeta:has-text("{nodoPF}")', timeout=20000)
+    tarjeta_s = s.locator('.pf-tarjeta', has_text=nodoPF)
+    ok('Reportada al VOC por Ana López' in tarjeta_s.inner_text() and tarjeta_s.locator('button:has-text("Crear falla")').count() == 0,
+       'arriba de la consulta ve las posibles fallas: la de Workforce ya reportada y sin el botón Crear falla', tarjeta_s.inner_text())
+    tarjeta_s.locator('button:has-text("Ver clientes")').click(); s.wait_for_selector('.pf-vista table', timeout=30000)
+    ok(s.locator('.pf-marca button:has-text("Quitar marca")').count() == 0 and s.locator('.modal-pie button:has-text("Reporté al VOC")').count() == 0
+       and s.locator('.modal-pie button:has-text("Crear falla")').count() == 0, 'en una ya reportada por otro no puede quitar la marca ni volver a reportarla')
+    s.click('.modal-pie button:has-text("Cerrar")')
+    # Otra posible falla, que nadie ha reportado
+    nodoPF2 = w.evaluate("(ya) => [...G.s.cat.nodos.values()].filter((n) => !U.esVirtual(n.code) && n.total >= 12 && !ya.includes(n.code)).map((n) => n.code).sort()[1]", ejemplos + [nodoPF])
+    buscar_en([http(f'/test/contrato?nodo={nodoPF2}&n={k}')['contrato'] for k in range(5)])
+    def revisar_s(cond):
+        for k in range(25):
+            s.evaluate('() => A.revisarAlertas()'); s.wait_for_timeout(1500)
+            if cond(): return True
+        return False
+    ok(revisar_s(lambda: s.locator('.pf-tarjeta', has_text=nodoPF2).count() > 0), f'con 5 clientes de {nodoPF2}, la supervisora ve la posible falla')
+    av = s.evaluate('() => window.__avisos')
+    ok(any(x['t'] == 'Posible falla en ' + nodoPF2 for x in av) and s.locator('.aviso-pf', has_text=nodoPF2).count() == 1, 'y le llega el aviso de escritorio y la barra de arriba', av)
+    s.locator('.aviso-pf .btn:has-text("Ver clientes")').click(); s.wait_for_selector('.pf-vista table', timeout=30000)
+    ok(s.locator('.modal-pie button:has-text("Avisar a Workforce")').count() == 1 and s.locator('.modal-pie button:has-text("Reporté al VOC")').count() == 1
+       and s.locator('.modal-pie button:has-text("Crear falla")').count() == 0, 'puede avisarle a Workforce o reportarla al VOC, pero no crear la falla')
+    ok('Supervisión de Call Center' in s.locator('.pf-vista').inner_text() and 'Sofía Mejía' in s.locator('.pf-vista').inner_text(), 'el correo lo firma ella, de Supervisión de Call Center')
+    s.fill('.pf-nota input', 'Clientes sin internet ni cable desde las 9')
+    s.screenshot(path=OUT + 'e06t_supervisor_modal.png')
+    s.click('.modal-pie button:has-text("Avisar a Workforce")'); s.wait_for_selector('.pf-marca', timeout=15000)
+    marca_s = s.locator('.pf-marca').inner_text()
+    ok('Sofía Mejía (supervisor) le avisó a Workforce' in marca_s and 'Clientes sin internet' in marca_s and s.locator('.pf-marca button:has-text("Quitar marca")').count() == 1
+       and s.locator('.modal-pie button:has-text("Avisar a Workforce")').count() == 0 and s.locator('.modal-pie button:has-text("Reporté al VOC")').count() == 1,
+       'queda el aviso con su nota; puede quitarlo o, cuando lo reporte, marcarlo al VOC', marca_s)
+    s.click('.modal-pie button:has-text("Cerrar")')
+    # Workforce recibe el aviso de la supervisora: tarjeta, barra y aviso de escritorio (sigue pendiente para ellos)
+    w.evaluate('() => { window.__avisos = []; }')
+    ok(revisar(lambda: 'le avisó a Workforce' in (w.locator('.pf-tarjeta', has_text=nodoPF2).inner_text() if w.locator('.pf-tarjeta', has_text=nodoPF2).count() else '')) or
+       w.locator('.aviso-pf', has_text='Sofía Mejía').count() == 1, 'a Workforce le llega el aviso de la supervisora')
+    av = w.evaluate('() => window.__avisos')
+    ok(any(x['t'] == 'Sofía Mejía avisa: posible falla en ' + nodoPF2 and 'Clientes sin internet' in x['b'] for x in av), 'como aviso de escritorio, con su nota', av)
+    ok(w.locator('.aviso-pf', has_text='Sofía Mejía (supervisor) avisa').count() == 1, 'y en la barra de arriba', w.locator('.aviso-pf').all_inner_texts())
+    w.screenshot(path=OUT + 'e06u_workforce_aviso_supervisor.png')
+    w.evaluate("() => ir('fallas')"); w.wait_for_selector(f'.pf-tarjeta:has-text("{nodoPF2}")', timeout=10000)
+    t_wf = w.locator('.pf-tarjeta', has_text=nodoPF2)
+    ok(t_wf.get_attribute('data-reportada') != 'true' and t_wf.locator('button:has-text("Crear falla")').count() == 1, 'para Workforce sigue pendiente, con Crear falla', t_wf.get_attribute('data-reportada'))
+    t_wf.screenshot(path=OUT + 'e06v_tarjeta_aviso.png')
+    w.evaluate("() => ir('consulta')")
+    # La supervisora la reporta al VOC
+    s.locator('.pf-tarjeta', has_text=nodoPF2).locator('button:has-text("Ver clientes")').click(); s.wait_for_selector('.pf-vista table', timeout=30000)
+    s.click('.modal-pie button:has-text("Reporté al VOC")'); s.wait_for_selector('.pf-marca:has-text("Reportada al VOC por Sofía Mejía")', timeout=15000)
+    ok(True, 'después la marca como reportada al VOC')
+    s.click('.modal-pie button:has-text("Cerrar")')
+    ok(s.locator('.pf-tarjeta', has_text=nodoPF2).get_attribute('data-reportada') == 'true', 'y su tarjeta queda como reportada')
+    s.screenshot(path=OUT + 'e06w_supervisor_panel.png')
+
     print('6. Sesión vencida')
     t.evaluate("() => { const s = JSON.parse(sessionStorage.getItem('alertas-sesion')); s.token = s.token.slice(0, -4) + 'AAAA'; sessionStorage.setItem('alertas-sesion', JSON.stringify(s)); }")
     t.reload(); t.wait_for_selector('text=Tu sesión venció', timeout=15000)
@@ -210,7 +281,7 @@ with sync_playwright() as p:
     x.click('form button[type=submit]'); x.wait_for_selector('.nav', timeout=15000)
     ok('Workforce' in x.locator('.usuario-txt').inner_text(), 'entra como Workforce con la clave temporal')
     x.evaluate("() => ir('fallas')"); x.wait_for_selector(f'.pf-tarjeta:has-text("{nodoPF}")', timeout=20000)
-    ok('Reportada por Ana López' in x.locator('.pf-tarjeta', has_text=nodoPF).inner_text(), 'el resto de Workforce ve que Ana López ya reportó la posible falla')
+    ok('Reportada al VOC por Ana López' in x.locator('.pf-tarjeta', has_text=nodoPF).inner_text(), 'el resto de Workforce ve que Ana López ya reportó la posible falla')
     x.locator('.pf-tarjeta', has_text=nodoPF).locator('button:has-text("Crear falla")').click()
     x.wait_for_selector(f'.lista-nodos .nodo-chip:has-text("{nodoPF}")', timeout=5000)
     ok(x.locator('.lista-nodos .nodo-chip').count() == 1, 'Crear falla deja el nodo listo en Publicar falla')
@@ -266,7 +337,19 @@ with sync_playwright() as p:
     x.goto(APP + '#fallas'); x.wait_for_selector('.pestanas', timeout=15000)
     x.click('button[role=tab]:has-text("Resueltas")'); x.wait_for_selector('.falla-card', timeout=10000)
     ok(x.locator('.falla-card', has_text='F1254585').locator('button.enviar-sms').count() == 0, 'una falla resuelta ya no tiene botón de SMS (no se avisa el servicio restablecido)')
+    x.evaluate("""() => { window.__avisos = []; document.hasFocus = () => false;
+      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
+      window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted', avisosEscritorio: true }); }""")
     x.evaluate("(n) => A.publicarFalla({ nodos: n, motivo: 'POSTES', numero: 'F1254600' })", ejemplos[:2]); x.wait_for_timeout(800)
+    # Aviso de escritorio de la falla nueva: le llega a todos los que lo activaron (aquí, la supervisora), no a quien la publicó
+    for pg in (s, x): pg.evaluate('() => Backend.estado().then((e) => A.avisarPublicadas(e))')
+    s.wait_for_timeout(300)
+    av = [v for v in s.evaluate('() => window.__avisos') if 'F1254600' in v['t']]
+    ok(len(av) == 1 and av[0]['t'] == 'Nueva falla publicada: F1254600' and 'Caída de postes en ' + ejemplos[0] in av[0]['b'] and 'Mario Rivera' in av[0]['b'],
+       'al publicar una falla, a la supervisora le llega el aviso de escritorio: ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
+    ok(not [v for v in x.evaluate('() => window.__avisos') if 'Nueva falla' in v['t']], 'a quien la publicó no le llega su propio aviso')
+    s.evaluate('() => Backend.estado().then((e) => A.avisarPublicadas(e))'); s.wait_for_timeout(300)
+    ok(len([v for v in s.evaluate('() => window.__avisos') if 'F1254600' in v['t']]) == 1, 'y el aviso llega una sola vez')
     a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)   # Concentrix recibe el aviso de la falla nueva
     def abrir_sms():
         x.goto(APP + '#fallas'); x.wait_for_selector('.pestanas', timeout=15000)

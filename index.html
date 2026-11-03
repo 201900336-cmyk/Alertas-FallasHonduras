@@ -446,7 +446,10 @@ button { cursor: pointer; }
 .pf-tarjeta .acc { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .pf-tarjeta[data-reportada="true"] { background: var(--surface); border-color: var(--line); }
 .pf-tarjeta[data-reportada="true"] .ico { background: var(--surface-3); color: var(--ink-2); }
-.pf-reportada { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink) !important; }
+.pf-reportada { display: flex; align-items: flex-start; gap: 6px; font-weight: 600; color: var(--ink) !important; }
+.pf-reportada svg { flex: none; margin-top: 2px; }
+/* Un supervisor le avisó a Workforce: la campana en el color de las posibles fallas */
+.pf-reportada[data-a="WF"] svg, .pf-marca[data-a="WF"] svg { color: var(--resuelta-text); }
 .observacion { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 2px 0; }
 .observacion-t { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); margin-right: 4px; }
 .observacion-t small { font-weight: 500; color: var(--ink-3); font-size: 12.5px; }
@@ -458,6 +461,7 @@ button { cursor: pointer; }
 .pf-cargando { display: flex; align-items: center; gap: 10px; padding: 28px 4px; color: var(--ink-2); font-weight: 600; }
 .pf-marca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
 .pf-marca svg { color: var(--ok); flex: none; }
+.pf-nota small { font-weight: 500; color: var(--ink-3); }
 .pf-datos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; }
 .pf-datos > div { padding: 12px 16px; }
 .pf-datos > div + div { border-left: 1px solid var(--line); }
@@ -478,6 +482,15 @@ button { cursor: pointer; }
 .enlace { border: 0; background: none; padding: 0; color: var(--ink); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .enlace:disabled { opacity: 0.5; cursor: default; }
 .modal-pie .pie-espacio { flex: 1; }
+/* Invitación a activar los avisos de escritorio (arriba del contenido, no se queda pegada al bajar) */
+.oferta-avisos {
+  display: flex; align-items: center; gap: 12px 14px; flex-wrap: wrap; margin: 0 0 18px; padding: 12px 14px 12px 16px;
+  border-radius: 14px; background: var(--surface); border: 1px solid var(--line);
+}
+.oferta-ico { width: 34px; height: 34px; border-radius: 10px; background: var(--resuelta-soft); color: var(--resuelta-text); display: grid; place-items: center; flex: none; }
+.oferta-avisos p { margin: 0; flex: 1 1 360px; min-width: 0; font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
+.oferta-avisos p b { color: var(--ink); font-weight: 700; }
+.oferta-acc { display: flex; gap: 6px; margin-left: auto; }
 /* Los avisos de arriba se apilan (actualización de Workforce y posible falla) y quedan a la vista al bajar */
 .avisos-arriba { position: sticky; top: 60px; z-index: 25; }
 .avisos-arriba .aviso { position: static; }
@@ -975,6 +988,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .marca-sms.faltan { background: var(--resuelta-soft); color: var(--resuelta-text); }
 .pie-acceso svg { flex: none; }
 .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.roles > .rol:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .rol { text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); transition: border-color 150ms ease, background-color 150ms ease; }
 .rol b { display: block; font-size: 14px; }
 .rol span { font-size: 12.5px; color: var(--ink-3); }
@@ -1589,7 +1603,7 @@ const CONFIG = {
   equipo: 'Workforce HN',
 
   // Una falla cerrada sigue visible para los asesores durante estas horas.
-  horasVisibleTrasCierre: 36,
+  horasVisibleTrasCierre: 72,
 
   // Cliente reincidente: tantas fallas en su nodo en estos días (desde que es cliente).
   reincidente: { fallas: 3, dias: 90 },
@@ -1620,8 +1634,10 @@ const CONFIG = {
   roles: {
     concentrix: { nombre: 'Concentrix, Call Center N1 y Redes Sociales', corto: 'Concentrix', canal: 'Concentrix', vistas: ['consulta'], entrada: 'Genesys' },
     tiendas: { nombre: 'Tiendas Claro', corto: 'Tiendas', canal: 'Tiendas', vistas: ['consulta'], entrada: 'Usuario de Tiendas' },
-    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats'], entrada: 'Genesys' },
-    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats'], equipo: true, entrada: 'Genesys' }
+    // Supervisores de Call Center: el panel de los asesores más las posibles fallas (aviso y reporte); no publican fallas
+    supervisor: { nombre: 'Supervisores de Call Center', corto: 'Supervisor', canal: 'Supervisor', vistas: ['consulta'], alertas: true, entrada: 'Genesys' },
+    workforce: { nombre: 'Workforce HN, Datos y Fallas', corto: 'Workforce HN', canal: 'Workforce HN', vistas: ['consulta', 'fallas', 'base', 'stats'], alertas: true, entrada: 'Genesys' },
+    jefatura: { nombre: 'Jefatura y Gerencia', corto: 'Jefatura', canal: 'Jefatura', vistas: ['consulta', 'fallas', 'base', 'stats'], equipo: true, alertas: true, entrada: 'Genesys' }
   },
 
   // "cliente" es la forma en que el asesor le explica el motivo al cliente.
@@ -2474,7 +2490,7 @@ const Model = (() => {
   }
 
   /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
-  const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal]);
+  const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal, CONFIG.roles.supervisor.canal]);
   const esInterno = (canal) => INTERNOS.has(canal);
   /* Nodo -> cuándo se registró el cierre de su última falla (resuelta o descartada): lo de antes ya lo explicó esa falla */
   const cierreDe = (f) => (f.historial || []).reduce((t, h) => (h.accion === 'CERRADA' && h.en > t ? h.en : t), f.cerradaEn || 0);
@@ -2584,7 +2600,8 @@ const Model = (() => {
     if (c.reporte) t += (t ? ', ' : '') + 'reportó posible falla';
     return t;
   }
-  function correoPosibleFalla(d, info, firma, ahora) {
+  function correoPosibleFalla(d, info, firma, ahora, equipo) {
+    equipo = equipo || CONFIG.equipo;
     const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
     const hora = (t) => U.hora(t).replace(/ /g, ' ');
     const h = new Date(ahora).getHours();
@@ -2635,8 +2652,8 @@ const Model = (() => {
     const parrafo = (t) => '<p style="margin:0 0 10px">' + t + '</p>';
     const html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000000">'
       + parrafo(esc(saludo) + ':') + parrafo(enHtml(p1)) + parrafo(enHtml(p2)) + parrafo(enHtml(p3)) + tablaHtml
-      + '<p style="margin:14px 0 0">Saludos,<br>' + esc(firma) + '<br>' + esc(CONFIG.equipo) + '</p></div>';
-    const texto = [saludo + ':', enTexto(p1), enTexto(p2), enTexto(p3), tablaTexto, 'Saludos,\r\n' + firma + '\r\n' + CONFIG.equipo].join('\r\n\r\n');
+      + '<p style="margin:14px 0 0">Saludos,<br>' + esc(firma) + '<br>' + esc(equipo) + '</p></div>';
+    const texto = [saludo + ':', enTexto(p1), enTexto(p2), enTexto(p3), tablaTexto, 'Saludos,\r\n' + firma + '\r\n' + equipo].join('\r\n\r\n');
     return { asunto, html, texto, tablaHtml, tablaTexto };
   }
 
@@ -2828,12 +2845,12 @@ const Demo = (() => {
     const gponCodes = nodos.filter((n) => n.tec === 'GPON').map((n) => n.code);
     const reincidentes = ['CHO02', 'DNLGC04', 'ROAGC02', 'GRA05', 'ALTGC07'];
 
-    // Historial de 30 días (cerradas hace más de 36 h)
+    // Historial de 30 días (cerradas hace más de 72 h, ya no las ven los asesores)
     for (let d = 30; d >= 2; d--) {
       const cuantas = r() < 0.25 ? 0 : ent(1, 2);
       for (let k = 0; k < cuantas; k++) {
         const inicio = now - d * D + ent(6, 21) * H + ent(0, 59) * M;
-        if (now - inicio < 40 * H) continue;
+        if (now - inicio < 84 * H) continue;
         const usarReinc = r() < 0.35;
         const tecG = r() < 0.5;
         const pool = tecG ? gponCodes : hfcCodes;
@@ -2852,8 +2869,8 @@ const Demo = (() => {
         });
       }
     }
-    // Resuelta hace 33 h (por ocultarse) y hace 14 h
-    crear({ nodos: ['VIC05', 'VIC06'], motivo: 'RUIDO', inicio: now - 38 * H, publicadaEn: now - 37.6 * H, publicadaPor: W[3], estado: 'CERRADA', cerradaEn: now - 33 * H, cerradaPor: W[3], notaCierre: 'Limpieza concluida', referencia: 'Correo NOC #8812' });
+    // Resuelta hace 69 h (por ocultarse) y hace 14 h
+    crear({ nodos: ['VIC05', 'VIC06'], motivo: 'RUIDO', inicio: now - 74 * H, publicadaEn: now - 73.6 * H, publicadaPor: W[3], estado: 'CERRADA', cerradaEn: now - 69 * H, cerradaPor: W[3], notaCierre: 'Limpieza concluida', referencia: 'Correo NOC #8812' });
     crear({ nodos: ['VENGC07'], motivo: 'EQUIPO', inicio: now - 19 * H, publicadaEn: now - 18.7 * H, publicadaPor: W[0], eta: now - 15 * H, estado: 'CERRADA', cerradaEn: now - 14 * H, cerradaPor: W[1], notaCierre: 'Tarjeta reemplazada', referencia: 'Correo NOC #9020' });
     // Activas
     const f1 = crear({ nodos: ['GRA03', 'GRA04', 'GRA07'], motivo: 'ENERGIA', inicio: now - 95 * M, publicadaEn: now - 82 * M, publicadaPor: W[2], eta: now + 65 * M, estado: 'ACTIVA', referencia: 'Correo NOC #9114', detalle: 'ENEE reporta corte en circuito de la zona.' });
@@ -3101,7 +3118,7 @@ function BackendRemoto() {
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
     alertas: () => llamar('alertas', {}),
     alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
-    marcarAlerta: (nodo, reportada) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo }),
+    marcarAlerta: (nodo, reportada, a, nota) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo, a, nota }),
     estadisticas: (d) => llamar('estadisticas', d, 120000),
     telefonos: (d) => llamar('telefonos', d, 120000),
     contactos: (d) => llamar('contactos', d, 30000),
@@ -3248,7 +3265,7 @@ function BackendLocal() {
       if (baseVersion !== c.bv) r.catalogo = c.catJson;
       return r;
     },
-    async estado() { const m = await Store.leerMeta(); return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null }; },
+    async estado() { const m = await Store.leerMeta(); return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null, avisos: m.avisos || [], ahora: Date.now() }; },
 
     async buscar(q) {
       const c = await indice();
@@ -3316,7 +3333,14 @@ function BackendLocal() {
           tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.numeroFalla(f);
         }
       }
-      const version = await confirmar(tipo, texto, { fallas });
+      // Igual que el servidor: las últimas fallas publicadas o reabiertas, para el aviso de escritorio; al cerrar se quita
+      const meta = await Store.leerMeta();
+      let avisos = (meta.avisos || []).filter((x) => x.id !== f.id);
+      if (tipo === 'FALLA_PUBLICADA' || tipo === 'FALLA_REABIERTA') {
+        avisos = avisos.concat({ v: (meta.version || 0) + 1, id: f.id, tipo: tipo === 'FALLA_REABIERTA' ? 'REABIERTA' : 'PUBLICADA', numero: f.numero || '', motivo: f.motivo,
+          motivoTexto: f.motivoTexto || '', nodos: f.nodos.slice(0, 4), n: f.nodos.length, clientes: (f.impacto && f.impacto.total) || 0, en: ahora, por: por.nombre }).slice(-5);
+      }
+      const version = await confirmar(tipo, texto, { fallas, meta: tipo === 'FALLA_EDITADA' ? undefined : { avisos } });
       return { falla: f, version };
     },
 
@@ -3369,11 +3393,19 @@ function BackendLocal() {
         reportada: marcasDemo()[nodo] || null, enFalla: (mf.porNodo.get(nodo) || []).some((f) => f.estado === 'ACTIVA')
       };
     },
-    async marcarAlerta(nodo, reportada) {
-      const m = marcasDemo();
-      if (reportada) m[nodo] = { por: ses.usuario.nombre, en: Date.now() }; else delete m[nodo];
+    /* Igual que el servidor: un supervisor reporta al VOC o le avisa a Workforce (con nota); un aviso no tapa una
+       que ya se reportó al VOC, y un supervisor solo quita sus propias marcas */
+    async marcarAlerta(nodo, reportada, a, nota) {
+      const m = marcasDemo(), u = ses.usuario, escribe = u.rol === 'workforce' || u.rol === 'jefatura', antes = m[nodo];
+      if (reportada) {
+        const tipo = a === 'WF' && !escribe ? 'WF' : 'VOC';
+        if (!(antes && antes.a !== 'WF' && tipo === 'WF')) m[nodo] = { por: u.nombre, u: u.u, rol: u.rol, a: tipo, nota: String(nota || '').trim().slice(0, 140), en: Date.now() };
+      } else {
+        if (antes && !escribe && antes.u !== u.u) throw errorAlertas('PERMISO', 'Solo ' + antes.por + ' o Workforce pueden quitar esa marca.');
+        delete m[nodo];
+      }
       guardarLS('alertas-demo-reportadas', m);
-      return { nodo, reportada: m[nodo] || null };
+      return { nodo, reportada: reportada ? m[nodo] || null : null };
     },
 
     async telefonos() {
@@ -3560,7 +3592,9 @@ const G = {
     sinConexion: false, cargando: false,
     // Posibles fallas (Workforce): umbral del servidor, la que está abierta, las que llegaron y no se han visto,
     // y si los avisos de escritorio están permitidos y activados
-    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', avisosEscritorio: false, semillaFalla: null
+    umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', avisosEscritorio: false, semillaFalla: null,
+    // La invitación a activar los avisos de escritorio se cerró con "Ahora no" (vuelve a los 7 días)
+    ofertaCerrada: false
   },
   subs: new Set(),
   set(p) { Object.assign(this.s, typeof p === 'function' ? p(this.s) : p); this.subs.forEach((f) => f()); }
@@ -3588,9 +3622,11 @@ function tostada(texto) {
 
 /* ---------- Acciones ---------- */
 const A = {
+  // Avisos de fallas publicadas: hasta qué versión ya se revisaron y las versiones que salieron de esta página
+  pub: { visto: null, propias: new Set() },
   async arrancar() {
     G.set({ tema: leerLS('alertas-tema', 'auto'), descartadas: leerLS('alertas-descartadas', {}), misConsultas: leerSS('alertas-mis-consultas', []), ruta: rutaActual(),
-      permisoAvisos: Avisos.permiso(), avisosEscritorio: Avisos.activos() });
+      permisoAvisos: Avisos.permiso(), avisosEscritorio: Avisos.activos(), ofertaCerrada: Date.now() - (Number(leerLS('alertas-oferta-avisos', 0)) || 0) < 7 * U.DIA });
     aplicarTema(G.s.tema);
     Backend.alExpirar((msg) => { A.limpiar(); G.set({ avisoAcceso: msg || 'Tu sesión venció. Entra de nuevo.' }); });
     window.addEventListener('hashchange', () => G.set({ ruta: rutaActual() }));
@@ -3619,6 +3655,7 @@ const A = {
   limpiar() {
     G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
       alertaAbierta: null, alertasNuevas: [], semillaFalla: null });
+    A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
   },
   salir() { Backend.salir(); A.limpiar(); },
@@ -3631,8 +3668,9 @@ const A = {
       cargas: d.cargas || [], remoto: null, now: Date.now(), sinConexion: false
     };
     if (d.catalogo !== undefined) cambios.cat = d.catalogo ? Model.cargarCatalogo(d.catalogo) : null;
+    if (A.pub.visto == null) A.pub.visto = d.version || 0;   // al entrar: lo que ya estaba publicado no se avisa
     G.set(cambios);
-    if (esWorkforce()) A.revisarAlertas();
+    if (veAlertas()) A.revisarAlertas();
   },
   async actualizar() {
     try { await A.recargar(); tostada('Listo, ya tienes la última versión'); } catch (e) { tostada(e.message); }
@@ -3641,16 +3679,18 @@ const A = {
   /* Revisa cada pocos segundos si Workforce cambió algo */
   vigilar() {
     // Cada página pregunta "¿hubo cambios?" cada minuto, en momentos distintos (para no llegar todas juntas
-    // al servidor), y no pregunta mientras la pestaña está escondida.
+    // al servidor). Con la pestaña escondida solo pregunta si en esta PC están activados los avisos de
+    // escritorio: así le llega el aviso de una falla nueva aunque Alertas esté minimizado.
     const cada = CONFIG.segundosRevision * 1000 * (Backend.modo === 'local' ? 0.2 : 1);
     let ocupado = false, ultimo = Date.now();
     const paso = async () => {
-      if (ocupado || !G.s.user || document.hidden) return;
+      if (ocupado || !G.s.user || (document.hidden && !Avisos.activos())) return;
       ocupado = true; ultimo = Date.now();
       try {
         const e = await Backend.estado();
         G.set({ sinConexion: false });
         if (e.version > G.s.meta.version && (!G.s.remoto || G.s.remoto.version < e.version)) G.set({ remoto: e });
+        A.avisarPublicadas(e);
       } catch (err) { if (err.codigo === 'RED') G.set({ sinConexion: true }); }
       ocupado = false;
     };
@@ -3660,8 +3700,22 @@ const A = {
     document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - ultimo > cada) paso(); });
     // Workforce revisa las posibles fallas cada minuto aunque la pestaña esté escondida o minimizada:
     // así llega el aviso de escritorio. Son pocas personas, no cargan al servidor.
-    setInterval(() => { if (G.s.user && esWorkforce()) A.revisarAlertas(); }, 60000);
+    setInterval(() => { if (G.s.user && veAlertas()) A.revisarAlertas(); }, 60000);
   },
+  /* Fallas que Workforce publicó (o reabrió) desde la última revisión: aviso de escritorio una vez por falla,
+     a todos los que lo activaron, si Alertas no está a la vista (a la vista ya sale la barra de cambios).
+     No avisa lo que publicó esta misma página, lo que ya estaba al entrar ni lo de hace más de 30 minutos. */
+  avisarPublicadas(e) {
+    if (A.pub.visto == null) return;   // todavía no termina de cargar al entrar
+    const nuevas = (e.avisos || []).filter((x) => x && x.v > A.pub.visto);
+    if (!nuevas.length) return;
+    A.pub.visto = Math.max(...nuevas.map((x) => x.v));
+    const ahora = e.ahora || Date.now();
+    const lista = nuevas.filter((x) => !A.pub.propias.has(x.v) && ahora - x.en < 30 * U.MIN);
+    if (lista.length && Avisos.activos() && (document.hidden || !document.hasFocus())) lista.slice(-3).forEach((x) => Avisos.falla(x));
+  },
+  // Al tocar el aviso de una falla nueva: la página trae las fallas al día y muestra la consulta (con sus fallas)
+  verFallaNueva() { ir('consulta'); window.scrollTo({ top: 0 }); A.recargar().catch(() => {}); },
   async revisarAlertas() {
     let r;
     try { r = await Backend.alertas(); } catch (e) { return; /* se intenta de nuevo luego */ }
@@ -3677,21 +3731,29 @@ const A = {
     const avisadas = leerLS('alertas-avisadas', {});
     Object.keys(avisadas).forEach((k) => { if (ahora - avisadas[k] > U.DIA) delete avisadas[k]; });
     const reaviso = (CONFIG.alerta.horasReaviso || 2) * U.HORA;
-    const pendientes = alertas.filter((a) => !a.reportada);
+    const pendientes = alertas.filter(pendienteAlerta);
     const nuevas = pendientes.filter((a) => !(ahora - (avisadas[a.nodo] || 0) < reaviso));
+    // A Workforce: cada vez que un supervisor les avisa de una posible falla, se avisa una vez (aunque ya la vieran)
+    const deSupervisor = esWorkforce() ? pendientes.filter((a) => a.reportada && a.reportada.a === 'WF' && !avisadas['wf:' + a.nodo + ':' + a.reportada.en]) : [];
     const vigentes = new Set(pendientes.map((a) => a.nodo));
     let barra = s.alertasNuevas.filter((n) => vigentes.has(n));
+    const enEscritorio = Avisos.activos() && (document.hidden || !document.hasFocus());
     if (nuevas.length) {
       nuevas.forEach((a) => { avisadas[a.nodo] = ahora; });
       barra = [...new Set(nuevas.map((a) => a.nodo).concat(barra))];
-      if (Avisos.activos() && (document.hidden || !document.hasFocus())) nuevas.slice(0, 3).forEach((a) => Avisos.mostrar(a));
+      if (enEscritorio) nuevas.slice(0, 3).forEach((a) => Avisos.mostrar(a));
+    }
+    if (deSupervisor.length) {
+      deSupervisor.forEach((a) => { avisadas['wf:' + a.nodo + ':' + a.reportada.en] = ahora; avisadas[a.nodo] = ahora; });
+      barra = [...new Set(deSupervisor.map((a) => a.nodo).concat(barra))];
+      if (enEscritorio) deSupervisor.filter((a) => !nuevas.includes(a)).slice(0, 3).forEach((a) => Avisos.mostrar(a));
     }
     guardarLS('alertas-avisadas', avisadas);
     if (barra.join() !== s.alertasNuevas.join()) G.set({ alertasNuevas: barra });
   },
   abrirPosibleFalla(nodo) { G.set((s) => ({ alertaAbierta: nodo, alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo) })); },
-  async marcarReportada(nodo, si) {
-    const r = await Backend.marcarAlerta(nodo, si);
+  async marcarReportada(nodo, si, tipo, nota) {
+    const r = await Backend.marcarAlerta(nodo, si, tipo, nota);
     G.set((s) => ({
       alertas: s.alertas.map((a) => (a.nodo === nodo ? Object.assign({}, a, { reportada: r.reportada || null }) : a)),
       alertasNuevas: s.alertasNuevas.filter((n) => n !== nodo)
@@ -3719,6 +3781,7 @@ const A = {
   quien() { const u = G.s.user; return { u: u.u, nombre: u.nombre }; },
   async falla(op, datos) {
     const r = await Backend.falla(op, datos);
+    A.pub.propias.add(r.version);
     const salto = r.version > G.s.meta.version + 1;
     G.set((s) => ({ fallas: s.fallas.filter((f) => f.id !== r.falla.id).concat(r.falla), meta: Object.assign({}, s.meta, { version: r.version }) }));
     if (salto) A.recargar().catch(() => {});
@@ -3817,6 +3880,15 @@ function cortoMotivo(f) { const m = motivoConocido(f); return m ? m.corto : f.mo
 function clienteMotivo(f) { const m = motivoConocido(f); return m ? m.cliente : f.clienteTexto || 'una afectación en la red de su zona'; }
 function puede(vista) { const u = G.s.user; return !!u && CONFIG.roles[u.rol].vistas.includes(vista); }
 const esWorkforce = () => { const u = G.s.user; return !!u && (u.rol === 'workforce' || u.rol === 'jefatura'); };
+/* Workforce, Jefatura y los supervisores de Call Center ven las posibles fallas (el aviso de 5 clientes en 60 min) */
+const veAlertas = () => { const u = G.s.user; return !!u && !!(CONFIG.roles[u.rol] || {}).alertas; };
+/* Sigue pendiente para quien la ve: para Workforce, hasta que alguien la reporte al VOC (si un supervisor les
+   avisó, sigue pendiente, con su aviso); para un supervisor, hasta que alguien la reporte o le avise a Workforce. */
+const pendienteAlerta = (a) => !a.reportada || (esWorkforce() && a.reportada.a === 'WF');
+/* Cómo se lee la marca de una posible falla */
+const quienMarca = (m) => m.por + (m.rol === 'supervisor' ? ' (supervisor)' : '');
+const textoMarca = (m, now) => (m.a === 'WF' ? quienMarca(m) + ' le avisó a Workforce ' : 'Reportada al VOC por ' + quienMarca(m) + ' ') + U.cuando(m.en, now)
+  + (m.nota ? ': «' + m.nota + '»' : '');
 
 /* Posibles fallas que muestra la página: sin falla activa publicada y sin descartar en esta PC.
    "alerta" (5 clientes o 2 reportes) y "observacion" (3 o 4 clientes). */
@@ -3828,7 +3900,8 @@ function posiblesFallas(s, mf) {
 const umbralAlertas = () => G.s.umbral || { minutos: CONFIG.alerta.minutos, clientes: CONFIG.alerta.clientesDistintos, observar: CONFIG.alerta.observar, reportes: CONFIG.alerta.reportes };
 const lapsoAlerta = (a) => U.dur(Math.max(0, a.ultimo - a.primero));
 
-/* Avisos de escritorio (notificaciones del navegador) para Workforce */
+/* Avisos de escritorio (notificaciones del navegador): fallas nuevas para todos; posibles fallas para Workforce,
+   Jefatura y los supervisores de Call Center */
 const Avisos = {
   soportado: () => typeof window.Notification === 'function' && window.isSecureContext !== false,
   permiso: () => (Avisos.soportado() ? Notification.permission : 'no'),
@@ -3854,11 +3927,23 @@ const Avisos = {
     const partes = [U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos') + ' en ' + lapsoAlerta(a)];
     if (a.reportes) partes.push(U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores'));
     if (info && info.muni) partes.push(U.lugar(info.muni));
-    Avisos.crear('Posible falla en ' + a.nodo, partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
+    // A Workforce: un supervisor les avisó de esta posible falla
+    const m = esWorkforce() && a.reportada && a.reportada.a === 'WF' ? a.reportada : null;
+    Avisos.crear(m ? m.por + ' avisa: posible falla en ' + a.nodo : 'Posible falla en ' + a.nodo,
+      (m && m.nota ? '«' + m.nota + '» · ' : '') + partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
+  },
+  /* Una falla que Workforce acaba de publicar o reabrir (lo que trae "estado" en avisos) */
+  falla(x) {
+    const resto = x.n - x.nodos.length;
+    const nodos = x.nodos.join(', ') + (resto > 0 ? ' y ' + U.plural(resto, '1 nodo más', resto + ' nodos más') : '');
+    const cuerpo = nombreMotivo(x) + ' en ' + nodos + (x.clientes ? ' · ' + U.plural(x.clientes, '1 cliente', U.n(x.clientes) + ' clientes') : '')
+      + '. ' + (x.tipo === 'REABIERTA' ? 'La reabrió ' : 'La publicó ') + x.por + '. Clic para verla.';
+    Avisos.crear((x.tipo === 'REABIERTA' ? 'Se reabrió la falla ' : 'Nueva falla publicada: ') + U.numeroFalla(x), cuerpo, 'alertas-falla-' + x.id, A.verFallaNueva);
   },
   prueba() {
     const um = umbralAlertas();
-    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos.', 'alertas-prueba');
+    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla nueva'
+      + (veAlertas() ? ' y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba');
   }
 };
 const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
@@ -4086,6 +4171,7 @@ function VistaConsulta() {
 
   return html`<div class="consulta">
     <section aria-label="Consulta de cliente">
+      ${veAlertas() && !esWorkforce() && html`<${PosiblesFallas} mf=${mf} />`}
       <form class="buscador" role="search" onSubmit=${(e) => { e.preventDefault(); consultar(q); }}>
         <label class="buscador-caja">
           <${Ico} n="lupa" s=${22} />
@@ -4532,9 +4618,10 @@ function VistaFallas() {
   </div>`;
 }
 
-/* ---------- Posibles fallas: aviso temprano para Workforce ----------
+/* ---------- Posibles fallas: aviso temprano para Workforce y los supervisores de Call Center ----------
    Nodos sin falla publicada con 5 clientes distintos en 60 min (o 2 reportes de asesores).
-   Con 3 o 4 clientes quedan en observación. Cada una trae el correo listo para reportarla. */
+   Con 3 o 4 clientes quedan en observación. Cada una trae el correo listo para reportarla.
+   Los supervisores la reportan al VOC o le avisan a Workforce; crear la falla, solo Workforce. */
 function PosiblesFallas({ mf }) {
   const s = useG();
   const { alertas, observacion } = posiblesFallas(s, mf);
@@ -4560,22 +4647,23 @@ function PosiblesFallas({ mf }) {
 function TarjetaPosibleFalla({ a }) {
   const s = useG();
   const info = Model.infoNodo(s.cat, a.nodo);
+  const m = a.reportada, pendiente = pendienteAlerta(a);
   const datos = [
     U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos') + ' en ' + lapsoAlerta(a),
     a.reportes ? U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : '',
     info && info.muni ? U.lugar(info.muni) : '',
     info ? U.n(info.total) + ' clientes en el nodo' : ''
   ].filter(Boolean);
-  return html`<div class="pf-tarjeta" data-reportada=${!!a.reportada}>
-    <div class="ico"><${Ico} n=${a.reportada ? 'check' : 'alerta'} s=${20} /></div>
+  return html`<div class="pf-tarjeta" data-reportada=${!pendiente}>
+    <div class="ico"><${Ico} n=${pendiente ? 'alerta' : 'check'} s=${20} /></div>
     <div>
       <div class="pf-tarjeta-tit"><b>Posible falla en <span class="codigo">${a.nodo}</span></b>${info && !info.virtual && html`<${Tec} t=${info.tecnologia} />`}</div>
       <p>${datos.join(' · ')}. Última consulta ${U.hace(a.ultimo, s.now)}.</p>
-      ${a.reportada && html`<p class="pf-reportada"><${Ico} n="check" s=${15} />${U.conPunto('Reportada por ' + a.reportada.por + ' ' + U.cuando(a.reportada.en, s.now))}</p>`}
+      ${m && html`<p class="pf-reportada" data-a=${m.a || 'VOC'}><${Ico} n=${m.a === 'WF' ? 'campana' : 'check'} s=${15} />${U.conPunto(textoMarca(m, s.now))}</p>`}
     </div>
     <div class="acc">
-      <button class=${'btn btn-chico ' + (a.reportada ? 'btn-borde' : 'btn-primario')} onClick=${() => A.abrirPosibleFalla(a.nodo)}><${Ico} n="correo" s=${15} />Ver clientes y correo</button>
-      <button class="btn btn-borde btn-chico" onClick=${() => A.crearFallaCon(a.nodo)}>Crear falla</button>
+      <button class=${'btn btn-chico ' + (pendiente ? 'btn-primario' : 'btn-borde')} onClick=${() => A.abrirPosibleFalla(a.nodo)}><${Ico} n="correo" s=${15} />Ver clientes y correo</button>
+      ${esWorkforce() && html`<button class="btn btn-borde btn-chico" onClick=${() => A.crearFallaCon(a.nodo)}>Crear falla</button>`}
       <button class="btn btn-fantasma btn-chico" title="Ocultarla en esta PC hasta que vuelvan a consultar clientes de este nodo" onClick=${() => A.descartarAlerta(a.nodo)}>Descartar</button>
     </div>
   </div>`;
@@ -4586,6 +4674,7 @@ function AvisosEscritorio() {
   const s = useG();
   if (!Avisos.soportado()) return null;
   const p = s.permisoAvisos;
+  if (p === 'default' && !s.ofertaCerrada) return null;   // mientras está la invitación de arriba, que hace lo mismo
   if (p === 'denied') return html`<p class="avisos-esc bloqueados"><${Ico} n="info" s=${16} />El navegador bloqueó los avisos de escritorio de esta página. Permítelos en el candado junto a la dirección.</p>`;
   if (p === 'granted' && s.avisosEscritorio) return html`<div class="avisos-esc">
     <span class="avisos-on"><${Ico} n="campana" s=${16} />Avisos en el escritorio activados</span>
@@ -4605,6 +4694,8 @@ function ModalPosibleFalla({ nodo }) {
   const [error, setError] = useState('');
   const [copiado, setCopiado] = useState('');
   const [marcando, setMarcando] = useState(false);
+  const [nota, setNota] = useState('');
+  const wf = esWorkforce();
   const cerrar = () => G.set({ alertaAbierta: null });
   async function traer() {
     setError(''); setD(null);
@@ -4616,7 +4707,10 @@ function ModalPosibleFalla({ nodo }) {
   const info = Model.infoNodo(s.cat, nodo);
   const enLista = s.alertas.find((x) => x.nodo === nodo);
   const marca = enLista ? enLista.reportada : d && d.reportada;
-  const correo = useMemo(() => (d && d.clientes.length ? Model.correoPosibleFalla(d, info, s.user.nombre, Date.now()) : null), [d]);
+  // Un supervisor solo quita su propia marca; Workforce y Jefatura, cualquiera
+  const puedeQuitar = !!marca && (wf || marca.u === s.user.u);
+  // El correo lo firma quien lo manda: Workforce HN o la supervisión de Call Center
+  const correo = useMemo(() => (d && d.clientes.length ? Model.correoPosibleFalla(d, info, s.user.nombre, Date.now(), wf ? CONFIG.equipo : 'Supervisión de Call Center') : null), [d]);
   const sub = [info && !info.virtual ? info.tecnologia : '', info && info.muni ? [info.muni, info.depto].filter(Boolean).map(U.lugar).filter((x, i, arr) => arr.indexOf(x) === i).join(', ') : '',
     info ? U.n(info.total) + ' clientes en el nodo' : ''].filter(Boolean).join(' · ');
 
@@ -4627,19 +4721,32 @@ function ModalPosibleFalla({ nodo }) {
     setCopiado(que); setTimeout(() => setCopiado((x) => (x === que ? '' : x)), 2500);
     tostada(que === 'asunto' ? 'Asunto copiado' : que === 'tabla' ? 'Tabla copiada: pégala en el correo con Ctrl+V' : 'Correo copiado: pégalo en Outlook con Ctrl+V');
   }
-  async function marcar(si) {
+  async function marcar(si, tipo) {
     setMarcando(true);
-    try { await A.marcarReportada(nodo, si); tostada(si ? 'Marcada como reportada para todo Workforce' : 'Se quitó la marca'); } catch (e) { tostada(e.message); }
+    try {
+      await A.marcarReportada(nodo, si, tipo, si ? nota.trim() : '');
+      tostada(!si ? 'Se quitó la marca' : tipo === 'WF' ? CONFIG.equipo + ' recibió tu aviso' : wf ? 'Marcada como reportada para todo Workforce' : 'Marcada como reportada al VOC');
+      if (si) setNota('');
+    } catch (e) { tostada(e.message); }
     setMarcando(false);
   }
 
   let porCC = 0, porTienda = 0;
   if (d) d.clientes.forEach((c) => { if ((c.canales || []).some((x) => /^Tiendas/.test(x))) porTienda++; else porCC++; });
-  const pie = html`
+  // Se puede reportar al VOC mientras nadie lo haya hecho (un aviso a Workforce no cuenta como reportada)
+  const porReportar = !marca || marca.a === 'WF';
+  const conClientes = !!d && d.clientes.length > 0;
+  const btnVoc = (txt, titulo) => html`<button class=${'btn ' + (copiado && copiado !== 'asunto' ? 'btn-primario' : 'btn-borde')} disabled=${marcando}
+    onClick=${() => marcar(true, 'VOC')} title=${titulo}><${Ico} n="check" s=${16} />${txt}</button>`;
+  const pie = wf ? html`
     <button class="btn btn-borde" onClick=${() => A.crearFallaCon(nodo)}>Crear falla con este nodo</button>
     <span class="pie-espacio"></span>
-    ${!marca && d && html`<button class=${'btn ' + (copiado && copiado !== 'asunto' ? 'btn-primario' : 'btn-borde')} disabled=${marcando} onClick=${() => marcar(true)}
-        title="El resto de Workforce verá que ya se reportó"><${Ico} n="check" s=${16} />Marcar como reportada</button>`}
+    ${porReportar && d && btnVoc('Marcar como reportada', 'El resto de Workforce verá que ya se reportó')}
+    <button class="btn btn-fantasma" onClick=${cerrar}>Cerrar</button>` : html`
+    <span class="pie-espacio"></span>
+    ${!marca && conClientes && html`<button class="btn btn-borde" disabled=${marcando} onClick=${() => marcar(true, 'WF')}
+        title=${CONFIG.equipo + ' recibe el aviso en Alertas y en su escritorio'}><${Ico} n="campana" s=${16} />Avisar a Workforce</button>`}
+    ${porReportar && conClientes && btnVoc('Reporté al VOC', 'Workforce y los demás supervisores verán que ya se reportó')}
     <button class="btn btn-fantasma" onClick=${cerrar}>Cerrar</button>`;
   return html`<${Modal} titulo=${'Posible falla en ' + nodo} sub=${sub} onCerrar=${cerrar} pie=${pie} ancho=${1120}>
     ${!d && !error && html`<div class="pf-cargando"><span class="punto"></span>Buscando los datos de los clientes…</div>`}
@@ -4647,8 +4754,8 @@ function ModalPosibleFalla({ nodo }) {
       <div><button class="btn btn-borde btn-chico" onClick=${traer}>Intentar de nuevo</button></div>`}
     ${d && html`
       ${d.enFalla && html`<div class="nota-linea" data-tipo="info"><${Ico} n="info" s=${16} /><span>Ya hay una falla publicada para este nodo.</span></div>`}
-      ${marca && html`<div class="pf-marca"><${Ico} n="check" s=${16} /><span>Reportada por <b>${marca.por}</b> ${U.conPunto(U.cuando(marca.en, s.now))}</span>
-        <button class="enlace" disabled=${marcando} onClick=${() => marcar(false)}>Quitar marca</button></div>`}
+      ${marca && html`<div class="pf-marca" data-a=${marca.a || 'VOC'}><${Ico} n=${marca.a === 'WF' ? 'campana' : 'check'} s=${16} /><span>${U.conPunto(textoMarca(marca, s.now))}</span>
+        ${puedeQuitar && html`<button class="enlace" disabled=${marcando} onClick=${() => marcar(false)}>Quitar marca</button>`}</div>`}
       ${!d.clientes.length ? html`<p class="sub">Ya no hay consultas de clientes de ${nodo} en los últimos ${d.minutos} minutos.</p>` : html`
         <div class="pf-datos">
           <div><b>${d.nClientes}</b><span>${U.plural(d.nClientes, 'cliente', 'clientes distintos')}</span></div>
@@ -4656,6 +4763,9 @@ function ModalPosibleFalla({ nodo }) {
           <div><b>${d.reportes}</b><span>${U.plural(d.reportes, 'reporte de asesor', 'reportes de asesores')}</span></div>
           <div><b>${porCC} · ${porTienda}</b><span>Call Center · Tiendas</span></div>
         </div>
+        ${!wf && porReportar && html`<label class="campo pf-nota"><span>Nota para ${CONFIG.equipo} <small>(opcional, va con el aviso o la marca)</small></span>
+          <input class="input" maxlength="140" value=${nota} onInput=${(e) => setNota(e.currentTarget.value)}
+            placeholder="Ejemplo: los clientes dicen que no tienen internet ni cable desde las 9" /></label>`}
         <div class="pf-correo">
           <div class="pf-correo-cab">
             <div><h3>Correo para reportar</h3><p>Cópialo y pégalo en Outlook con Ctrl+V: la tabla conserva su formato.</p></div>
@@ -6455,7 +6565,7 @@ function CabezaBloque({ ico, titulo, sub }) {
   </div>`;
 }
 
-/* Acceso real: Genesys para Concentrix, Workforce y Jefatura; usuario genérico para Tiendas */
+/* Acceso real: Genesys para Concentrix, los supervisores, Workforce y Jefatura; usuario genérico para Tiendas */
 function Acceso() {
   const s = useG();
   const cfg = s.config || { genesys: {} };
@@ -6494,9 +6604,9 @@ function Acceso() {
         <${CabezaAcceso} titulo="Entrar" />
         ${s.avisoAcceso && html`<div class="nota aviso-acceso" role="alert"><${Ico} n="info" s=${18} /><span>${s.avisoAcceso}</span></div>`}
         <section class="acceso-bloque">
-          <${CabezaBloque} ico="auricular" titulo="Concentrix, Workforce HN y Jefatura" sub="Con tu usuario de Genesys." />
+          <${CabezaBloque} ico="auricular" titulo="Concentrix, supervisores, Workforce HN y Jefatura" sub="Con tu usuario de Genesys." />
           <button class="btn btn-primario btn-grande" style="width:100%" disabled=${ocupado || !cfg.genesys.activo} onClick=${genesys}>Entrar con Genesys</button>
-          ${!cfg.genesys.activo && html`<p class="sub">Genesys todavía no está conectado.${cfg.temporal ? ' Mientras tanto, Workforce y Jefatura pueden usar el acceso temporal.' : ''}</p>`}
+          ${!cfg.genesys.activo && html`<p class="sub">Genesys todavía no está conectado.${cfg.temporal ? ' Mientras tanto, quien tenga una cuenta temporal puede usar el acceso temporal.' : ''}</p>`}
         </section>
         <div class="acceso-o" aria-hidden="true"><span>o</span></div>
         <form class="acceso-bloque" onSubmit=${entrar}>
@@ -6532,7 +6642,8 @@ function AccesoDemo() {
   const [rol, setRol] = useState(prev.rol || 'concentrix');
   const [tienda, setTienda] = useState(() => tiendaDeLista(CONFIG.tiendas, prev.tienda || ''));
   const ok = nombre.trim().length >= 3 && (rol !== 'tiendas' || !!tienda);
-  const DESC = { concentrix: 'Call Center N1 y Redes Sociales, con Genesys', tiendas: 'Usuario genérico de tiendas', workforce: 'Publica y cierra fallas, con Genesys', jefatura: 'Todo, más el desempeño del equipo' };
+  const DESC = { concentrix: 'Call Center N1 y Redes Sociales, con Genesys', tiendas: 'Usuario genérico de tiendas', supervisor: 'Panel de asesor y avisos de posibles fallas',
+    workforce: 'Publica y cierra fallas, con Genesys', jefatura: 'Todo, más el desempeño del equipo' };
   async function entrar(e) {
     e.preventDefault(); if (!ok) return;
     const datos = { nombre: U.titulo(nombre.trim()), rol, tienda: rol === 'tiendas' ? tienda : '' };
@@ -6602,6 +6713,8 @@ function BarraSuperior({ mf }) {
           <div class="info"><b>${u.nombre}</b>${rol.nombre}${u.tienda ? html`<br />Tienda ${u.tienda}` : ''}<br />${u.origen === 'genesys' ? 'Entró con Genesys' : u.origen === 'demo' ? 'Demostración' : 'Usuario ' + String(u.u).split(':')[0]}</div>
           <hr />
           <button role="menuitem" onClick=${() => { setMenu(false); A.actualizar(); }}><${Ico} n="refrescar" s=${17} />Actualizar datos</button>
+          ${Avisos.soportado() && html`<button role="menuitem" onClick=${() => { setMenu(false); cambiarAvisos(!s.avisosEscritorio); }}>
+            <${Ico} n="campana" s=${17} />${s.avisosEscritorio ? 'Desactivar avisos en el escritorio' : 'Activar avisos en el escritorio'}</button>`}
           <button role="menuitem" onClick=${() => { setMenu(false); A.salir(); }}><${Ico} n="salir" s=${17} />Salir</button>
         </div>`}
       </div>
@@ -6622,18 +6735,45 @@ function AvisoCambios() {
   </div>`;
 }
 
-/* Una posible falla nueva para Workforce, en cualquier vista menos Fallas (ahí está el panel) */
+/* Una posible falla nueva para Workforce (en cualquier vista menos Fallas, donde está el panel) y para los
+   supervisores de Call Center (su panel está arriba de la consulta). A Workforce también le llega así el aviso
+   de un supervisor. */
 function AvisoPosibleFalla({ mf }) {
   const s = useG();
-  if (!esWorkforce() || s.ruta === 'fallas' || !s.alertasNuevas.length) return null;
-  const lista = posiblesFallas(s, mf).alertas.filter((a) => s.alertasNuevas.includes(a.nodo) && !a.reportada);
+  const wf = esWorkforce();
+  if (!veAlertas() || (wf && s.ruta === 'fallas') || !s.alertasNuevas.length) return null;
+  const lista = posiblesFallas(s, mf).alertas.filter((a) => s.alertasNuevas.includes(a.nodo) && pendienteAlerta(a));
   if (!lista.length) return null;
   const a = lista[0], otras = lista.length - 1;
+  const m = wf && a.reportada && a.reportada.a === 'WF' ? a.reportada : null;
+  const donde = wf ? 'en Fallas' : 'en Posibles fallas';
   return html`<div class="aviso aviso-pf" role="alert">
-    <span class="aviso-icono"><${Ico} n="alerta" s=${17} /></span>
-    <p><b>Posible falla en ${a.nodo}.</b> ${U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos')} en ${lapsoAlerta(a)}${a.reportes ? ', ' + U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : ''}.${otras ? ' Hay ' + U.plural(otras, 'otra más', otras + ' más') + ' en Fallas.' : ''}</p>
+    <span class="aviso-icono"><${Ico} n=${m ? 'campana' : 'alerta'} s=${17} /></span>
+    <p><b>${m ? quienMarca(m) + ' avisa: posible falla en ' + a.nodo : 'Posible falla en ' + a.nodo}.</b> ${m && m.nota ? '«' + m.nota + '» ' : ''}${U.plural(a.nClientes, '1 cliente', a.nClientes + ' clientes distintos')} en ${lapsoAlerta(a)}${a.reportes ? ', ' + U.plural(a.reportes, '1 reporte de asesor', a.reportes + ' reportes de asesores') : ''}.${otras ? ' Hay ' + U.plural(otras, 'otra más', otras + ' más') + ' ' + donde + '.' : ''}</p>
     <button class="btn btn-chico" onClick=${() => A.abrirPosibleFalla(a.nodo)}>Ver clientes y correo</button>
-    <button class="btn btn-icono btn-chico aviso-x" aria-label="Cerrar el aviso" title="Cerrar el aviso (la posible falla sigue en Fallas)" onClick=${() => G.set({ alertasNuevas: [] })}><${Ico} n="x" s=${16} /></button>
+    <button class="btn btn-icono btn-chico aviso-x" aria-label="Cerrar el aviso" title=${'Cerrar el aviso (la posible falla sigue ' + donde + ')'} onClick=${() => G.set({ alertasNuevas: [] })}><${Ico} n="x" s=${16} /></button>
+  </div>`;
+}
+
+/* Activar o desactivar los avisos de escritorio desde el menú o la invitación (el navegador pide permiso la primera vez) */
+async function cambiarAvisos(activar) {
+  if (!activar) { Avisos.desactivar(); tostada('Avisos en el escritorio desactivados'); return; }
+  const p = await Avisos.activar();
+  if (p === 'granted') { Avisos.prueba(); tostada('Avisos en el escritorio activados'); }
+  else if (p === 'denied') tostada('El navegador bloqueó los avisos de esta página. Permítelos en el candado junto a la dirección.');
+}
+/* Invitación a activar los avisos de escritorio: a todos les avisa de cada falla nueva que publica Workforce.
+   Sale mientras el navegador no haya preguntado; "Ahora no" la esconde 7 días (el menú del usuario siempre los activa). */
+function OfertaAvisos() {
+  const s = useG();
+  if (s.ofertaCerrada || !Avisos.soportado() || s.permisoAvisos !== 'default') return null;
+  return html`<div class="oferta-avisos" role="region" aria-label="Avisos en el escritorio">
+    <span class="oferta-ico"><${Ico} n="campana" s=${18} /></span>
+    <p><b>Entérate al instante de cada falla nueva.</b> Activa los avisos en el escritorio y te avisaremos cuando ${CONFIG.equipo} publique una falla${veAlertas() ? ' o haya una posible falla' : ''}, aunque Alertas esté minimizado o en otra pestaña.</p>
+    <div class="oferta-acc">
+      <button class="btn btn-primario btn-chico" onClick=${() => cambiarAvisos(true)}>Activar avisos</button>
+      <button class="btn btn-fantasma btn-chico" onClick=${() => { guardarLS('alertas-oferta-avisos', Date.now()); G.set({ ofertaCerrada: true }); }}>Ahora no</button>
+    </div>
   </div>`;
 }
 
@@ -6648,12 +6788,13 @@ function Shell() {
     <div class="avisos-arriba"><${AvisoCambios} /><${AvisoPosibleFalla} mf=${mf} /></div>
     ${Backend.modo === 'local' && html`<div class="demo-cinta">${s.meta.demo ? 'Estás viendo datos de demostración: clientes, fallas y consultas inventados.' : 'Modo demostración: los datos se guardan solo en esta PC.'}${!RT.api ? ' Falta conectar el servidor en config.js.' : ''}</div>`}
     <main class="contenido" id="contenido">
+      <${OfertaAvisos} />
       ${ruta === 'consulta' && html`<${VistaConsulta} />`}
       ${ruta === 'fallas' && html`<${VistaFallas} />`}
       ${ruta === 'base' && html`<${VistaBase} />`}
       ${ruta === 'stats' && html`<${VistaStats} />`}
     </main>
-    ${esWorkforce() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
+    ${veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
     <${Tostadas} />
   </div>`;
 }
