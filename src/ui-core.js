@@ -16,7 +16,9 @@ const G = {
     umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', semillaFalla: null,
     // Los avisos de escritorio son obligatorios. Solo si el navegador los tiene bloqueados se puede seguir sin
     // ellos en esta pestaña (queda registrado en Conexiones)
-    sinAvisos: false
+    sinAvisos: false,
+    // La ayuda que se abre al probar los avisos: { ok } (ok: el navegador aceptó mandar el aviso de prueba)
+    pruebaAvisos: null
   },
   subs: new Set(),
   set(p) { Object.assign(this.s, typeof p === 'function' ? p(this.s) : p); this.subs.forEach((f) => f()); }
@@ -89,7 +91,7 @@ const A = {
   seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
     G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
-      alertaAbierta: null, alertasNuevas: [], semillaFalla: null });
+      alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
     guardarSS('alertas-avisos-reportado', ''); guardarSS('alertas-sin-avisos', false); G.set({ sinAvisos: false });
@@ -352,6 +354,10 @@ const Avisos = {
   /* Hace falta la pantalla de los avisos: el navegador los soporta y no están permitidos (salvo que estén
      bloqueados y la persona eligió seguir sin ellos) */
   faltan: (s) => Avisos.soportado() && s.permisoAvisos !== 'granted' && !(s.permisoAvisos === 'denied' && s.sinAvisos),
+  /* La etiqueta (tag) de cada aviso es única por cada cosa que se avisa. Si llega un aviso con la etiqueta de
+     otro que sigue en el centro de notificaciones de Windows, Chrome y Edge lo cambian por el anterior sin
+     mostrarlo en pantalla: así el aviso de prueba salía solo la primera vez. Solo se repite para la misma cosa,
+     para que dos pestañas de Alertas abiertas no la avisen dos veces. */
   crear(titulo, cuerpo, tag, alTocar) {
     try {
       const n = new Notification(titulo, { body: cuerpo, tag, lang: 'es' });
@@ -366,8 +372,10 @@ const Avisos = {
     if (info && info.muni) partes.push(U.lugar(info.muni));
     // A Workforce: un supervisor les avisó de esta posible falla
     const m = esWorkforce() && a.reportada && a.reportada.a === 'WF' ? a.reportada : null;
+    // El aviso de 2 horas después y el de un supervisor también tienen que salir en pantalla: etiqueta propia
     Avisos.crear(m ? m.por + ' avisa: posible falla en ' + a.nodo : 'Posible falla en ' + a.nodo,
-      (m && m.nota ? '«' + m.nota + '» · ' : '') + partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
+      (m && m.nota ? '«' + m.nota + '» · ' : '') + partes.join(' · ') + '. Clic para ver los clientes y el correo.',
+      'alertas-' + a.nodo + '-' + (m ? 'wf-' + m.en : Date.now()), () => A.abrirPosibleFalla(a.nodo));
   },
   /* Lo que Workforce acaba de hacer con una falla (lo que trae "estado" en avisos): publicarla, reabrirla,
      cerrarla (resuelta) o descartarla (una posible falla general que no se confirmó) */
@@ -383,15 +391,24 @@ const Avisos = {
         : x.tipo === 'REABIERTA'
           ? ['Se reabrió la falla ' + num, donde + '. La reabrió ' + x.por + '. Clic para verla.']
           : ['Nueva falla publicada: ' + num, donde + '. La publicó ' + x.por + '. Clic para verla.'];
-    // Etiqueta por falla y por tipo: la de resuelta no reemplaza en silencio a la de publicada
-    Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo, A.verAvisoFalla);
+    // Etiqueta por falla, por tipo y por versión: cerrarla otra vez o reabrirla otra vez también sale en pantalla
+    Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo + '-' + x.v, A.verAvisoFalla);
   },
-  // Desde el menú o el panel: para revisar que en esta PC se vean (Windows puede tener las notificaciones apagadas)
-  probar() { Avisos.prueba(); tostada('Te mandamos un aviso de prueba. Si no lo ves, revisa que Windows permita las notificaciones del navegador.'); },
+  /* Desde el menú o el panel: para revisar que en esta PC se vean. Manda el aviso y abre la ayuda, que dice dónde
+     sale y qué revisar si no sale (Windows puede tener apagadas las notificaciones o "No molestar" encendido). */
+  ultimaPrueba: null,
+  probar() {
+    // La prueba anterior sale del centro de notificaciones, para que no se junten
+    if (Avisos.ultimaPrueba) { try { Avisos.ultimaPrueba.close(); } catch (e) { /* nada */ } }
+    const n = Avisos.prueba();
+    Avisos.ultimaPrueba = n;
+    if (n) n.onerror = () => G.set({ pruebaAvisos: { ok: false } });
+    G.set({ pruebaAvisos: { ok: !!n } });
+  },
   prueba() {
     const um = umbralAlertas();
-    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
-      + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba');
+    return Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
+      + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba-' + Date.now());
   }
 };
 const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();

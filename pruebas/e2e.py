@@ -36,7 +36,7 @@ with sync_playwright() as p:
         pg.on('pageerror', lambda e: errores.append(str(e)))
         pg.on('console', lambda m: errores.append(m.text) if m.type == 'error' and 'favicon' not in m.text else None)
         pg.add_init_script("""window.__avisos = [];
-          window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {}
+          window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body, tag: (o || {}).tag }); } close() {}
             static requestPermission() { window.Notification.permission = '%s'; return Promise.resolve('%s'); } };
           window.Notification.permission = '%s';""" % (pide, pide, permiso) + ('' if enfocada else ' document.hasFocus = () => false;'))
         return pg
@@ -92,6 +92,19 @@ with sync_playwright() as p:
     html = t.content()
     ok('ClaroTiendas2026' not in html and 'ClaroTiendas2026' not in json.dumps(t.evaluate('() => ({...sessionStorage, ...localStorage})')), 'la contraseña no queda en la página ni en el navegador')
     t.screenshot(path=OUT + 'e02_tiendas_inicio.png')
+    # Probar los avisos: cada prueba lleva su propia etiqueta (con la misma, Windows la dejaba en el centro de
+    # notificaciones sin mostrarla) y se abre la ayuda con dónde sale y qué revisar en la PC si no sale
+    t.click('button.usuario'); t.click('.menu button:has-text("Probar los avisos")')
+    t.wait_for_selector('.modal:has-text("Te mandamos un aviso de prueba")', timeout=5000)
+    t.click('.modal-pie button:has-text("Probar otra vez")'); t.wait_for_timeout(300)
+    pr = [x for x in t.evaluate('() => window.__avisos') if x['t'] == 'Avisos de Alertas activados']
+    ok(len(pr) == 2 and all(x['tag'] for x in pr) and pr[0]['tag'] != pr[1]['tag'], 'Probar los avisos manda un aviso cada vez, cada uno con su propia etiqueta', pr)
+    ayuda = t.locator('.modal').inner_text()
+    ok('abajo a la derecha' in ayuda and 'Configuración › Sistema › Notificaciones' in ayuda and 'No molestar' in ayuda and 'Asistente de concentración' in ayuda,
+       'la ayuda dice dónde sale el aviso y qué revisar en Windows si no sale', ayuda)
+    t.screenshot(path=OUT + 'e02c_prueba_avisos.png')
+    t.click('.modal-pie button:has-text("Listo")'); t.wait_for_timeout(300)
+    ok(t.locator('.modal').count() == 0, 'Listo cierra la ayuda')
     t.goto(APP + '#fallas'); t.wait_for_timeout(500)
     ok(t.locator('.buscador-caja').count() == 1, 'Tiendas no puede abrir Fallas aunque escriba la dirección')
 
@@ -187,7 +200,7 @@ with sync_playwright() as p:
     contratosPF = [http(f'/test/contrato?nodo={nodoPF}&n={k}')['contrato'] for k in range(5)]
     # El aviso de escritorio, simulado: se anota lo que se avisa, como si Alertas estuviera minimizado
     w.evaluate("""() => { window.__avisos = []; document.hasFocus = () => false;
-      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
+      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body, tag: (o || {}).tag }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
       window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted' }); }""")
     w.evaluate("() => ir('fallas')")
     def buscar_en(contratos):
@@ -374,7 +387,7 @@ with sync_playwright() as p:
     x.click('button[role=tab]:has-text("Resueltas")'); x.wait_for_selector('.falla-card', timeout=10000)
     ok(x.locator('.falla-card', has_text='F1254585').locator('button.enviar-sms').count() == 0, 'una falla resuelta ya no tiene botón de SMS (no se avisa el servicio restablecido)')
     x.evaluate("""() => { window.__avisos = []; document.hasFocus = () => false;
-      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
+      window.Notification = class { constructor(t, o) { window.__avisos.push({ t, b: (o || {}).body, tag: (o || {}).tag }); } close() {} static requestPermission() { return Promise.resolve('granted'); } };
       window.Notification.permission = 'granted'; G.set({ permisoAvisos: 'granted' }); }""")
     x.evaluate("(n) => A.publicarFalla({ nodos: n, motivo: 'POSTES', numero: 'F1254600' })", ejemplos[:2]); x.wait_for_timeout(800)
     # Aviso de escritorio de la falla nueva: le llega a todos los que lo activaron (aquí, la supervisora), no a quien la publicó
@@ -383,6 +396,7 @@ with sync_playwright() as p:
     av = [v for v in s.evaluate('() => window.__avisos') if 'F1254600' in v['t']]
     ok(len(av) == 1 and av[0]['t'] == 'Nueva falla publicada: F1254600' and 'Caída de postes en ' + ejemplos[0] in av[0]['b'] and 'Mario Rivera' in av[0]['b'],
        'al publicar una falla, a la supervisora le llega el aviso de escritorio: ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
+    ok(len(av) == 1 and re.search(r'^alertas-falla-.+-PUBLICADA-\d+$', av[0]['tag'] or ''), 'el aviso lleva la etiqueta de esa falla, ese cambio y esa versión (si se repite el cambio, también sale en pantalla)', av)
     ok(not [v for v in x.evaluate('() => window.__avisos') if 'Nueva falla' in v['t']], 'a quien la publicó no le llega su propio aviso')
     s.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))'); s.wait_for_timeout(300)
     ok(len([v for v in s.evaluate('() => window.__avisos') if 'F1254600' in v['t']]) == 1, 'y el aviso llega una sola vez')

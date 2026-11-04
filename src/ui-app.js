@@ -395,7 +395,7 @@ function PuertaAvisos() {
   const s = useG();
   const [intento, setIntento] = useState(false);
   const p = s.permisoAvisos;
-  const listo = () => { Avisos.prueba(); tostada('Avisos en el escritorio activados'); A.reportarAvisos(); };
+  const listo = () => { Avisos.ultimaPrueba = Avisos.prueba(); tostada('Avisos en el escritorio activados'); A.reportarAvisos(); };
   // Si los permiten desde el candado del navegador, Alertas sigue sola
   useEffect(() => {
     const t = setInterval(() => {
@@ -430,6 +430,59 @@ function PuertaAvisos() {
   </section>`;
 }
 
+/* El navegador, con el nombre que tiene en la lista de notificaciones de Windows o de la Mac */
+function nombreNavegador() {
+  const ua = navigator.userAgent || '';
+  return /Edg\//.test(ua) ? 'Microsoft Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\//.test(ua) ? 'Google Chrome' : /Safari\//.test(ua) ? 'Safari' : 'tu navegador';
+}
+const esMac = () => /Mac/i.test(navigator.platform || navigator.userAgent || '');
+
+/* Una pantalla con el aviso en la esquina donde sale: en Windows abajo a la derecha, en la Mac arriba */
+function PantallaAviso({ arriba }) {
+  const y = arriba ? 15 : 41;
+  return html`<svg class="prueba-pantalla" viewBox="0 0 120 80" aria-hidden="true">
+    <rect class="pp-marco" x="1.5" y="1.5" width="117" height="77" rx="9" />
+    <rect class="pp-barra" x="7" y=${arriba ? 7 : 67} width="106" height="6" rx="3" />
+    <rect class="pp-aviso" x="66" y=${y} width="46" height="21" rx="4.5" />
+    <circle class="pp-punto" cx="73.5" cy=${y + 7.5} r="3" />
+    <rect class="pp-linea" x="80" y=${y + 5.5} width="26" height="3.5" rx="1.75" />
+    <rect class="pp-linea suave" x="72" y=${y + 13} width="34" height="3" rx="1.5" />
+  </svg>`;
+}
+
+/* Después de "Probar los avisos": dónde sale el aviso y qué revisar en la PC si no sale */
+function ModalPruebaAvisos() {
+  const s = useG();
+  const p = s.pruebaAvisos;
+  if (!p) return null;
+  const cerrar = () => G.set({ pruebaAvisos: null });
+  const mac = esMac(), nav = nombreNavegador();
+  return html`<${Modal} titulo=${p.ok ? 'Te mandamos un aviso de prueba' : 'No se pudo mandar el aviso de prueba'} onCerrar=${cerrar} ancho=${520}
+    pie=${html`<button class="btn btn-borde" onClick=${Avisos.probar}>Probar otra vez</button><button class="btn btn-primario" onClick=${cerrar}>Listo</button>`}>
+    <div class="prueba-donde">
+      <${PantallaAviso} arriba=${mac} />
+      ${p.ok
+        ? html`<p>Sale en la esquina de <b>${mac ? 'arriba' : 'abajo'} a la derecha</b> de la pantalla y dice «Avisos de Alertas activados». Así te van a llegar los avisos de fallas, aunque Alertas esté minimizado.</p>`
+        : html`<p>${nav} no dejó mostrar el aviso. Revisa que en el candado junto a la dirección de la página las notificaciones estén en <b>Permitir</b>, y luego lo de abajo.</p>`}
+    </div>
+    <div class="prueba-ayuda">
+      <b>¿No te salió? Revisa esto en ${mac ? 'la Mac' : 'la PC'}:</b>
+      <ol>
+        ${mac ? html`
+          <li>Abre <b>Configuración del Sistema › Notificaciones</b>.</li>
+          <li>Busca <b>${nav}</b> y activa <b>Permitir notificaciones</b>.</li>
+          <li>Apaga <b>No molestar</b> (está en el Centro de control).</li>` : html`
+          <li>Abre <b>Inicio › Configuración › Sistema › Notificaciones</b>.</li>
+          <li>Deja activado <b>Notificaciones</b> y, en la lista de abajo, <b>${nav}</b>.</li>
+          <li>Apaga <b>No molestar</b> (en Windows 10 se llama <b>Asistente de concentración</b>).</li>`}
+        <li>Toca <b>Probar otra vez</b>.</li>
+      </ol>
+      <p>Si ${mac ? 'la Mac' : 'la PC'} no te deja cambiarlo, pide ayuda a soporte técnico.</p>
+    </div>
+  <//>`;
+}
+
 function Shell() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
@@ -450,6 +503,7 @@ function Shell() {
         ${ruta === 'reportes' && html`<${VistaReportes} />`}`}
     </main>
     ${!puerta && veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
+    <${ModalPruebaAvisos} />
     <${Tostadas} />
   </div>`;
 }

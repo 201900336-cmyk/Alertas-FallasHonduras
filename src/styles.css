@@ -486,6 +486,24 @@ button { cursor: pointer; }
 .puerta-pasos li + li { margin-top: 4px; }
 .puerta-pasos svg { vertical-align: -2px; }
 .puerta-avisos .nota { margin-top: 16px; text-align: left; }
+/* Ayuda del aviso de prueba: dónde sale y qué revisar si no sale */
+.prueba-donde { display: flex; gap: 18px; align-items: center; }
+.prueba-donde p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.prueba-donde b { color: var(--ink); }
+.prueba-pantalla { flex: none; width: 116px; height: auto; }
+.prueba-pantalla .pp-marco { fill: var(--surface-2); stroke: var(--line-2); stroke-width: 1.5; }
+.prueba-pantalla .pp-barra { fill: var(--line); }
+.prueba-pantalla .pp-aviso { fill: var(--surface); stroke: var(--resuelta); stroke-width: 2; }
+.prueba-pantalla .pp-punto { fill: var(--resuelta); }
+.prueba-pantalla .pp-linea { fill: var(--ink-3); }
+.prueba-pantalla .pp-linea.suave { fill: var(--line-2); }
+.prueba-ayuda { padding: 14px 16px; border-radius: 12px; background: var(--surface-2); color: var(--ink-2); font-size: 14px; line-height: 1.55; }
+.prueba-ayuda > b { color: var(--ink); }
+.prueba-ayuda ol { margin: 6px 0 0; padding-left: 22px; }
+.prueba-ayuda li + li { margin-top: 3px; }
+.prueba-ayuda li b { color: var(--ink); font-weight: 650; }
+.prueba-ayuda p { margin: 10px 0 0; font-size: 13.5px; color: var(--ink-3); }
+@media (max-width: 520px) { .prueba-donde { flex-direction: column; align-items: flex-start; } }
 @media (max-width: 640px) { .puerta-avisos { margin: 20px 0; padding: 28px 20px 24px; } .puerta-avisos h1 { font-size: 22px; } }
 /* Los avisos de arriba se apilan (actualización de Workforce y posible falla) y quedan a la vista al bajar */
 .avisos-arriba { position: sticky; top: 60px; z-index: 25; }

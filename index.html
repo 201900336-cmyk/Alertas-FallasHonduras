@@ -498,6 +498,24 @@ button { cursor: pointer; }
 .puerta-pasos li + li { margin-top: 4px; }
 .puerta-pasos svg { vertical-align: -2px; }
 .puerta-avisos .nota { margin-top: 16px; text-align: left; }
+/* Ayuda del aviso de prueba: dónde sale y qué revisar si no sale */
+.prueba-donde { display: flex; gap: 18px; align-items: center; }
+.prueba-donde p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.prueba-donde b { color: var(--ink); }
+.prueba-pantalla { flex: none; width: 116px; height: auto; }
+.prueba-pantalla .pp-marco { fill: var(--surface-2); stroke: var(--line-2); stroke-width: 1.5; }
+.prueba-pantalla .pp-barra { fill: var(--line); }
+.prueba-pantalla .pp-aviso { fill: var(--surface); stroke: var(--resuelta); stroke-width: 2; }
+.prueba-pantalla .pp-punto { fill: var(--resuelta); }
+.prueba-pantalla .pp-linea { fill: var(--ink-3); }
+.prueba-pantalla .pp-linea.suave { fill: var(--line-2); }
+.prueba-ayuda { padding: 14px 16px; border-radius: 12px; background: var(--surface-2); color: var(--ink-2); font-size: 14px; line-height: 1.55; }
+.prueba-ayuda > b { color: var(--ink); }
+.prueba-ayuda ol { margin: 6px 0 0; padding-left: 22px; }
+.prueba-ayuda li + li { margin-top: 3px; }
+.prueba-ayuda li b { color: var(--ink); font-weight: 650; }
+.prueba-ayuda p { margin: 10px 0 0; font-size: 13.5px; color: var(--ink-3); }
+@media (max-width: 520px) { .prueba-donde { flex-direction: column; align-items: flex-start; } }
 @media (max-width: 640px) { .puerta-avisos { margin: 20px 0; padding: 28px 20px 24px; } .puerta-avisos h1 { font-size: 22px; } }
 /* Los avisos de arriba se apilan (actualización de Workforce y posible falla) y quedan a la vista al bajar */
 .avisos-arriba { position: sticky; top: 60px; z-index: 25; }
@@ -3716,7 +3734,9 @@ const G = {
     umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', semillaFalla: null,
     // Los avisos de escritorio son obligatorios. Solo si el navegador los tiene bloqueados se puede seguir sin
     // ellos en esta pestaña (queda registrado en Conexiones)
-    sinAvisos: false
+    sinAvisos: false,
+    // La ayuda que se abre al probar los avisos: { ok } (ok: el navegador aceptó mandar el aviso de prueba)
+    pruebaAvisos: null
   },
   subs: new Set(),
   set(p) { Object.assign(this.s, typeof p === 'function' ? p(this.s) : p); this.subs.forEach((f) => f()); }
@@ -3789,7 +3809,7 @@ const A = {
   seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
     G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
-      alertaAbierta: null, alertasNuevas: [], semillaFalla: null });
+      alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
     guardarSS('alertas-avisos-reportado', ''); guardarSS('alertas-sin-avisos', false); G.set({ sinAvisos: false });
@@ -4052,6 +4072,10 @@ const Avisos = {
   /* Hace falta la pantalla de los avisos: el navegador los soporta y no están permitidos (salvo que estén
      bloqueados y la persona eligió seguir sin ellos) */
   faltan: (s) => Avisos.soportado() && s.permisoAvisos !== 'granted' && !(s.permisoAvisos === 'denied' && s.sinAvisos),
+  /* La etiqueta (tag) de cada aviso es única por cada cosa que se avisa. Si llega un aviso con la etiqueta de
+     otro que sigue en el centro de notificaciones de Windows, Chrome y Edge lo cambian por el anterior sin
+     mostrarlo en pantalla: así el aviso de prueba salía solo la primera vez. Solo se repite para la misma cosa,
+     para que dos pestañas de Alertas abiertas no la avisen dos veces. */
   crear(titulo, cuerpo, tag, alTocar) {
     try {
       const n = new Notification(titulo, { body: cuerpo, tag, lang: 'es' });
@@ -4066,8 +4090,10 @@ const Avisos = {
     if (info && info.muni) partes.push(U.lugar(info.muni));
     // A Workforce: un supervisor les avisó de esta posible falla
     const m = esWorkforce() && a.reportada && a.reportada.a === 'WF' ? a.reportada : null;
+    // El aviso de 2 horas después y el de un supervisor también tienen que salir en pantalla: etiqueta propia
     Avisos.crear(m ? m.por + ' avisa: posible falla en ' + a.nodo : 'Posible falla en ' + a.nodo,
-      (m && m.nota ? '«' + m.nota + '» · ' : '') + partes.join(' · ') + '. Clic para ver los clientes y el correo.', 'alertas-' + a.nodo, () => A.abrirPosibleFalla(a.nodo));
+      (m && m.nota ? '«' + m.nota + '» · ' : '') + partes.join(' · ') + '. Clic para ver los clientes y el correo.',
+      'alertas-' + a.nodo + '-' + (m ? 'wf-' + m.en : Date.now()), () => A.abrirPosibleFalla(a.nodo));
   },
   /* Lo que Workforce acaba de hacer con una falla (lo que trae "estado" en avisos): publicarla, reabrirla,
      cerrarla (resuelta) o descartarla (una posible falla general que no se confirmó) */
@@ -4083,15 +4109,24 @@ const Avisos = {
         : x.tipo === 'REABIERTA'
           ? ['Se reabrió la falla ' + num, donde + '. La reabrió ' + x.por + '. Clic para verla.']
           : ['Nueva falla publicada: ' + num, donde + '. La publicó ' + x.por + '. Clic para verla.'];
-    // Etiqueta por falla y por tipo: la de resuelta no reemplaza en silencio a la de publicada
-    Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo, A.verAvisoFalla);
+    // Etiqueta por falla, por tipo y por versión: cerrarla otra vez o reabrirla otra vez también sale en pantalla
+    Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo + '-' + x.v, A.verAvisoFalla);
   },
-  // Desde el menú o el panel: para revisar que en esta PC se vean (Windows puede tener las notificaciones apagadas)
-  probar() { Avisos.prueba(); tostada('Te mandamos un aviso de prueba. Si no lo ves, revisa que Windows permita las notificaciones del navegador.'); },
+  /* Desde el menú o el panel: para revisar que en esta PC se vean. Manda el aviso y abre la ayuda, que dice dónde
+     sale y qué revisar si no sale (Windows puede tener apagadas las notificaciones o "No molestar" encendido). */
+  ultimaPrueba: null,
+  probar() {
+    // La prueba anterior sale del centro de notificaciones, para que no se junten
+    if (Avisos.ultimaPrueba) { try { Avisos.ultimaPrueba.close(); } catch (e) { /* nada */ } }
+    const n = Avisos.prueba();
+    Avisos.ultimaPrueba = n;
+    if (n) n.onerror = () => G.set({ pruebaAvisos: { ok: false } });
+    G.set({ pruebaAvisos: { ok: !!n } });
+  },
   prueba() {
     const um = umbralAlertas();
-    Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
-      + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba');
+    return Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
+      + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba-' + Date.now());
   }
 };
 const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
@@ -7095,7 +7130,7 @@ function PuertaAvisos() {
   const s = useG();
   const [intento, setIntento] = useState(false);
   const p = s.permisoAvisos;
-  const listo = () => { Avisos.prueba(); tostada('Avisos en el escritorio activados'); A.reportarAvisos(); };
+  const listo = () => { Avisos.ultimaPrueba = Avisos.prueba(); tostada('Avisos en el escritorio activados'); A.reportarAvisos(); };
   // Si los permiten desde el candado del navegador, Alertas sigue sola
   useEffect(() => {
     const t = setInterval(() => {
@@ -7130,6 +7165,59 @@ function PuertaAvisos() {
   </section>`;
 }
 
+/* El navegador, con el nombre que tiene en la lista de notificaciones de Windows o de la Mac */
+function nombreNavegador() {
+  const ua = navigator.userAgent || '';
+  return /Edg\//.test(ua) ? 'Microsoft Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\//.test(ua) ? 'Google Chrome' : /Safari\//.test(ua) ? 'Safari' : 'tu navegador';
+}
+const esMac = () => /Mac/i.test(navigator.platform || navigator.userAgent || '');
+
+/* Una pantalla con el aviso en la esquina donde sale: en Windows abajo a la derecha, en la Mac arriba */
+function PantallaAviso({ arriba }) {
+  const y = arriba ? 15 : 41;
+  return html`<svg class="prueba-pantalla" viewBox="0 0 120 80" aria-hidden="true">
+    <rect class="pp-marco" x="1.5" y="1.5" width="117" height="77" rx="9" />
+    <rect class="pp-barra" x="7" y=${arriba ? 7 : 67} width="106" height="6" rx="3" />
+    <rect class="pp-aviso" x="66" y=${y} width="46" height="21" rx="4.5" />
+    <circle class="pp-punto" cx="73.5" cy=${y + 7.5} r="3" />
+    <rect class="pp-linea" x="80" y=${y + 5.5} width="26" height="3.5" rx="1.75" />
+    <rect class="pp-linea suave" x="72" y=${y + 13} width="34" height="3" rx="1.5" />
+  </svg>`;
+}
+
+/* Después de "Probar los avisos": dónde sale el aviso y qué revisar en la PC si no sale */
+function ModalPruebaAvisos() {
+  const s = useG();
+  const p = s.pruebaAvisos;
+  if (!p) return null;
+  const cerrar = () => G.set({ pruebaAvisos: null });
+  const mac = esMac(), nav = nombreNavegador();
+  return html`<${Modal} titulo=${p.ok ? 'Te mandamos un aviso de prueba' : 'No se pudo mandar el aviso de prueba'} onCerrar=${cerrar} ancho=${520}
+    pie=${html`<button class="btn btn-borde" onClick=${Avisos.probar}>Probar otra vez</button><button class="btn btn-primario" onClick=${cerrar}>Listo</button>`}>
+    <div class="prueba-donde">
+      <${PantallaAviso} arriba=${mac} />
+      ${p.ok
+        ? html`<p>Sale en la esquina de <b>${mac ? 'arriba' : 'abajo'} a la derecha</b> de la pantalla y dice «Avisos de Alertas activados». Así te van a llegar los avisos de fallas, aunque Alertas esté minimizado.</p>`
+        : html`<p>${nav} no dejó mostrar el aviso. Revisa que en el candado junto a la dirección de la página las notificaciones estén en <b>Permitir</b>, y luego lo de abajo.</p>`}
+    </div>
+    <div class="prueba-ayuda">
+      <b>¿No te salió? Revisa esto en ${mac ? 'la Mac' : 'la PC'}:</b>
+      <ol>
+        ${mac ? html`
+          <li>Abre <b>Configuración del Sistema › Notificaciones</b>.</li>
+          <li>Busca <b>${nav}</b> y activa <b>Permitir notificaciones</b>.</li>
+          <li>Apaga <b>No molestar</b> (está en el Centro de control).</li>` : html`
+          <li>Abre <b>Inicio › Configuración › Sistema › Notificaciones</b>.</li>
+          <li>Deja activado <b>Notificaciones</b> y, en la lista de abajo, <b>${nav}</b>.</li>
+          <li>Apaga <b>No molestar</b> (en Windows 10 se llama <b>Asistente de concentración</b>).</li>`}
+        <li>Toca <b>Probar otra vez</b>.</li>
+      </ol>
+      <p>Si ${mac ? 'la Mac' : 'la PC'} no te deja cambiarlo, pide ayuda a soporte técnico.</p>
+    </div>
+  <//>`;
+}
+
 function Shell() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
@@ -7150,6 +7238,7 @@ function Shell() {
         ${ruta === 'reportes' && html`<${VistaReportes} />`}`}
     </main>
     ${!puerta && veAlertas() && s.alertaAbierta && html`<${ModalPosibleFalla} nodo=${s.alertaAbierta} key=${s.alertaAbierta} />`}
+    <${ModalPruebaAvisos} />
     <${Tostadas} />
   </div>`;
 }
