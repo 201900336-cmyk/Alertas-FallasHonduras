@@ -279,7 +279,7 @@ function TarjetaCliente({ rec, v, now }) {
       <div class="dato"><div class="l">Cliente desde</div><div class="v">${U.fechaDias(rec.fecha)}${rec.fecha ? html`<small>${U.antiguedad(rec.fecha, now)} con nosotros</small>` : ''}</div></div>
       <div class="dato"><div class="l">Departamento</div><div class="v">${U.lugar(rec.departamento) || 'Sin dato'}</div></div>
       <div class="dato"><div class="l">Municipio</div><div class="v">${U.lugar(rec.municipio) || 'Sin dato'}</div></div>
-      <div class="dato"><div class="l">Colonia</div><div class="v">${U.titulo(rec.colonia) || 'Sin dato'}</div></div>
+      <div class="dato"><div class="l">Colonia</div><div class="v">${U.colonia(rec.colonia) || 'Sin dato'}</div></div>
       ${rec.megas && html`<div class="dato"><div class="l">Velocidad</div><div class="v">${rec.megas}</div></div>`}
     </div>
   </article>`;
@@ -465,7 +465,7 @@ function FallaItem({ f, now }) {
   // departamento cuando el único municipio se llama igual, como La Paz)
   const munis = unDep && zona.munis.length === 1 && zona.munis[0] === zona.deps[0] ? [] : zona.munis;
   const debajo = zona.top.length
-    ? (masColonias > 0 ? zona.top.map(L).join(', ') + ' y ' + U.plural(masColonias, '1 colonia más', U.n(masColonias) + ' colonias más') : U.listaNatural(zona.top.map(L), 3))
+    ? (masColonias > 0 ? zona.top.join(', ') + ' y ' + U.plural(masColonias, '1 colonia más', U.n(masColonias) + ' colonias más') : U.listaNatural(zona.top, 3))
     : U.listaNatural(munis.map(L), 3);
   const grupos = zona.grupos ? zona.grupos.filter((g) => todas || g.principal) : [];
   const hayMas = !!zona.grupos && zona.grupos.some((g) => !g.principal || g.cols.length > COLONIAS_POR_MUNICIPIO);
@@ -492,7 +492,7 @@ function FallaItem({ f, now }) {
             <div class="zona-muni"><b>${L(g.muni) || 'Sin municipio'}</b>${(!unDep || !g.principal) && g.dep ? html`<span>${L(g.dep)}</span>` : ''}
               <span class="cuantos">${U.plural(g.n, '1 cliente', U.n(g.n) + ' clientes')}</span></div>
             <div class="zona-cols">
-              ${(todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO)).map(([c]) => html`<span class="chip" key=${c}>${L(c)}</span>`)}
+              ${(todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO)).map(([c]) => html`<span class="chip" key=${c}>${c}</span>`)}
               ${!todas && g.cols.length > COLONIAS_POR_MUNICIPIO && html`<button type="button" class="chip mas" title="Ver todas las colonias" onClick=${() => setTodas(true)}>+${U.n(g.cols.length - COLONIAS_POR_MUNICIPIO)}</button>`}
             </div>
           </div>`)

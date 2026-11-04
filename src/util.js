@@ -130,17 +130,44 @@ const U = (() => {
     Union: 'Unión', Concepcion: 'Concepción', Guanaja: 'Guanaja', Santa: 'Santa', Ocotepeque: 'Ocotepeque', Juticalpa: 'Juticalpa',
     // Palabras frecuentes en los nombres de colonias y barrios
     Jesus: 'Jesús', Angeles: 'Ángeles', Rio: 'Río', Ramon: 'Ramón', Martin: 'Martín', Tomas: 'Tomás', Jardin: 'Jardín', Bolivar: 'Bolívar',
-    Lopez: 'López', Perez: 'Pérez', Gonzalez: 'González', Hernandez: 'Hernández', Rodriguez: 'Rodríguez', Garcia: 'García', Mexico: 'México' };
+    Lopez: 'López', Perez: 'Pérez', Gonzalez: 'González', Hernandez: 'Hernández', Rodriguez: 'Rodríguez', Garcia: 'García', Mexico: 'México',
+    Alamos: 'Álamos', Angel: 'Ángel', Monica: 'Mónica', Olimpica: 'Olímpica', Satelite: 'Satélite', Toncontin: 'Toncontín', America: 'América',
+    Americas: 'Américas', Ines: 'Inés', Lucia: 'Lucía', Simon: 'Simón', Peru: 'Perú', Panama: 'Panamá', Japon: 'Japón', Ruben: 'Rubén', Dario: 'Darío' };
   // En la base, la Ñ a veces llega como "¿" (CASTA¿OS): entre dos letras no puede ser otra cosa
   const conEnie = (s) => String(s == null ? '' : s).replace(/(\p{L})[¿�](?=\p{L})/gu, (m, a) => a + (a === a.toUpperCase() ? 'Ñ' : 'ñ'));
   // El artículo es parte del nombre del lugar ("Barrio La Hoya", "Colonia Los Ángeles"), salvo después de "de"
   // ("San Francisco de la Paz", "Villa de los Ángeles")
-  const ARTICULOS = new Set(['el', 'la', 'los', 'las']), PREPOSICIONES = new Set(['de', 'del', 'y', 'e', 'a', 'en']);
+  const ARTICULOS = new Set(['el', 'la', 'los', 'las']), PREPOSICIONES = new Set(['de', 'del', 'a', 'en']);
   const lugar = (s) => titulo(conEnie(s)).split(' ').map((w, i, ws) => {
     if (i > 0 && ARTICULOS.has(w) && !PREPOSICIONES.has(ws[i - 1].toLowerCase())) return w.charAt(0).toUpperCase() + w.slice(1);
     if (i > 0 && i < ws.length - 1 && w === 'A') return 'a';   // "Gracias a Dios" (pero "Sector A")
     return ACENTOS[w] || w;
   }).join(' ');
+
+  /* Colonias de la base. Las que dicen "NO USAR" no se muestran. Para mostrarlas: con la Ñ, sin lo que va entre
+     paréntesis ("COL. KENNEDY ( ZONA 1,2,3...)"), con el tipo siempre igual (Col., Barrio, Res., ...) y en nombre
+     propio: "COL. EL CASTA¿O SUR" es "Col. El Castaño Sur". La clave es el nombre sin el tipo ni tildes, para juntar
+     la misma colonia escrita distinto ("COL. LAS COLINAS", "COLONIA LAS COLINAS" y "RES. LAS COLINAS"). */
+  const coloniaNoUsar = (s) => /NO\s*USAR/i.test(String(s || ''));
+  const TIPOS_COLONIA = [[/^(COLONIA|COL)(\.|\b)/, 'Col.'], [/^(BARRIO|BO)(\.|\b)/, 'Barrio'], [/^(RESIDENCIAL|RES)(\.|\b)/, 'Res.'],
+    [/^(URBANIZACION|URB)(\.|\b)/, 'Urb.'], [/^(LOTIFICACION|LOT)(\.|\b)/, 'Lot.'], [/^(ALDEA|ALD)(\.|\b)/, 'Aldea'], [/^CASERIO\b/, 'Caserío']];
+  function partesColonia(s) {
+    let t = conEnie(String(s == null ? '' : s)).replace(/\(.*?\)|\(.*$/g, ' ').replace(/\s+/g, ' ').trim().replace(/[\s,.;:-]+$/, '');
+    t = t.replace(/^col\.?\s*col(onia)?\b\.?/i, 'COLONIA');   // "COLCOLONIA EL HATILLO"
+    const u = sinAcentos(t).toUpperCase();
+    for (const [re, tipo] of TIPOS_COLONIA) {
+      const m = u.match(re);
+      if (m) { const resto = t.slice(m[0].length).replace(/^[\s.,-]+/, ''); if (resto) return { tipo, resto }; }
+    }
+    return { tipo: '', resto: t };
+  }
+  const colonia = (s) => {
+    if (!s || coloniaNoUsar(s)) return '';
+    const { tipo, resto } = partesColonia(s);
+    if (!tipo) return lugar(resto);
+    return tipo + ' ' + lugar(resto).replace(/^(De|Del)(?= )/, (w) => w.toLowerCase());   // "Barrio de Jesús", "Col. del Valle"
+  };
+  const claveColonia = (s) => sinAcentos(partesColonia(s).resto).toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   const esEmpresa = (nombre, categoria) =>
     /\b(S\.?\s?A\.?|S\.? DE R\.?L|C\.?V\.?|BANCO|ASOCIACION|FUNDACION|IGLESIA|COLEGIO|ESCUELA|INSTITUTO|HOTEL|RESTAURANTE|EMPRESA|CORPORACION|INVERSIONES|COMERCIAL|DISTRIBUIDORA|MUNICIPALIDAD|SECRETARIA|CLINICA|HOSPITAL)\b/.test(sinAcentos(nombre || '').toUpperCase())
     || /CORPORATIVO|EMPRESARIAL|PYME/.test(categoria || '');
@@ -226,6 +253,6 @@ const U = (() => {
   };
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
-    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
+    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, colonia, claveColonia, coloniaNoUsar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();

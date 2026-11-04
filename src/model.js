@@ -121,15 +121,26 @@ const Model = (() => {
      Resumen por nodo sin datos personales: es lo único que viaja a todas las PCs.
      nodos: [codigo, total, hfc, gpon, empresariales, indiceOlt, [dep, n, ...], [muni, n, ...], [colonia, n, ...]]
      cols (desde el formato 2): [dep, muni, nombre] de cada colonia, para el panel de fallas de los asesores. La
-     misma colonia en otro municipio es otra. */
-  // Nombre de colonia para juntar las que vienen escritas distinto ("Barrio Belen" y "BARRIO  BELEN")
-  const nombreColonia = (s) => U.conEnie(String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toUpperCase());
+     misma colonia en otro municipio es otra. Las colonias quedan limpias: una sola vez aunque en la base venga
+     escrita de varias formas (con el nombre de la forma que más se repite), en nombre propio y sin las que dicen
+     "NO USAR"; los clientes sin colonia válida van a una con nombre vacío, para que cuenten en su municipio. */
+  // Cada pareja municipio y colonia, con su clave, una sola vez (la misma pareja se repite en miles de filas)
+  function coloniasDeBase(ix) {
+    const memo = new Map();
+    return (raw) => {
+      let r = memo.get(raw);
+      if (r === undefined) { r = raw && !U.coloniaNoUsar(raw) ? U.claveColonia(raw) : ''; memo.set(raw, r); }
+      return r;
+    };
+  }
   function catalogo(ix) {
     const deps = [], munis = [], olts = [], cols = [];
     const di = new Map(), mi = new Map(), oi = new Map(), ci = new Map();
     const pos = (arr, mapa, v) => { let k = mapa.get(v); if (k === undefined) { k = arr.length; arr.push(v); mapa.set(v, k); } return k; };
     const plano = (m, arr, mapa) => [...m.entries()].sort((a, b) => b[1] - a[1]).reduce((o, [k, n]) => { o.push(pos(arr, mapa, k), n); return o; }, []);
     const SEP = '\u0001';
+    const clave = coloniasDeBase(ix);
+    const formas = new Map();   // dep|muni|clave -> cuántas filas trae cada forma de escribir la colonia
     const nodos = [];
     for (const [code, c] of ix.nodoIdx) {
       const desde = ix.inicio[c], hasta = ix.inicio[c + 1];
@@ -140,18 +151,24 @@ const Model = (() => {
         const i = ix.filasNodo[p];
         const d = ix.D.departamento[ix.C.departamento[i]], m = ix.D.municipio[ix.C.municipio[i]];
         dm.set(d, (dm.get(d) || 0) + 1); mm.set(m, (mm.get(m) || 0) + 1);
-        const col = nombreColonia(ix.D.colonia[ix.C.colonia[i]]);
-        if (col) { const k = d + SEP + m + SEP + col; cm.set(k, (cm.get(k) || 0) + 1); }
+        const raw = ix.D.colonia[ix.C.colonia[i]], kc = clave(raw), k = d + SEP + m + SEP + kc;
+        cm.set(k, (cm.get(k) || 0) + 1);
+        if (kc) { let f = formas.get(k); if (!f) formas.set(k, (f = new Map())); f.set(raw, (f.get(raw) || 0) + 1); }
         if (ix.esCorp[ix.C.categoria[i]]) corp++;
       }
       const oltIdx = ix.oltNodo[c] >= 0 ? pos(olts, oi, U.oltBase(ix.D.olt[ix.oltNodo[c]])) : -1;
       const pd = plano(dm, deps, di), pm = plano(mm, munis, mi);
       const pc = [...cm.entries()].sort((a, b) => b[1] - a[1]).reduce((o, [k, n]) => {
         let x = ci.get(k);
-        if (x === undefined) { const [d, m, col] = k.split(SEP); x = cols.length; cols.push([pos(deps, di, d), pos(munis, mi, m), col]); ci.set(k, x); }
+        if (x === undefined) { const [d, m] = k.split(SEP); x = cols.length; cols.push([pos(deps, di, d), pos(munis, mi, m), k]); ci.set(k, x); }
         o.push(x, n); return o;
       }, []);
       nodos.push([code, ix.cnt[c], ix.cH[c], ix.cG[c], corp, oltIdx, pd, pm, pc]);
+    }
+    // El nombre de cada colonia: la forma que más se repite, limpia ("COL. EL CASTA¿O SUR" -> "Col. El Castaño Sur")
+    for (const x of cols) {
+      const f = formas.get(x[2]);
+      x[2] = f ? U.colonia([...f.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0][0]) : '';
     }
     return { formato: 2, deps, munis, cols, olts: olts.map((b) => [b, U.oltNombre(b)]), nodos, resumen: Object.assign({}, ix.resumen) };
   }
@@ -210,15 +227,23 @@ const Model = (() => {
         for (const [dep, muni, col, v] of n.cols) {
           const k = dep + '\u0001' + muni;
           let e = g.get(k); if (!e) { e = { dep, muni, n: 0, cols: new Map() }; g.set(k, e); }
-          e.n += v; e.cols.set(col, (e.cols.get(col) || 0) + v);
+          e.n += v;   // los clientes sin colonia válida cuentan en su municipio, pero no salen como colonia
+          if (!col || U.coloniaNoUsar(col)) continue;
+          // La misma colonia de varios nodos (o escrita distinto en un catálogo de antes) va una sola vez
+          const kc = U.claveColonia(col);
+          let x = e.cols.get(kc); if (!x) { x = { n: 0, formas: new Map() }; e.cols.set(kc, x); }
+          x.n += v; x.formas.set(col, (x.formas.get(col) || 0) + v);
         }
       }
       if (g.size) {
         const total = [...g.values()].reduce((a, e) => a + e.n, 0);
+        const nombre = (x) => U.colonia([...x.formas.entries()].sort((a, b) => b[1] - a[1])[0][0]);
         const grupos = [...g.values()].sort((a, b) => b.n - a.n)
-          .map((e, i) => ({ dep: e.dep, muni: e.muni, n: e.n, cols: orden(e.cols), principal: i === 0 || e.n >= minimo(total) }));
+          .map((e, i) => ({ dep: e.dep, muni: e.muni, n: e.n, cols: [...e.cols.values()].map((x) => [nombre(x), x.n]).sort((a, b) => b[1] - a[1]),
+            principal: i === 0 || e.n >= minimo(total) }));
         const deps = orden(d);
-        const top = grupos.filter((x) => x.principal).flatMap((x) => x.cols).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+        // Las 3 colonias con más clientes, sin repetir el nombre (dos municipios pueden tener su "Barrio El Centro")
+        const top = [...new Set(grupos.filter((x) => x.principal).flatMap((x) => x.cols).sort((a, b) => b[1] - a[1]).map(([c]) => c))].slice(0, 3);
         return { deps: principales(deps, suma(deps)), munis: grupos.filter((x) => x.principal).map((x) => x.muni), grupos,
           colonias: grupos.reduce((a, x) => a + x.cols.length, 0), top };
       }
@@ -622,7 +647,7 @@ const Model = (() => {
 
     // En HFC la columna OLT de la base repite el nodo: ahí no dice nada y queda en blanco
     const filas = d.clientes.map((c) => [hora(c.primera), c.contrato, c.enBase ? c.nombre : 'No está en la base actual', c.nodo || d.nodo, c.tecnologia,
-      c.olt && c.olt !== (c.nodo || d.nodo) ? c.olt : '', c.nap, U.lugar(c.colonia || ''), U.lugar(c.municipio || ''), U.titulo(c.categoria || ''), canalCliente(c)]);
+      c.olt && c.olt !== (c.nodo || d.nodo) ? c.olt : '', c.nap, U.colonia(c.colonia), U.lugar(c.municipio || ''), U.titulo(c.categoria || ''), canalCliente(c)]);
     // Una columna que no trae nada en ningún cliente (por ejemplo OLT en un nodo HFC) no va
     const siempre = [0, 1, 2, 3];
     const usadas = CAMPOS_CORREO.map((c, i) => siempre.includes(i) || filas.some((f) => f[i]));

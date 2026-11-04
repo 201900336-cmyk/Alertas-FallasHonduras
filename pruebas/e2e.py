@@ -156,7 +156,7 @@ with sync_playwright() as p:
     # El panel dice el departamento con sus nodos y, debajo, las colonias afectadas
     tarjeta = t.locator('.riel .falla-item', has_text='F1254585')
     z = t.evaluate("""() => { const f = G.s.fallas.find((x) => x.numero === 'F1254585'); const z = Model.zonaFalla(G.s.cat, f);
-      return { dep: U.lugar(z.deps[0] || ''), col: U.lugar(z.top[0] || ''), nodos: f.nodos, con: !!G.s.cat.conColonias }; }""")
+      return { dep: U.lugar(z.deps[0] || ''), col: z.top[0] || '', nodos: f.nodos, con: !!G.s.cat.conColonias }; }""")
     zona = tarjeta.locator('.zona').inner_text()
     ok(z['con'] and z['dep'] and z['col'] and z['dep'] in zona and all(n in zona for n in z['nodos']) and z['col'] in tarjeta.locator('.colonias').inner_text(),
        f'el panel dice el departamento con sus nodos ({zona}) y, debajo, las colonias afectadas', tarjeta.inner_text())

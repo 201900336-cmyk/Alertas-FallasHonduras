@@ -198,6 +198,25 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     ok(r.datos.catalogo.formato === 2 && cc.conColonias && r.datos.catalogo.cols.length === catJson.cols.length && enCols === filas0,
       'el catálogo trae las colonias de cada nodo, con su municipio y departamento', [r.datos.catalogo.formato, enCols, filas0]);
   }
+  {
+    // Colonias limpias: la misma escrita de varias formas va una sola vez, sin las "NO USAR", en nombre propio
+    const b = Demo.generar(Date.UTC(2026, 9, 1)).base, ixa = Model.indexar(b);
+    const [n0, c0] = [...ixa.nodoIdx].find(([, c]) => ixa.cnt[c] >= 8);
+    const filas = Array.from(ixa.filasNodo.slice(ixa.inicio[c0], ixa.inicio[c0 + 1]));
+    ['COL. EL CASTA¿O SUR', 'COLONIA EL CASTAÑO SUR', 'Col.  El Castaño Sur', 'NO USAR - CIUDAD TEGUCIGALPA'].forEach((txt, j) => {
+      b.dicts.colonia.push(txt); b.cols.colonia[filas[j]] = b.dicts.colonia.length - 1;
+    });
+    const cc = Model.cargarCatalogo(JSON.parse(JSON.stringify(Model.catalogo(Model.indexar(b)))));
+    const z = Model.zonaFalla(cc, { nodos: [n0], impacto: {} });
+    const todas = z.grupos.flatMap((g) => g.cols), nombres = todas.map(([c]) => c);
+    const cast = todas.filter(([c]) => c === 'Col. El Castaño Sur');
+    ok(cast.length === 1 && cast[0][1] === 3 && !nombres.some((c) => /no usar|¿/i.test(c)) && new Set(nombres).size === nombres.length
+      && z.grupos.reduce((a, g) => a + g.n, 0) === ixa.cnt[c0],
+      'colonias limpias: la misma escrita de 3 formas va una vez (Col. El Castaño Sur), sin las NO USAR y sin perder clientes del municipio', [cast, nombres.slice(0, 6)]);
+    ok(U.colonia('COL. SAN JOSE DE LA VEGA Y LA HERENDIDA') === 'Col. San José de la Vega y La Herendida' && U.colonia('BARRIO DE JESUS') === 'Barrio de Jesús'
+      && U.colonia('NO USAR - BARRIO GUADALUPE') === '' && U.colonia('COL. KENNEDY ( ZONA 1,2,3,4,5,6,)') === 'Col. Kennedy',
+      'nombres de colonias en nombre propio, sin las "NO USAR" ni lo que va entre paréntesis');
+  }
   const bv = r.datos.baseVersion;
   r = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: bv } });
   ok(r.ok && !r.datos.catalogo, 'si la base no cambió, no vuelve a enviar el catálogo');
