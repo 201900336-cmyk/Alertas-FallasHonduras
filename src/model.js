@@ -119,28 +119,41 @@ const Model = (() => {
 
   /* ---------- Catálogo de nodos ----------
      Resumen por nodo sin datos personales: es lo único que viaja a todas las PCs.
-     nodos: [codigo, total, hfc, gpon, empresariales, indiceOlt, [dep, n, ...], [muni, n, ...]] */
+     nodos: [codigo, total, hfc, gpon, empresariales, indiceOlt, [dep, n, ...], [muni, n, ...], [colonia, n, ...]]
+     cols (desde el formato 2): [dep, muni, nombre] de cada colonia, para el panel de fallas de los asesores. La
+     misma colonia en otro municipio es otra. */
+  // Nombre de colonia para juntar las que vienen escritas distinto ("Barrio Belen" y "BARRIO  BELEN")
+  const nombreColonia = (s) => U.conEnie(String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toUpperCase());
   function catalogo(ix) {
-    const deps = [], munis = [], olts = [];
-    const di = new Map(), mi = new Map(), oi = new Map();
+    const deps = [], munis = [], olts = [], cols = [];
+    const di = new Map(), mi = new Map(), oi = new Map(), ci = new Map();
     const pos = (arr, mapa, v) => { let k = mapa.get(v); if (k === undefined) { k = arr.length; arr.push(v); mapa.set(v, k); } return k; };
     const plano = (m, arr, mapa) => [...m.entries()].sort((a, b) => b[1] - a[1]).reduce((o, [k, n]) => { o.push(pos(arr, mapa, k), n); return o; }, []);
+    const SEP = '\u0001';
     const nodos = [];
     for (const [code, c] of ix.nodoIdx) {
       const desde = ix.inicio[c], hasta = ix.inicio[c + 1];
       if (desde === hasta) continue;
-      const dm = new Map(), mm = new Map();
+      const dm = new Map(), mm = new Map(), cm = new Map();
       let corp = 0;
       for (let p = desde; p < hasta; p++) {
         const i = ix.filasNodo[p];
         const d = ix.D.departamento[ix.C.departamento[i]], m = ix.D.municipio[ix.C.municipio[i]];
         dm.set(d, (dm.get(d) || 0) + 1); mm.set(m, (mm.get(m) || 0) + 1);
+        const col = nombreColonia(ix.D.colonia[ix.C.colonia[i]]);
+        if (col) { const k = d + SEP + m + SEP + col; cm.set(k, (cm.get(k) || 0) + 1); }
         if (ix.esCorp[ix.C.categoria[i]]) corp++;
       }
       const oltIdx = ix.oltNodo[c] >= 0 ? pos(olts, oi, U.oltBase(ix.D.olt[ix.oltNodo[c]])) : -1;
-      nodos.push([code, ix.cnt[c], ix.cH[c], ix.cG[c], corp, oltIdx, plano(dm, deps, di), plano(mm, munis, mi)]);
+      const pd = plano(dm, deps, di), pm = plano(mm, munis, mi);
+      const pc = [...cm.entries()].sort((a, b) => b[1] - a[1]).reduce((o, [k, n]) => {
+        let x = ci.get(k);
+        if (x === undefined) { const [d, m, col] = k.split(SEP); x = cols.length; cols.push([pos(deps, di, d), pos(munis, mi, m), col]); ci.set(k, x); }
+        o.push(x, n); return o;
+      }, []);
+      nodos.push([code, ix.cnt[c], ix.cH[c], ix.cG[c], corp, oltIdx, pd, pm, pc]);
     }
-    return { formato: 1, deps, munis, olts: olts.map((b) => [b, U.oltNombre(b)]), nodos, resumen: Object.assign({}, ix.resumen) };
+    return { formato: 2, deps, munis, cols, olts: olts.map((b) => [b, U.oltNombre(b)]), nodos, resumen: Object.assign({}, ix.resumen) };
   }
   /* Monitoreo de la pantalla de entrada: el nodo con más clientes de cada departamento (sin TAP VIRTUAL) y si
      está en una falla activa, sin cantidades. Igual que nodosPrincipales_ del servidor: con empate, el primero
@@ -163,16 +176,56 @@ const Model = (() => {
   function cargarCatalogo(json) {
     if (!json || !Array.isArray(json.nodos)) return null;
     const olts = json.olts.map(([base, nombre]) => ({ base, nombre, nodos: [], clientes: 0 }));
+    // Colonias (desde el formato 2; un catálogo de antes no las trae): [departamento, municipio, colonia]
+    const cols = Array.isArray(json.cols) ? json.cols.map(([d, m, c]) => [json.deps[d] || '', json.munis[m] || '', c]) : null;
     const nodos = new Map();
-    for (const [code, total, hfc, gpon, corp, oi, df, mf] of json.nodos) {
-      const deps = [], munis = [];
+    for (const [code, total, hfc, gpon, corp, oi, df, mf, cf] of json.nodos) {
+      const deps = [], munis = [], colonias = [];
       for (let i = 0; i < df.length; i += 2) deps.push([json.deps[df[i]], df[i + 1]]);
       for (let i = 0; i < mf.length; i += 2) munis.push([json.munis[mf[i]], mf[i + 1]]);
+      if (cols && Array.isArray(cf)) for (let i = 0; i < cf.length; i += 2) { const x = cols[cf[i]]; if (x) colonias.push([x[0], x[1], x[2], cf[i + 1]]); }
       const olt = oi >= 0 ? olts[oi] : null;
       if (olt) { olt.nodos.push(code); olt.clientes += gpon; }
-      nodos.set(code, { code, total, hfc, gpon, corp, olt, deps, munis });
+      nodos.set(code, { code, total, hfc, gpon, corp, olt, deps, munis, cols: colonias });
     }
-    return { nodos, olts: olts.filter((o) => o.nodos.length), resumen: json.resumen || {} };
+    return { nodos, olts: olts.filter((o) => o.nodos.length), resumen: json.resumen || {}, conColonias: !!cols };
+  }
+
+  /* Dónde está una falla, para el panel de los asesores: departamentos, municipios y colonias, de más a menos
+     clientes. Sale del catálogo de la base actual; con un catálogo de antes, que no traía colonias, quedan los
+     departamentos y municipios que se guardaron al publicarla. Un departamento o municipio con muy pocos clientes
+     de la falla (por ejemplo, unos cuantos con la dirección de otro lugar) no se toma como zona afectada: no sale
+     en el resumen, pero sí en la lista completa de colonias. Cuenta con 30 clientes o más, o con el 3 % de la
+     falla (y al menos 5) si es pequeña. */
+  function zonaFalla(cat, f) {
+    const minimo = (total) => Math.min(30, Math.max(5, 0.03 * total));
+    const orden = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]);
+    const suma = (l) => l.reduce((a, x) => a + x[1], 0);
+    const principales = (l, total) => l.filter(([, v], i) => i === 0 || v >= minimo(total)).map(([k]) => k);
+    if (cat && cat.conColonias) {
+      const d = new Map(), g = new Map();
+      for (const code of new Set(f.nodos || [])) {
+        const n = cat.nodos.get(code); if (!n) continue;
+        for (const [k, v] of n.deps) d.set(k, (d.get(k) || 0) + v);
+        for (const [dep, muni, col, v] of n.cols) {
+          const k = dep + '\u0001' + muni;
+          let e = g.get(k); if (!e) { e = { dep, muni, n: 0, cols: new Map() }; g.set(k, e); }
+          e.n += v; e.cols.set(col, (e.cols.get(col) || 0) + v);
+        }
+      }
+      if (g.size) {
+        const total = [...g.values()].reduce((a, e) => a + e.n, 0);
+        const grupos = [...g.values()].sort((a, b) => b.n - a.n)
+          .map((e, i) => ({ dep: e.dep, muni: e.muni, n: e.n, cols: orden(e.cols), principal: i === 0 || e.n >= minimo(total) }));
+        const deps = orden(d);
+        const top = grupos.filter((x) => x.principal).flatMap((x) => x.cols).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+        return { deps: principales(deps, suma(deps)), munis: grupos.filter((x) => x.principal).map((x) => x.muni), grupos,
+          colonias: grupos.reduce((a, x) => a + x.cols.length, 0), top };
+      }
+    }
+    const imp = f.impacto || {};
+    const deps = imp.deps || [], munis = imp.munis || [];
+    return { deps: principales(deps, suma(deps)), munis: principales(munis, suma(deps) || suma(munis)), grupos: null, colonias: 0, top: [] };
   }
 
   function infoNodo(cat, code) {
@@ -621,7 +674,7 @@ const Model = (() => {
     return [hfc[0], gpon[0], gpon[1] || hfc[1]].filter(Boolean).map((n) => n.code);
   }
 
-  return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
+  return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

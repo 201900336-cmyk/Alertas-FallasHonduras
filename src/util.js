@@ -127,8 +127,20 @@ const U = (() => {
   }
   const ACENTOS = { Morazan: 'Morazán', Cortes: 'Cortés', Atlantida: 'Atlántida', Paraiso: 'Paraíso', Colon: 'Colón', Copan: 'Copán',
     Intibuca: 'Intibucá', Bahia: 'Bahía', Barbara: 'Bárbara', Danli: 'Danlí', Roatan: 'Roatán', Jose: 'José', Maria: 'María', Belen: 'Belén',
-    Union: 'Unión', Concepcion: 'Concepción', Guanaja: 'Guanaja', Santa: 'Santa', Ocotepeque: 'Ocotepeque', Juticalpa: 'Juticalpa' };
-  const lugar = (s) => titulo(s).split(' ').map((w) => ACENTOS[w] || w).join(' ');
+    Union: 'Unión', Concepcion: 'Concepción', Guanaja: 'Guanaja', Santa: 'Santa', Ocotepeque: 'Ocotepeque', Juticalpa: 'Juticalpa',
+    // Palabras frecuentes en los nombres de colonias y barrios
+    Jesus: 'Jesús', Angeles: 'Ángeles', Rio: 'Río', Ramon: 'Ramón', Martin: 'Martín', Tomas: 'Tomás', Jardin: 'Jardín', Bolivar: 'Bolívar',
+    Lopez: 'López', Perez: 'Pérez', Gonzalez: 'González', Hernandez: 'Hernández', Rodriguez: 'Rodríguez', Garcia: 'García', Mexico: 'México' };
+  // En la base, la Ñ a veces llega como "¿" (CASTA¿OS): entre dos letras no puede ser otra cosa
+  const conEnie = (s) => String(s == null ? '' : s).replace(/(\p{L})[¿�](?=\p{L})/gu, (m, a) => a + (a === a.toUpperCase() ? 'Ñ' : 'ñ'));
+  // El artículo es parte del nombre del lugar ("Barrio La Hoya", "Colonia Los Ángeles"), salvo después de "de"
+  // ("San Francisco de la Paz", "Villa de los Ángeles")
+  const ARTICULOS = new Set(['el', 'la', 'los', 'las']), PREPOSICIONES = new Set(['de', 'del', 'y', 'e', 'a', 'en']);
+  const lugar = (s) => titulo(conEnie(s)).split(' ').map((w, i, ws) => {
+    if (i > 0 && ARTICULOS.has(w) && !PREPOSICIONES.has(ws[i - 1].toLowerCase())) return w.charAt(0).toUpperCase() + w.slice(1);
+    if (i > 0 && i < ws.length - 1 && w === 'A') return 'a';   // "Gracias a Dios" (pero "Sector A")
+    return ACENTOS[w] || w;
+  }).join(' ');
   const esEmpresa = (nombre, categoria) =>
     /\b(S\.?\s?A\.?|S\.? DE R\.?L|C\.?V\.?|BANCO|ASOCIACION|FUNDACION|IGLESIA|COLEGIO|ESCUELA|INSTITUTO|HOTEL|RESTAURANTE|EMPRESA|CORPORACION|INVERSIONES|COMERCIAL|DISTRIBUIDORA|MUNICIPALIDAD|SECRETARIA|CLINICA|HOSPITAL)\b/.test(sinAcentos(nombre || '').toUpperCase())
     || /CORPORATIVO|EMPRESARIAL|PYME/.test(categoria || '');
@@ -214,6 +226,6 @@ const U = (() => {
   };
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
-    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
+    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();

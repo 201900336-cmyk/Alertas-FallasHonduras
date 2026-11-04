@@ -191,6 +191,13 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: 0 } });
   ok(r.ok && r.datos.catalogo && r.datos.catalogo.nodos.length === ix.resumen.nodos, 'cargar entrega el catálogo de nodos', r.ok && r.datos.catalogo && r.datos.catalogo.nodos.length);
   ok(!JSON.stringify(r.datos.catalogo).match(/NOMBRE|0801-|\d{13}/), 'el catálogo no trae nombres ni DNI');
+  {
+    // Las colonias de cada nodo (para el panel de fallas de los asesores) llegan completas desde el servidor
+    const cc = Model.cargarCatalogo(r.datos.catalogo), n0 = catJson.nodos[0][0];
+    const filas0 = catJson.nodos[0][8].reduce((a, v, i) => (i % 2 ? a + v : a), 0), enCols = cc && cc.nodos.get(n0) ? cc.nodos.get(n0).cols.reduce((a, x) => a + x[3], 0) : -1;
+    ok(r.datos.catalogo.formato === 2 && cc.conColonias && r.datos.catalogo.cols.length === catJson.cols.length && enCols === filas0,
+      'el catálogo trae las colonias de cada nodo, con su municipio y departamento', [r.datos.catalogo.formato, enCols, filas0]);
+  }
   const bv = r.datos.baseVersion;
   r = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: bv } });
   ok(r.ok && !r.datos.catalogo, 'si la base no cambió, no vuelve a enviar el catálogo');
@@ -1198,6 +1205,18 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && r.datos.vacias === 190, `las filas que salen quedan vacías (${r.datos && r.datos.vacias}); al pasar del 8 % la página hace la carga completa`);
   r = porCambios(filas3, tWf, cols3, 'semana 3 otra vez.xlsx');
   ok(r.ok && r.datos.agregadas === 0 && r.datos.quitadas === 0 && igual(filasHoja(), comoHoja(filas3)), 'subir el mismo Excel otra vez no cambia nada', r.datos);
+  {
+    // Una base publicada antes de que el catálogo trajera colonias: subir el mismo Excel otra vez se las agrega
+    const sinColonias = Object.assign({}, catJson, { formato: 1, cols: undefined, nodos: catJson.nodos.map((n) => n.slice(0, 8)) });
+    r = porCambios(filas3, tWf, cols3, 'semana 3 sin colonias.xlsx', (d) => { d.catalogo = sinColonias; });
+    let rc = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: 0 } });
+    const antes = r.ok && rc.ok && rc.datos.catalogo && !rc.datos.catalogo.cols && !Model.cargarCatalogo(rc.datos.catalogo).conColonias;
+    r = porCambios(filas3, tWf, cols3, 'semana 3 otra vez.xlsx');
+    rc = g.post({ accion: 'cargar', token: tAgente, datos: { baseVersion: 0 } });
+    ok(antes && r.ok && r.datos.agregadas === 0 && r.datos.quitadas === 0 && igual(filasHoja(), comoHoja(filas3)) && rc.ok
+      && rc.datos.catalogo.formato === 2 && Model.cargarCatalogo(rc.datos.catalogo).conColonias,
+      'con una base publicada sin colonias, subir el mismo Excel otra vez agrega las colonias sin cambiar ninguna fila', [antes, r.datos, rc.ok && rc.datos.catalogo.formato]);
+  }
 
   // Lo que debe hacer que la página vaya por la carga completa
   const antesDeFallar = filasHoja();

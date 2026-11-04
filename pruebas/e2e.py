@@ -153,6 +153,17 @@ with sync_playwright() as p:
     t.click('.aviso .btn'); t.wait_for_selector('.falla-item')
     ok('F1254585' in t.locator('.falla-item .id').all_inner_texts() and 'NOC #9150' not in json.dumps(t.evaluate('() => G.s.fallas')) and 'NOC #9150' not in t.content(),
        'Tiendas ve la falla con su número de falla (F1254585), sin la referencia', t.locator('.falla-item .id').all_inner_texts())
+    # El panel dice el departamento con sus nodos y, debajo, las colonias afectadas
+    tarjeta = t.locator('.riel .falla-item', has_text='F1254585')
+    z = t.evaluate("""() => { const f = G.s.fallas.find((x) => x.numero === 'F1254585'); const z = Model.zonaFalla(G.s.cat, f);
+      return { dep: U.lugar(z.deps[0] || ''), col: U.lugar(z.top[0] || ''), nodos: f.nodos, con: !!G.s.cat.conColonias }; }""")
+    zona = tarjeta.locator('.zona').inner_text()
+    ok(z['con'] and z['dep'] and z['col'] and z['dep'] in zona and all(n in zona for n in z['nodos']) and z['col'] in tarjeta.locator('.colonias').inner_text(),
+       f'el panel dice el departamento con sus nodos ({zona}) y, debajo, las colonias afectadas', tarjeta.inner_text())
+    tarjeta.locator('.falla-item-cab').click(); t.wait_for_selector('.riel .zona-muni', timeout=5000)
+    ok(tarjeta.locator('.zona-muni').count() >= 1 and tarjeta.locator('.zona-cols .chip').count() >= 1, 'al tocarla salen sus colonias por municipio')
+    ok(tarjeta.locator('.det-acc button', has_text='nodos').count() == 0, 'con 3 nodos o menos ya están todos a la vista: no hace falta Ver los nodos')
+    t.locator('.riel').screenshot(path=OUT + 'e04b_panel_colonias.png')
     ok(t.locator('.mapa path[fill*="seq-5"]').count() >= 1, 'el mapa pinta el departamento afectado')
     cab = t.locator('.mapa-grid.apilado .hbar.cab').inner_text()
     ok('Departamento' in cab and 'Clientes' in cab, 'en Consulta el mapa va a todo lo ancho, con la lista abajo y los encabezados Departamento y Clientes')

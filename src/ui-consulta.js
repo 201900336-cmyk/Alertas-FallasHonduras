@@ -445,26 +445,64 @@ function RielFallas({ mf, now }) {
   </aside>`;
 }
 
+/* Una falla en el panel: el departamento con sus nodos (los primeros 3 y cuántos más) y, debajo, las colonias con
+   más clientes. Al tocarla se ven sus colonias por municipio y, si son más de 3 nodos, todos los nodos. */
+const COLONIAS_POR_MUNICIPIO = 6, NODOS_A_LA_VISTA = 3;
 function FallaItem({ f, now }) {
+  const s = useG();
   const [abierto, setAbierto] = useState(false);
+  const [todas, setTodas] = useState(false);
+  const [verNodos, setVerNodos] = useState(false);
+  const zona = useMemo(() => Model.zonaFalla(s.cat, f), [s.cat, f]);
   const activa = f.estado === 'ACTIVA';
   const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
   const imp = f.impacto || { total: 0, hfc: 0, gpon: 0, deps: [] };
-  return html`<button type="button" class="falla-item" data-s=${f.estado} aria-expanded=${abierto} onClick=${() => setAbierto(!abierto)}>
-    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
-    <div class="nodos">${U.listaNatural(f.nodos, 3)}</div>
-    <div class="m">
-      ${activa ? html`<span>Desde ${U.las(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
-        : html`<span>Resuelta ${U.cuandoCorto(f.cerradaEn, now)}</span><span>Se oculta en ${U.dur(restante)}</span>`}
-      <span class="impacto-linea"><span><b class="num">${U.n(imp.total)}</b> clientes</span>
-        ${imp.hfc > 0 && html`<span class="tec" data-t="HFC">HFC${imp.gpon > 0 ? ' ' + U.n(imp.hfc) : ''}</span>`}
-        ${imp.gpon > 0 && html`<span class="tec" data-t="GPON">GPON${imp.hfc > 0 ? ' ' + U.n(imp.gpon) : ''}</span>`}</span>
-    </div>
-    ${abierto && html`<div class="det">
-      ${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}
-      <div class="sub" style="width:100%;margin-top:4px">
-        ${(imp.munis || []).slice(0, 3).map((m) => U.lugar(m[0])).join(', ')}${(imp.munis || []).length ? '. ' : ''}Publicada por ${f.publicadaPor.nombre}, ${U.cuandoCorto(f.publicadaEn, now)}.
+  const L = U.lugar;
+  const unDep = zona.deps.length === 1;
+  const nodos = U.listaNatural(f.nodos, NODOS_A_LA_VISTA);
+  const masColonias = zona.colonias - zona.top.length;
+  // Debajo: las colonias con más clientes; con una base de antes, que no las trae, los municipios (sin repetir el
+  // departamento cuando el único municipio se llama igual, como La Paz)
+  const munis = unDep && zona.munis.length === 1 && zona.munis[0] === zona.deps[0] ? [] : zona.munis;
+  const debajo = zona.top.length
+    ? (masColonias > 0 ? zona.top.map(L).join(', ') + ' y ' + U.plural(masColonias, '1 colonia más', U.n(masColonias) + ' colonias más') : U.listaNatural(zona.top.map(L), 3))
+    : U.listaNatural(munis.map(L), 3);
+  const grupos = zona.grupos ? zona.grupos.filter((g) => todas || g.principal) : [];
+  const hayMas = !!zona.grupos && zona.grupos.some((g) => !g.principal || g.cols.length > COLONIAS_POR_MUNICIPIO);
+  const muchosNodos = f.nodos.length > NODOS_A_LA_VISTA;
+  const idDet = 'falla-det-' + f.id;
+  return html`<div class="falla-item" data-s=${f.estado}>
+    <button type="button" class="falla-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
+      <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
+      ${zona.deps.length
+        ? html`<div class="zona"><${Ico} n="pin" s=${15} /><span><b>${U.listaNatural(zona.deps.map(L), 3)}</b> · <span class="nodos-zona">${nodos}</span></span></div>`
+        : html`<div class="nodos">${nodos}</div>`}
+      ${debajo && html`<div class="colonias">${debajo}</div>`}
+      <div class="m">
+        ${activa ? html`<span>Desde ${U.las(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
+          : html`<span>Resuelta ${U.cuandoCorto(f.cerradaEn, now)}</span><span>Se oculta en ${U.dur(restante)}</span>`}
+        <span class="impacto-linea"><span><b class="num">${U.n(imp.total)}</b> clientes</span>
+          ${imp.hfc > 0 && html`<span class="tec" data-t="HFC">HFC${imp.gpon > 0 ? ' ' + U.n(imp.hfc) : ''}</span>`}
+          ${imp.gpon > 0 && html`<span class="tec" data-t="GPON">GPON${imp.hfc > 0 ? ' ' + U.n(imp.gpon) : ''}</span>`}</span>
       </div>
+    </button>
+    ${abierto && html`<div class="det" id=${idDet}>
+      ${zona.grupos
+        ? grupos.map((g) => html`<div class="zona-grupo" key=${g.dep + '|' + g.muni}>
+            <div class="zona-muni"><b>${L(g.muni) || 'Sin municipio'}</b>${(!unDep || !g.principal) && g.dep ? html`<span>${L(g.dep)}</span>` : ''}
+              <span class="cuantos">${U.plural(g.n, '1 cliente', U.n(g.n) + ' clientes')}</span></div>
+            <div class="zona-cols">
+              ${(todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO)).map(([c]) => html`<span class="chip" key=${c}>${L(c)}</span>`)}
+              ${!todas && g.cols.length > COLONIAS_POR_MUNICIPIO && html`<button type="button" class="chip mas" title="Ver todas las colonias" onClick=${() => setTodas(true)}>+${U.n(g.cols.length - COLONIAS_POR_MUNICIPIO)}</button>`}
+            </div>
+          </div>`)
+        : (imp.munis || []).length > 0 && html`<div class="zona-cols">${imp.munis.map(([m, n]) => html`<span class="chip" key=${m}>${L(m)} · ${U.n(n)}</span>`)}</div>`}
+      ${(hayMas || muchosNodos) && html`<div class="det-acc">
+        ${hayMas && html`<button type="button" class="enlace" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + U.n(zona.colonias) + ' colonias'}</button>`}
+        ${muchosNodos && html`<button type="button" class="enlace" aria-expanded=${verNodos} onClick=${() => setVerNodos(!verNodos)}>${verNodos ? 'Ocultar los nodos' : 'Ver los ' + U.n(f.nodos.length) + ' nodos'}</button>`}
+      </div>`}
+      ${verNodos && html`<div class="zona-cols nodos-falla">${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}</div>`}
+      <div class="sub">${U.conPunto('Publicada por ' + f.publicadaPor.nombre + ', ' + U.cuandoCorto(f.publicadaEn, now))}</div>
     </div>`}
-  </button>`;
+  </div>`;
 }

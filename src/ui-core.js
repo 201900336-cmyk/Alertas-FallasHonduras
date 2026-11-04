@@ -416,6 +416,7 @@ const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2)
 /* ---------- Íconos ---------- */
 const ICONOS = {
   lupa: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
+  pin: '<path d="M12 21s-6.5-5.7-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15.3 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.4"/>',
   copiar: '<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',

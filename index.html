@@ -399,18 +399,35 @@ button { cursor: pointer; }
 .riel-seccion { padding: 4px 12px 12px; }
 .riel-seccion h4 { margin: 6px 8px 8px; font-size: 12.5px; color: var(--ink-3); font-weight: 650; display: flex; justify-content: space-between; }
 .falla-item {
-  width: 100%; text-align: left; display: block; padding: 12px 12px 12px 16px; margin-bottom: 8px; border-radius: 12px;
+  width: 100%; text-align: left; display: block; margin-bottom: 8px; border-radius: 12px;
   background: var(--surface); border: 1px solid var(--line); position: relative;
   transition: border-color 150ms ease, background-color 150ms ease;
 }
 .falla-item::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--falla); }
 .falla-item[data-s="CERRADA"]::before { background: var(--resuelta); }
 .falla-item:hover { border-color: var(--line-2); background: var(--surface-2); }
+.falla-item-cab { display: block; width: 100%; padding: 12px 12px 12px 16px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .falla-item .t { font-weight: 700; font-size: 14px; display: flex; align-items: baseline; gap: 8px; }
 .falla-item .t .id { margin-left: auto; font-size: 11.5px; color: var(--ink-3); font-weight: 600; font-variant-numeric: tabular-nums; }
 .falla-item .nodos { margin-top: 3px; font-size: 13px; font-weight: 650; font-stretch: 110%; color: var(--ink); overflow-wrap: anywhere; }
+/* Dónde es la falla: departamento (y municipios) y las colonias con más clientes */
+.falla-item .zona { margin-top: 4px; display: flex; gap: 5px; align-items: flex-start; font-size: 13px; line-height: 1.35; color: var(--ink-2); }
+.falla-item .zona svg { flex: none; margin-top: 1px; color: var(--falla); }
+.falla-item[data-s="CERRADA"] .zona svg { color: var(--resuelta-text); }
+.falla-item .zona b { color: var(--ink); font-weight: 750; font-stretch: 108%; }
+.falla-item .zona .nodos-zona { color: var(--ink); font-weight: 600; font-stretch: 108%; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+.falla-item .colonias { margin-top: 3px; padding-left: 20px; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
 .falla-item .m { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
-.falla-item .det { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-2); display: flex; flex-wrap: wrap; gap: 6px; }
+.falla-item .det { margin: 0 12px 0 16px; padding: 10px 0 12px; border-top: 1px dashed var(--line-2); display: flex; flex-direction: column; gap: 10px; }
+.zona-muni { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; font-size: 12px; color: var(--ink-3); }
+.zona-muni b { font-size: 13px; font-weight: 750; color: var(--ink); }
+.zona-muni .cuantos { margin-left: auto; font-variant-numeric: tabular-nums; }
+.zona-cols { display: flex; flex-wrap: wrap; gap: 6px; }
+.zona-cols .chip { height: auto; min-height: 26px; padding: 3px 10px; white-space: normal; line-height: 1.3; }
+.zona-cols .chip.mas { cursor: pointer; color: var(--ink); background: var(--surface); font-variant-numeric: tabular-nums; }
+.zona-cols .chip.mas:hover { border-color: var(--line-2); }
+.det-acc { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+.falla-item .det > .sub { margin: 0; font-size: 12.5px; }
 .barra-tec { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 8px; gap: 2px; background: transparent; }
 .barra-tec i { display: block; height: 100%; border-radius: 3px; }
 .barra-tec .h { background: var(--hfc); } .barra-tec .g { background: var(--gpon); }
@@ -1897,8 +1914,20 @@ const U = (() => {
   }
   const ACENTOS = { Morazan: 'Morazán', Cortes: 'Cortés', Atlantida: 'Atlántida', Paraiso: 'Paraíso', Colon: 'Colón', Copan: 'Copán',
     Intibuca: 'Intibucá', Bahia: 'Bahía', Barbara: 'Bárbara', Danli: 'Danlí', Roatan: 'Roatán', Jose: 'José', Maria: 'María', Belen: 'Belén',
-    Union: 'Unión', Concepcion: 'Concepción', Guanaja: 'Guanaja', Santa: 'Santa', Ocotepeque: 'Ocotepeque', Juticalpa: 'Juticalpa' };
-  const lugar = (s) => titulo(s).split(' ').map((w) => ACENTOS[w] || w).join(' ');
+    Union: 'Unión', Concepcion: 'Concepción', Guanaja: 'Guanaja', Santa: 'Santa', Ocotepeque: 'Ocotepeque', Juticalpa: 'Juticalpa',
+    // Palabras frecuentes en los nombres de colonias y barrios
+    Jesus: 'Jesús', Angeles: 'Ángeles', Rio: 'Río', Ramon: 'Ramón', Martin: 'Martín', Tomas: 'Tomás', Jardin: 'Jardín', Bolivar: 'Bolívar',
+    Lopez: 'López', Perez: 'Pérez', Gonzalez: 'González', Hernandez: 'Hernández', Rodriguez: 'Rodríguez', Garcia: 'García', Mexico: 'México' };
+  // En la base, la Ñ a veces llega como "¿" (CASTA¿OS): entre dos letras no puede ser otra cosa
+  const conEnie = (s) => String(s == null ? '' : s).replace(/(\p{L})[¿�](?=\p{L})/gu, (m, a) => a + (a === a.toUpperCase() ? 'Ñ' : 'ñ'));
+  // El artículo es parte del nombre del lugar ("Barrio La Hoya", "Colonia Los Ángeles"), salvo después de "de"
+  // ("San Francisco de la Paz", "Villa de los Ángeles")
+  const ARTICULOS = new Set(['el', 'la', 'los', 'las']), PREPOSICIONES = new Set(['de', 'del', 'y', 'e', 'a', 'en']);
+  const lugar = (s) => titulo(conEnie(s)).split(' ').map((w, i, ws) => {
+    if (i > 0 && ARTICULOS.has(w) && !PREPOSICIONES.has(ws[i - 1].toLowerCase())) return w.charAt(0).toUpperCase() + w.slice(1);
+    if (i > 0 && i < ws.length - 1 && w === 'A') return 'a';   // "Gracias a Dios" (pero "Sector A")
+    return ACENTOS[w] || w;
+  }).join(' ');
   const esEmpresa = (nombre, categoria) =>
     /\b(S\.?\s?A\.?|S\.? DE R\.?L|C\.?V\.?|BANCO|ASOCIACION|FUNDACION|IGLESIA|COLEGIO|ESCUELA|INSTITUTO|HOTEL|RESTAURANTE|EMPRESA|CORPORACION|INVERSIONES|COMERCIAL|DISTRIBUIDORA|MUNICIPALIDAD|SECRETARIA|CLINICA|HOSPITAL)\b/.test(sinAcentos(nombre || '').toUpperCase())
     || /CORPORATIVO|EMPRESARIAL|PYME/.test(categoria || '');
@@ -1984,7 +2013,7 @@ const U = (() => {
   };
 
   return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
-    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
+    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();
 
@@ -2270,28 +2299,41 @@ const Model = (() => {
 
   /* ---------- Catálogo de nodos ----------
      Resumen por nodo sin datos personales: es lo único que viaja a todas las PCs.
-     nodos: [codigo, total, hfc, gpon, empresariales, indiceOlt, [dep, n, ...], [muni, n, ...]] */
+     nodos: [codigo, total, hfc, gpon, empresariales, indiceOlt, [dep, n, ...], [muni, n, ...], [colonia, n, ...]]
+     cols (desde el formato 2): [dep, muni, nombre] de cada colonia, para el panel de fallas de los asesores. La
+     misma colonia en otro municipio es otra. */
+  // Nombre de colonia para juntar las que vienen escritas distinto ("Barrio Belen" y "BARRIO  BELEN")
+  const nombreColonia = (s) => U.conEnie(String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toUpperCase());
   function catalogo(ix) {
-    const deps = [], munis = [], olts = [];
-    const di = new Map(), mi = new Map(), oi = new Map();
+    const deps = [], munis = [], olts = [], cols = [];
+    const di = new Map(), mi = new Map(), oi = new Map(), ci = new Map();
     const pos = (arr, mapa, v) => { let k = mapa.get(v); if (k === undefined) { k = arr.length; arr.push(v); mapa.set(v, k); } return k; };
     const plano = (m, arr, mapa) => [...m.entries()].sort((a, b) => b[1] - a[1]).reduce((o, [k, n]) => { o.push(pos(arr, mapa, k), n); return o; }, []);
+    const SEP = '\u0001';
     const nodos = [];
     for (const [code, c] of ix.nodoIdx) {
       const desde = ix.inicio[c], hasta = ix.inicio[c + 1];
       if (desde === hasta) continue;
-      const dm = new Map(), mm = new Map();
+      const dm = new Map(), mm = new Map(), cm = new Map();
       let corp = 0;
       for (let p = desde; p < hasta; p++) {
         const i = ix.filasNodo[p];
         const d = ix.D.departamento[ix.C.departamento[i]], m = ix.D.municipio[ix.C.municipio[i]];
         dm.set(d, (dm.get(d) || 0) + 1); mm.set(m, (mm.get(m) || 0) + 1);
+        const col = nombreColonia(ix.D.colonia[ix.C.colonia[i]]);
+        if (col) { const k = d + SEP + m + SEP + col; cm.set(k, (cm.get(k) || 0) + 1); }
         if (ix.esCorp[ix.C.categoria[i]]) corp++;
       }
       const oltIdx = ix.oltNodo[c] >= 0 ? pos(olts, oi, U.oltBase(ix.D.olt[ix.oltNodo[c]])) : -1;
-      nodos.push([code, ix.cnt[c], ix.cH[c], ix.cG[c], corp, oltIdx, plano(dm, deps, di), plano(mm, munis, mi)]);
+      const pd = plano(dm, deps, di), pm = plano(mm, munis, mi);
+      const pc = [...cm.entries()].sort((a, b) => b[1] - a[1]).reduce((o, [k, n]) => {
+        let x = ci.get(k);
+        if (x === undefined) { const [d, m, col] = k.split(SEP); x = cols.length; cols.push([pos(deps, di, d), pos(munis, mi, m), col]); ci.set(k, x); }
+        o.push(x, n); return o;
+      }, []);
+      nodos.push([code, ix.cnt[c], ix.cH[c], ix.cG[c], corp, oltIdx, pd, pm, pc]);
     }
-    return { formato: 1, deps, munis, olts: olts.map((b) => [b, U.oltNombre(b)]), nodos, resumen: Object.assign({}, ix.resumen) };
+    return { formato: 2, deps, munis, cols, olts: olts.map((b) => [b, U.oltNombre(b)]), nodos, resumen: Object.assign({}, ix.resumen) };
   }
   /* Monitoreo de la pantalla de entrada: el nodo con más clientes de cada departamento (sin TAP VIRTUAL) y si
      está en una falla activa, sin cantidades. Igual que nodosPrincipales_ del servidor: con empate, el primero
@@ -2314,16 +2356,56 @@ const Model = (() => {
   function cargarCatalogo(json) {
     if (!json || !Array.isArray(json.nodos)) return null;
     const olts = json.olts.map(([base, nombre]) => ({ base, nombre, nodos: [], clientes: 0 }));
+    // Colonias (desde el formato 2; un catálogo de antes no las trae): [departamento, municipio, colonia]
+    const cols = Array.isArray(json.cols) ? json.cols.map(([d, m, c]) => [json.deps[d] || '', json.munis[m] || '', c]) : null;
     const nodos = new Map();
-    for (const [code, total, hfc, gpon, corp, oi, df, mf] of json.nodos) {
-      const deps = [], munis = [];
+    for (const [code, total, hfc, gpon, corp, oi, df, mf, cf] of json.nodos) {
+      const deps = [], munis = [], colonias = [];
       for (let i = 0; i < df.length; i += 2) deps.push([json.deps[df[i]], df[i + 1]]);
       for (let i = 0; i < mf.length; i += 2) munis.push([json.munis[mf[i]], mf[i + 1]]);
+      if (cols && Array.isArray(cf)) for (let i = 0; i < cf.length; i += 2) { const x = cols[cf[i]]; if (x) colonias.push([x[0], x[1], x[2], cf[i + 1]]); }
       const olt = oi >= 0 ? olts[oi] : null;
       if (olt) { olt.nodos.push(code); olt.clientes += gpon; }
-      nodos.set(code, { code, total, hfc, gpon, corp, olt, deps, munis });
+      nodos.set(code, { code, total, hfc, gpon, corp, olt, deps, munis, cols: colonias });
     }
-    return { nodos, olts: olts.filter((o) => o.nodos.length), resumen: json.resumen || {} };
+    return { nodos, olts: olts.filter((o) => o.nodos.length), resumen: json.resumen || {}, conColonias: !!cols };
+  }
+
+  /* Dónde está una falla, para el panel de los asesores: departamentos, municipios y colonias, de más a menos
+     clientes. Sale del catálogo de la base actual; con un catálogo de antes, que no traía colonias, quedan los
+     departamentos y municipios que se guardaron al publicarla. Un departamento o municipio con muy pocos clientes
+     de la falla (por ejemplo, unos cuantos con la dirección de otro lugar) no se toma como zona afectada: no sale
+     en el resumen, pero sí en la lista completa de colonias. Cuenta con 30 clientes o más, o con el 3 % de la
+     falla (y al menos 5) si es pequeña. */
+  function zonaFalla(cat, f) {
+    const minimo = (total) => Math.min(30, Math.max(5, 0.03 * total));
+    const orden = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]);
+    const suma = (l) => l.reduce((a, x) => a + x[1], 0);
+    const principales = (l, total) => l.filter(([, v], i) => i === 0 || v >= minimo(total)).map(([k]) => k);
+    if (cat && cat.conColonias) {
+      const d = new Map(), g = new Map();
+      for (const code of new Set(f.nodos || [])) {
+        const n = cat.nodos.get(code); if (!n) continue;
+        for (const [k, v] of n.deps) d.set(k, (d.get(k) || 0) + v);
+        for (const [dep, muni, col, v] of n.cols) {
+          const k = dep + '\u0001' + muni;
+          let e = g.get(k); if (!e) { e = { dep, muni, n: 0, cols: new Map() }; g.set(k, e); }
+          e.n += v; e.cols.set(col, (e.cols.get(col) || 0) + v);
+        }
+      }
+      if (g.size) {
+        const total = [...g.values()].reduce((a, e) => a + e.n, 0);
+        const grupos = [...g.values()].sort((a, b) => b.n - a.n)
+          .map((e, i) => ({ dep: e.dep, muni: e.muni, n: e.n, cols: orden(e.cols), principal: i === 0 || e.n >= minimo(total) }));
+        const deps = orden(d);
+        const top = grupos.filter((x) => x.principal).flatMap((x) => x.cols).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+        return { deps: principales(deps, suma(deps)), munis: grupos.filter((x) => x.principal).map((x) => x.muni), grupos,
+          colonias: grupos.reduce((a, x) => a + x.cols.length, 0), top };
+      }
+    }
+    const imp = f.impacto || {};
+    const deps = imp.deps || [], munis = imp.munis || [];
+    return { deps: principales(deps, suma(deps)), munis: principales(munis, suma(deps) || suma(munis)), grupos: null, colonias: 0, top: [] };
   }
 
   function infoNodo(cat, code) {
@@ -2772,7 +2854,7 @@ const Model = (() => {
     return [hfc[0], gpon[0], gpon[1] || hfc[1]].filter(Boolean).map((n) => n.code);
   }
 
-  return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, leerNodos, sugerir, visible, mapaFallas,
+  return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();
@@ -2800,7 +2882,23 @@ const Demo = (() => {
   const SEGUNDOS_F = ['Isabel', 'Elizabeth', 'Patricia', 'Margarita', 'Alejandra', 'Yamileth', 'Esperanza', 'Concepción', 'Mercedes', 'Beatriz'];
   const APELLIDOS = ['López', 'Martínez', 'Hernández', 'Rodríguez', 'García', 'Flores', 'Mejía', 'Reyes', 'Cruz', 'Zelaya', 'Castillo', 'Ramírez', 'Sánchez', 'Pérez', 'Gómez', 'Banegas', 'Turcios', 'Ordóñez', 'Maradiaga', 'Funes', 'Aguilar', 'Rivera', 'Bonilla', 'Matute', 'Ponce', 'Andino', 'Velásquez', 'Paz', 'Zúniga', 'Alvarado', 'Lagos', 'Midence', 'Carías', 'Sierra', 'Valladares', 'Osorto'];
   const EMPRESAS = ['Inversiones El Roble S. de R.L.', 'Ferretería La Unión', 'Clínica Santa Fe', 'Distribuidora Maya S.A.', 'Colegio Bilingüe Los Pinos', 'Restaurante El Fogón', 'Farmacia San Rafael', 'Hotel Plaza Real', 'Repostería Doña Tina', 'Taller Mecánico El Pistón'];
-  const COLONIAS = ['Col. Kennedy', 'Col. Miraflores', 'Col. Las Colinas', 'Barrio El Centro', 'Col. Altos de Toncontín', 'Res. Plaza', 'Col. Hato de Enmedio', 'Col. Loarque', 'Col. Las Brisas', 'Barrio Guadalupe', 'Col. Jardines del Valle', 'Res. Los Álamos', 'Col. Satélite', 'Col. Trejo', 'Barrio Río de Piedras', 'Col. Fesitranh', 'Col. Universidad', 'Col. San Ángel', 'Col. La Pradera', 'Barrio La Granja'];
+  // Colonias de ejemplo de cada municipio (el panel de fallas las muestra): las de las ciudades grandes y, para las
+  // demás, nombres comunes en cualquier ciudad
+  const COLONIAS = {
+    'DISTRITO CENTRAL': ['Col. Kennedy', 'Col. Miraflores', 'Col. Las Colinas', 'Col. Altos de Toncontín', 'Res. Plaza', 'Col. Hato de Enmedio', 'Col. Loarque',
+      'Col. Las Brisas', 'Res. Los Álamos', 'Col. Satélite', 'Col. Universidad', 'Col. San Ángel', 'Col. La Pradera', 'Barrio La Granja', 'Col. Palmira',
+      'Barrio Abajo', 'Col. Lomas del Guijarro', 'Col. El Pedregal', 'Barrio El Centro', 'Col. Villa Olímpica'],
+    'SAN PEDRO SULA': ['Barrio Guadalupe', 'Col. Jardines del Valle', 'Col. Trejo', 'Barrio Río de Piedras', 'Barrio Guamilito', 'Col. Rivera Hernández',
+      'Col. Los Alpes', 'Col. Moderna', 'Barrio Paz Barahona', 'Barrio Cabañas', 'Col. Fesitranh', 'Res. Los Andes', 'Col. Chamelecón', 'Barrio El Benque',
+      'Col. Satélite', 'Barrio Medina'],
+    'CHOLOMA': ['Col. López Arellano', 'Col. Victoria', 'Barrio El Centro', 'Col. San Antonio', 'Col. Las Brisas', 'Col. Monte Verde', 'Res. Santa Isabel'],
+    'LA CEIBA': ['Barrio La Isla', 'Barrio Mejía', 'Col. El Sauce', 'Col. Alhambra', 'Barrio El Centro', 'Barrio Inglés', 'Res. El Toronjal', 'Col. Bella Vista'],
+    'JUTICALPA': ['Barrio Belén', 'Barrio de Jesús', 'Col. Villa Santa', 'Barrio La Hoya', 'Barrio El Campo', 'Col. Los Profesores', 'Barrio El Centro'],
+    'ROATAN': ['Coxen Hole', 'West End', 'French Harbour', 'Sandy Bay', 'Flowers Bay', 'West Bay']
+  };
+  const COLONIAS_COMUNES = ['Barrio El Centro', 'Barrio San José', 'Barrio La Merced', 'Col. Las Flores', 'Col. Las Palmas', 'Barrio Abajo', 'Barrio Arriba',
+    'Col. Bella Vista', 'Res. Las Colinas', 'Col. San Miguel', 'Barrio El Calvario', 'Col. Los Pinos'];
+  const coloniasDe = (mun) => COLONIAS[mun] || COLONIAS_COMUNES;
 
   // municipio -> departamento, peso, prefijo DNI, nodos HFC, grupos GPON (OLT)
   const ZONAS = [
@@ -2892,7 +2990,7 @@ const Demo = (() => {
         nap: gpon ? nd.code + '/GT/' + String(tap).padStart(2, '0') + '-' + String(tap + 1).padStart(2, '0') : (nd.virtual ? 'VGRA_TAP_VIRTUAL' : (r() < 0.3 ? 'TAP VIRTUAL ' + nd.code : nd.code + 'B4' + ent(10, 44) + '/' + ent(101, 304) + '/' + ent(1, 8))),
         categoria: persona.emp ? pick(['CORPORATIVO', 'PYME CORPORATIVO', 'EMPRESARIAL']) : (r() < 0.006 ? 'EMPLEADOS' : 'RESIDENCIAL'),
         play: r() < 0.8 ? '3P' : r() < 0.55 ? '1P' : '2P',
-        departamento: z.dep, municipio: z.mun, colonia: pick(COLONIAS).toUpperCase(), megas: '',
+        departamento: z.dep, municipio: z.mun, colonia: pick(coloniasDe(z.mun)).toUpperCase(), megas: '',
         nombre: persona.nombre, dni: persona.dni
       };
       builder.add(rec);
@@ -4134,6 +4232,7 @@ const iniciales = (n) => String(n || '?').split(' ').filter(Boolean).slice(0, 2)
 /* ---------- Íconos ---------- */
 const ICONOS = {
   lupa: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
+  pin: '<path d="M12 21s-6.5-5.7-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15.3 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.4"/>',
   copiar: '<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
@@ -4727,28 +4826,66 @@ function RielFallas({ mf, now }) {
   </aside>`;
 }
 
+/* Una falla en el panel: el departamento con sus nodos (los primeros 3 y cuántos más) y, debajo, las colonias con
+   más clientes. Al tocarla se ven sus colonias por municipio y, si son más de 3 nodos, todos los nodos. */
+const COLONIAS_POR_MUNICIPIO = 6, NODOS_A_LA_VISTA = 3;
 function FallaItem({ f, now }) {
+  const s = useG();
   const [abierto, setAbierto] = useState(false);
+  const [todas, setTodas] = useState(false);
+  const [verNodos, setVerNodos] = useState(false);
+  const zona = useMemo(() => Model.zonaFalla(s.cat, f), [s.cat, f]);
   const activa = f.estado === 'ACTIVA';
   const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
   const imp = f.impacto || { total: 0, hfc: 0, gpon: 0, deps: [] };
-  return html`<button type="button" class="falla-item" data-s=${f.estado} aria-expanded=${abierto} onClick=${() => setAbierto(!abierto)}>
-    <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
-    <div class="nodos">${U.listaNatural(f.nodos, 3)}</div>
-    <div class="m">
-      ${activa ? html`<span>Desde ${U.las(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
-        : html`<span>Resuelta ${U.cuandoCorto(f.cerradaEn, now)}</span><span>Se oculta en ${U.dur(restante)}</span>`}
-      <span class="impacto-linea"><span><b class="num">${U.n(imp.total)}</b> clientes</span>
-        ${imp.hfc > 0 && html`<span class="tec" data-t="HFC">HFC${imp.gpon > 0 ? ' ' + U.n(imp.hfc) : ''}</span>`}
-        ${imp.gpon > 0 && html`<span class="tec" data-t="GPON">GPON${imp.hfc > 0 ? ' ' + U.n(imp.gpon) : ''}</span>`}</span>
-    </div>
-    ${abierto && html`<div class="det">
-      ${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}
-      <div class="sub" style="width:100%;margin-top:4px">
-        ${(imp.munis || []).slice(0, 3).map((m) => U.lugar(m[0])).join(', ')}${(imp.munis || []).length ? '. ' : ''}Publicada por ${f.publicadaPor.nombre}, ${U.cuandoCorto(f.publicadaEn, now)}.
+  const L = U.lugar;
+  const unDep = zona.deps.length === 1;
+  const nodos = U.listaNatural(f.nodos, NODOS_A_LA_VISTA);
+  const masColonias = zona.colonias - zona.top.length;
+  // Debajo: las colonias con más clientes; con una base de antes, que no las trae, los municipios (sin repetir el
+  // departamento cuando el único municipio se llama igual, como La Paz)
+  const munis = unDep && zona.munis.length === 1 && zona.munis[0] === zona.deps[0] ? [] : zona.munis;
+  const debajo = zona.top.length
+    ? (masColonias > 0 ? zona.top.map(L).join(', ') + ' y ' + U.plural(masColonias, '1 colonia más', U.n(masColonias) + ' colonias más') : U.listaNatural(zona.top.map(L), 3))
+    : U.listaNatural(munis.map(L), 3);
+  const grupos = zona.grupos ? zona.grupos.filter((g) => todas || g.principal) : [];
+  const hayMas = !!zona.grupos && zona.grupos.some((g) => !g.principal || g.cols.length > COLONIAS_POR_MUNICIPIO);
+  const muchosNodos = f.nodos.length > NODOS_A_LA_VISTA;
+  const idDet = 'falla-det-' + f.id;
+  return html`<div class="falla-item" data-s=${f.estado}>
+    <button type="button" class="falla-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
+      <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
+      ${zona.deps.length
+        ? html`<div class="zona"><${Ico} n="pin" s=${15} /><span><b>${U.listaNatural(zona.deps.map(L), 3)}</b> · <span class="nodos-zona">${nodos}</span></span></div>`
+        : html`<div class="nodos">${nodos}</div>`}
+      ${debajo && html`<div class="colonias">${debajo}</div>`}
+      <div class="m">
+        ${activa ? html`<span>Desde ${U.las(f.inicio)}, ${U.hace(f.inicio, now)}</span>${f.eta && html`<span>Solución estimada: ${U.cuandoCorto(f.eta, now)}</span>`}`
+          : html`<span>Resuelta ${U.cuandoCorto(f.cerradaEn, now)}</span><span>Se oculta en ${U.dur(restante)}</span>`}
+        <span class="impacto-linea"><span><b class="num">${U.n(imp.total)}</b> clientes</span>
+          ${imp.hfc > 0 && html`<span class="tec" data-t="HFC">HFC${imp.gpon > 0 ? ' ' + U.n(imp.hfc) : ''}</span>`}
+          ${imp.gpon > 0 && html`<span class="tec" data-t="GPON">GPON${imp.hfc > 0 ? ' ' + U.n(imp.gpon) : ''}</span>`}</span>
       </div>
+    </button>
+    ${abierto && html`<div class="det" id=${idDet}>
+      ${zona.grupos
+        ? grupos.map((g) => html`<div class="zona-grupo" key=${g.dep + '|' + g.muni}>
+            <div class="zona-muni"><b>${L(g.muni) || 'Sin municipio'}</b>${(!unDep || !g.principal) && g.dep ? html`<span>${L(g.dep)}</span>` : ''}
+              <span class="cuantos">${U.plural(g.n, '1 cliente', U.n(g.n) + ' clientes')}</span></div>
+            <div class="zona-cols">
+              ${(todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO)).map(([c]) => html`<span class="chip" key=${c}>${L(c)}</span>`)}
+              ${!todas && g.cols.length > COLONIAS_POR_MUNICIPIO && html`<button type="button" class="chip mas" title="Ver todas las colonias" onClick=${() => setTodas(true)}>+${U.n(g.cols.length - COLONIAS_POR_MUNICIPIO)}</button>`}
+            </div>
+          </div>`)
+        : (imp.munis || []).length > 0 && html`<div class="zona-cols">${imp.munis.map(([m, n]) => html`<span class="chip" key=${m}>${L(m)} · ${U.n(n)}</span>`)}</div>`}
+      ${(hayMas || muchosNodos) && html`<div class="det-acc">
+        ${hayMas && html`<button type="button" class="enlace" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + U.n(zona.colonias) + ' colonias'}</button>`}
+        ${muchosNodos && html`<button type="button" class="enlace" aria-expanded=${verNodos} onClick=${() => setVerNodos(!verNodos)}>${verNodos ? 'Ocultar los nodos' : 'Ver los ' + U.n(f.nodos.length) + ' nodos'}</button>`}
+      </div>`}
+      ${verNodos && html`<div class="zona-cols nodos-falla">${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}</div>`}
+      <div class="sub">${U.conPunto('Publicada por ' + f.publicadaPor.nombre + ', ' + U.cuandoCorto(f.publicadaEn, now))}</div>
     </div>`}
-  </button>`;
+  </div>`;
 }
 
 

@@ -19,7 +19,23 @@ const Demo = (() => {
   const SEGUNDOS_F = ['Isabel', 'Elizabeth', 'Patricia', 'Margarita', 'Alejandra', 'Yamileth', 'Esperanza', 'Concepción', 'Mercedes', 'Beatriz'];
   const APELLIDOS = ['López', 'Martínez', 'Hernández', 'Rodríguez', 'García', 'Flores', 'Mejía', 'Reyes', 'Cruz', 'Zelaya', 'Castillo', 'Ramírez', 'Sánchez', 'Pérez', 'Gómez', 'Banegas', 'Turcios', 'Ordóñez', 'Maradiaga', 'Funes', 'Aguilar', 'Rivera', 'Bonilla', 'Matute', 'Ponce', 'Andino', 'Velásquez', 'Paz', 'Zúniga', 'Alvarado', 'Lagos', 'Midence', 'Carías', 'Sierra', 'Valladares', 'Osorto'];
   const EMPRESAS = ['Inversiones El Roble S. de R.L.', 'Ferretería La Unión', 'Clínica Santa Fe', 'Distribuidora Maya S.A.', 'Colegio Bilingüe Los Pinos', 'Restaurante El Fogón', 'Farmacia San Rafael', 'Hotel Plaza Real', 'Repostería Doña Tina', 'Taller Mecánico El Pistón'];
-  const COLONIAS = ['Col. Kennedy', 'Col. Miraflores', 'Col. Las Colinas', 'Barrio El Centro', 'Col. Altos de Toncontín', 'Res. Plaza', 'Col. Hato de Enmedio', 'Col. Loarque', 'Col. Las Brisas', 'Barrio Guadalupe', 'Col. Jardines del Valle', 'Res. Los Álamos', 'Col. Satélite', 'Col. Trejo', 'Barrio Río de Piedras', 'Col. Fesitranh', 'Col. Universidad', 'Col. San Ángel', 'Col. La Pradera', 'Barrio La Granja'];
+  // Colonias de ejemplo de cada municipio (el panel de fallas las muestra): las de las ciudades grandes y, para las
+  // demás, nombres comunes en cualquier ciudad
+  const COLONIAS = {
+    'DISTRITO CENTRAL': ['Col. Kennedy', 'Col. Miraflores', 'Col. Las Colinas', 'Col. Altos de Toncontín', 'Res. Plaza', 'Col. Hato de Enmedio', 'Col. Loarque',
+      'Col. Las Brisas', 'Res. Los Álamos', 'Col. Satélite', 'Col. Universidad', 'Col. San Ángel', 'Col. La Pradera', 'Barrio La Granja', 'Col. Palmira',
+      'Barrio Abajo', 'Col. Lomas del Guijarro', 'Col. El Pedregal', 'Barrio El Centro', 'Col. Villa Olímpica'],
+    'SAN PEDRO SULA': ['Barrio Guadalupe', 'Col. Jardines del Valle', 'Col. Trejo', 'Barrio Río de Piedras', 'Barrio Guamilito', 'Col. Rivera Hernández',
+      'Col. Los Alpes', 'Col. Moderna', 'Barrio Paz Barahona', 'Barrio Cabañas', 'Col. Fesitranh', 'Res. Los Andes', 'Col. Chamelecón', 'Barrio El Benque',
+      'Col. Satélite', 'Barrio Medina'],
+    'CHOLOMA': ['Col. López Arellano', 'Col. Victoria', 'Barrio El Centro', 'Col. San Antonio', 'Col. Las Brisas', 'Col. Monte Verde', 'Res. Santa Isabel'],
+    'LA CEIBA': ['Barrio La Isla', 'Barrio Mejía', 'Col. El Sauce', 'Col. Alhambra', 'Barrio El Centro', 'Barrio Inglés', 'Res. El Toronjal', 'Col. Bella Vista'],
+    'JUTICALPA': ['Barrio Belén', 'Barrio de Jesús', 'Col. Villa Santa', 'Barrio La Hoya', 'Barrio El Campo', 'Col. Los Profesores', 'Barrio El Centro'],
+    'ROATAN': ['Coxen Hole', 'West End', 'French Harbour', 'Sandy Bay', 'Flowers Bay', 'West Bay']
+  };
+  const COLONIAS_COMUNES = ['Barrio El Centro', 'Barrio San José', 'Barrio La Merced', 'Col. Las Flores', 'Col. Las Palmas', 'Barrio Abajo', 'Barrio Arriba',
+    'Col. Bella Vista', 'Res. Las Colinas', 'Col. San Miguel', 'Barrio El Calvario', 'Col. Los Pinos'];
+  const coloniasDe = (mun) => COLONIAS[mun] || COLONIAS_COMUNES;
 
   // municipio -> departamento, peso, prefijo DNI, nodos HFC, grupos GPON (OLT)
   const ZONAS = [
@@ -111,7 +127,7 @@ const Demo = (() => {
         nap: gpon ? nd.code + '/GT/' + String(tap).padStart(2, '0') + '-' + String(tap + 1).padStart(2, '0') : (nd.virtual ? 'VGRA_TAP_VIRTUAL' : (r() < 0.3 ? 'TAP VIRTUAL ' + nd.code : nd.code + 'B4' + ent(10, 44) + '/' + ent(101, 304) + '/' + ent(1, 8))),
         categoria: persona.emp ? pick(['CORPORATIVO', 'PYME CORPORATIVO', 'EMPRESARIAL']) : (r() < 0.006 ? 'EMPLEADOS' : 'RESIDENCIAL'),
         play: r() < 0.8 ? '3P' : r() < 0.55 ? '1P' : '2P',
-        departamento: z.dep, municipio: z.mun, colonia: pick(COLONIAS).toUpperCase(), megas: '',
+        departamento: z.dep, municipio: z.mun, colonia: pick(coloniasDe(z.mun)).toUpperCase(), megas: '',
         nombre: persona.nombre, dni: persona.dni
       };
       builder.add(rec);
