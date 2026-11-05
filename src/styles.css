@@ -703,6 +703,11 @@ table.conex-tabla { min-width: 680px; }
 .resumen-base span { font-size: 13px; color: var(--ink-2); }
 .nota { display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; color: var(--ink-2); }
 .nota svg { flex: none; margin-top: 2px; }
+/* Una nota que pide hacer algo (por ejemplo, volver a publicar la base para que salgan las colonias) */
+.nota.atencion { background: var(--resuelta-soft); color: var(--ink); line-height: 1.45; }
+.nota.atencion svg { color: var(--resuelta-text); }
+.nota.atencion a { color: var(--ink); font-weight: 650; }
+.riel-nota { margin: 0 12px 8px; padding: 10px 12px; font-size: 12.5px; }
 
 /* ---------- Estadísticas ---------- */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 0; }

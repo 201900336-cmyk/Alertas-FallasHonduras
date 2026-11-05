@@ -715,6 +715,11 @@ table.conex-tabla { min-width: 680px; }
 .resumen-base span { font-size: 13px; color: var(--ink-2); }
 .nota { display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; color: var(--ink-2); }
 .nota svg { flex: none; margin-top: 2px; }
+/* Una nota que pide hacer algo (por ejemplo, volver a publicar la base para que salgan las colonias) */
+.nota.atencion { background: var(--resuelta-soft); color: var(--ink); line-height: 1.45; }
+.nota.atencion svg { color: var(--resuelta-text); }
+.nota.atencion a { color: var(--ink); font-weight: 650; }
+.riel-nota { margin: 0 12px 8px; padding: 10px 12px; font-size: 12.5px; }
 
 /* ---------- Estadísticas ---------- */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 0; }
@@ -4863,8 +4868,12 @@ function MapaVivo({ mf }) {
 
 /* ---------- Riel con las fallas activas y recientes ---------- */
 function RielFallas({ mf, now }) {
+  const s = useG();
+  // A quien publica la base: las colonias salen cuando se vuelve a publicar una base de antes de que se guardaran
+  const faltanColonias = s.cat && !s.cat.conColonias && puede('base') && mf.activas.length + mf.resueltas.length > 0;
   return html`<aside class="panel riel" aria-label="Fallas en la red">
     <div class="panel-cab"><h2>Fallas en la red</h2><span class="der sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados' : ''}</span></div>
+    ${faltanColonias && html`<div class="nota atencion riel-nota falta-colonias"><${Ico} n="info" s=${16} /><span>Las colonias salen al volver a publicar la base en <a href="#base" onClick=${() => ir('base')}>Base</a>: sirve el mismo Excel de esta semana.</span></div>`}
     <div class="riel-seccion">
       <h4><span>Activas</span><span>${mf.activas.length}</span></h4>
       ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)
@@ -5841,6 +5850,8 @@ function VistaBase() {
             <div><b class="num">${U.n(r.olts)}</b><span>OLT con nodos GPON</span></div>
           </div>
           <div class="panel-cuerpo" style="display:flex;flex-direction:column;gap:10px">
+            ${s.cat && !s.cat.conColonias && html`<div class="nota atencion falta-colonias"><${Ico} n="alerta" s=${18} /><span><b>Falta un paso para ver las colonias en el panel de fallas.</b> Esta base se publicó
+              antes de que Alertas guardara las colonias. Vuelve a publicarla: sube el mismo Excel de esta semana y toca <b>Publicar base</b>. Sube solo el resumen y tarda menos de un minuto.</span></div>`}
             ${r.virtuales > 0 && html`<div class="nota"><${Ico} n="info" s=${18} /><span>${U.n(r.virtuales)} clientes están en nodos virtuales (TAP VIRTUAL). Para ellos se muestra "Nodo sin identificar", porque no se puede certificar una falla general.</span></div>`}
             ${!r.tieneMegas && html`<div class="nota"><${Ico} n="info" s=${18} /><span>La base no trae la velocidad contratada. Si BI agrega una columna MEGAS o VELOCIDAD, aparecerá sola en la tarjeta del cliente.</span></div>`}
           </div>`

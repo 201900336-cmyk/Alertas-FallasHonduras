@@ -95,6 +95,8 @@ function VistaBase() {
             <div><b class="num">${U.n(r.olts)}</b><span>OLT con nodos GPON</span></div>
           </div>
           <div class="panel-cuerpo" style="display:flex;flex-direction:column;gap:10px">
+            ${s.cat && !s.cat.conColonias && html`<div class="nota atencion falta-colonias"><${Ico} n="alerta" s=${18} /><span><b>Falta un paso para ver las colonias en el panel de fallas.</b> Esta base se publicó
+              antes de que Alertas guardara las colonias. Vuelve a publicarla: sube el mismo Excel de esta semana y toca <b>Publicar base</b>. Sube solo el resumen y tarda menos de un minuto.</span></div>`}
             ${r.virtuales > 0 && html`<div class="nota"><${Ico} n="info" s=${18} /><span>${U.n(r.virtuales)} clientes están en nodos virtuales (TAP VIRTUAL). Para ellos se muestra "Nodo sin identificar", porque no se puede certificar una falla general.</span></div>`}
             ${!r.tieneMegas && html`<div class="nota"><${Ico} n="info" s=${18} /><span>La base no trae la velocidad contratada. Si BI agrega una columna MEGAS o VELOCIDAD, aparecerá sola en la tarjeta del cliente.</span></div>`}
           </div>`

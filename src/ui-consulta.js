@@ -430,8 +430,12 @@ function MapaVivo({ mf }) {
 
 /* ---------- Riel con las fallas activas y recientes ---------- */
 function RielFallas({ mf, now }) {
+  const s = useG();
+  // A quien publica la base: las colonias salen cuando se vuelve a publicar una base de antes de que se guardaran
+  const faltanColonias = s.cat && !s.cat.conColonias && puede('base') && mf.activas.length + mf.resueltas.length > 0;
   return html`<aside class="panel riel" aria-label="Fallas en la red">
     <div class="panel-cab"><h2>Fallas en la red</h2><span class="der sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados' : ''}</span></div>
+    ${faltanColonias && html`<div class="nota atencion riel-nota falta-colonias"><${Ico} n="info" s=${16} /><span>Las colonias salen al volver a publicar la base en <a href="#base" onClick=${() => ir('base')}>Base</a>: sirve el mismo Excel de esta semana.</span></div>`}
     <div class="riel-seccion">
       <h4><span>Activas</span><span>${mf.activas.length}</span></h4>
       ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)

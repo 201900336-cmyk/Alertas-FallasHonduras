@@ -500,6 +500,16 @@ with sync_playwright() as p:
     ok(crudo[0].startswith('Fecha,Terminó,Falla,ID de Alertas,Motivo,Nodos,Aviso,Mensaje,Texto,Envió,Clientes,Enviados') and any(',F1254600,' in l and 'Mario Rivera' in l for l in crudo)
        and not any(re.search(r'504\d{8}', l) for l in crudo), 'Descargar CSV: ' + dl.value.suggested_filename + ', sin teléfonos', crudo[:2])
 
+    # Con una base publicada antes de que Alertas guardara las colonias, Base y el panel le dicen a Workforce qué hacer
+    x.evaluate("() => { G.set({ cat: Object.assign({}, G.s.cat, { conColonias: false }) }); ir('base'); }")
+    x.wait_for_selector('.falta-colonias', timeout=10000)
+    nota_base = x.locator('.falta-colonias').inner_text()
+    x.evaluate("() => ir('consulta')"); x.wait_for_selector('.riel .falta-colonias', timeout=10000)
+    ok('mismo Excel' in nota_base and 'Publicar base' in nota_base and 'mismo Excel' in x.locator('.riel .falta-colonias').inner_text(),
+       'si la base no trae colonias, Base y el panel le piden a Workforce volver a publicarla (con el mismo Excel)', nota_base)
+    x.evaluate("() => { G.set({ cat: null }); return A.recargar(); }"); x.wait_for_timeout(500)
+    ok(x.locator('.falta-colonias').count() == 0, 'con una base que trae las colonias, ese aviso no sale')
+
     if EXCEL:
         print('8. Subir la base real desde la página')
         x.goto(APP + '#base'); x.wait_for_selector('.zona-carga input[type=file]')
@@ -515,6 +525,8 @@ with sync_playwright() as p:
         e = http('/test/estado')
         ok(e['filasBase'] == servicios + 1, f'la base real quedó completa en la base interna ({e["filasBase"] - 1} filas, {time.time() - t0:.0f} s en el emulador)', e)
         ok(x.locator('.tabla tbody tr').count() >= 2, 'el historial muestra las dos cargas')
+        ok(x.evaluate('() => !!(G.s.cat && G.s.cat.conColonias && [...G.s.cat.nodos.values()].some((n) => n.cols.some((c) => c[2])))'),
+           'la base publicada desde la página trae las colonias de cada nodo para el panel de fallas')
         x.screenshot(path=OUT + 'e09_base.png', full_page=True)
         a.wait_for_selector('.aviso', timeout=20000)
         ok('actualizó la base' in a.locator('.aviso p').inner_text(), 'Concentrix recibe el aviso de la base nueva')
