@@ -672,6 +672,26 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .conex-kpis { margin-bottom: 18px; }
 /* Reportes */
 .reporte-barra { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: -4px 0 16px; }
+/* Consultas por nodo */
+.nodo-barra { justify-content: flex-start; }
+.nodo-barra .nodo-buscar { flex: 0 1 340px; margin-left: 0; max-width: 360px; }
+.nodo-barra .seg { margin-left: auto; }
+.nodo-cab { padding: 16px 20px; margin-bottom: 12px; }
+.nodo-titulo { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; }
+.nodo-titulo h2 { margin: 0; font-size: 24px; font-weight: 800; font-stretch: 110%; letter-spacing: 0.01em; }
+.nodo-titulo .sub { font-size: 14px; }
+.nodo-titulo .sub b { color: var(--ink); }
+.nodo-canal-cli { margin: -3px 0 8px; font-size: 12px; }
+.nodo-sub { margin: 14px 0 4px; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.nodo-fallas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.nodo-fallas li { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: baseline; padding: 10px 14px 10px 18px;
+  border: 1px solid var(--line); border-radius: 10px; position: relative; font-size: 14px; }
+.nodo-fallas li::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px; border-radius: 0 4px 4px 0; background: var(--falla); }
+.nodo-fallas li[data-s="CERRADA"]::before { background: var(--resuelta); }
+.nodo-fallas li .sub { grid-column: 1 / 3; }
+.nodo-fallas li .num { grid-row: 1 / 3; grid-column: 3; align-self: center; font-weight: 650; font-variant-numeric: tabular-nums; }
+.nodo-tabla td.codigo { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 720px) { .nodo-barra .seg { margin-left: 0; } .nodo-barra .nodo-buscar { flex: 1 1 100%; max-width: none; } }
 .sms-personas { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 16px; }
 .sms-tabla td .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
 /* En el teléfono las tablas se desplazan de lado en vez de partir cada palabra */
@@ -2688,6 +2708,51 @@ const Model = (() => {
   /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
   const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal, CONFIG.roles.supervisor.canal]);
   const esInterno = (canal) => INTERNOS.has(canal);
+
+  /* ---------- Consultas por nodo (Reportes) ----------
+     De las consultas sueltas de un nodo ([fecha, acceso, tienda, tipo, contrato, resultado]): cuántos clientes
+     distintos consultaron, cuántas consultas, por qué canal, de qué tiendas y a qué hora o día. Las búsquedas de
+     Workforce, Jefatura y los supervisores van aparte: son ellos revisando el nodo, no clientes llamando. Un
+     reporte de posible falla de un asesor cuenta a su cliente, pero no como otra consulta. */
+  const CANAL_CC = 'Call center y redes sociales';
+  function resumenNodo(r) {
+    const porCliente = new Map(), canales = new Map(), tiendas = new Map(), internas = new Map();
+    let consultas = 0, conFalla = 0, reportes = 0;
+    const consultasExternas = [];
+    for (const [t, acceso, tienda, tipo, contrato, res] of (r && r.filas) || []) {
+      if (esInterno(acceso)) { internas.set(acceso, (internas.get(acceso) || 0) + 1); continue; }
+      const canal = acceso === CONFIG.roles.tiendas.canal ? 'Tiendas' : CANAL_CC;
+      const reporte = tipo === 'reporte';
+      let k = canales.get(canal);
+      if (!k) canales.set(canal, (k = { canal, consultas: 0, clientes: new Set() }));
+      if (reporte) reportes++;
+      else {
+        consultas++; k.consultas++;
+        if (res === 'FALLA') conFalla++;
+        consultasExternas.push({ t, falla: res === 'FALLA' });
+        if (canal === 'Tiendas') tiendas.set(tienda || 'Sin tienda', (tiendas.get(tienda || 'Sin tienda') || 0) + 1);
+      }
+      if (!contrato) continue;
+      k.clientes.add(contrato);
+      let c = porCliente.get(contrato);
+      if (!c) porCliente.set(contrato, (c = { contrato, veces: 0, primera: t, ultima: t, canales: [], conFalla: false, reporte: false }));
+      if (!reporte) c.veces++;
+      c.primera = Math.min(c.primera, t); c.ultima = Math.max(c.ultima, t);
+      const donde = canal === 'Tiendas' ? (tienda || 'Tiendas') : CANAL_CC;
+      if (!c.canales.includes(donde)) c.canales.push(donde);
+      if (res === 'FALLA') c.conFalla = true;
+      if (reporte) c.reporte = true;
+    }
+    const datos = (r && r.clientes) || {};
+    const lista = [...porCliente.values()].map((c) => Object.assign(c, datos[c.contrato] || {}))
+      .sort((a, b) => b.veces - a.veces || b.ultima - a.ultima);
+    return {
+      consultas, conFalla, reportes, clientes: porCliente.size, lista, consultasExternas,
+      canales: [...canales.values()].map((k) => ({ canal: k.canal, consultas: k.consultas, clientes: k.clientes.size })).sort((a, b) => b.consultas - a.consultas),
+      tiendas: [...tiendas.entries()].sort((a, b) => b[1] - a[1]),
+      internas: [...internas.entries()].sort((a, b) => b[1] - a[1]), totalInternas: [...internas.values()].reduce((a, n) => a + n, 0)
+    };
+  }
   /* Nodo -> cuándo se registró el cierre de su última falla (resuelta o descartada): lo de antes ya lo explicó esa falla */
   const cierreDe = (f) => (f.historial || []).reduce((t, h) => (h.accion === 'CERRADA' && h.en > t ? h.en : t), f.cerradaEn || 0);
   function cierresPorNodo(fallas) {
@@ -2912,7 +2977,7 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();
 
@@ -3248,7 +3313,7 @@ function BackendRemoto() {
 
   /* Las consultas de solo lectura se reintentan solas si el servidor estuvo ocupado un momento
      (con cientos de personas a la vez, Apps Script a veces rechaza una solicitud suelta). */
-  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1, conexiones: 1, uso: 1 };
+  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1, conexiones: 1, uso: 1, consultasNodo: 1 };
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
@@ -3368,6 +3433,7 @@ function BackendRemoto() {
     sms: (d) => llamar('sms', d, d.op === 'lote' ? 200000 : 120000),
     uso: (d) => llamar('uso', d),
     conexiones: (d) => llamar('conexiones', d, 60000),
+    consultasNodo: (d) => llamar('consultasNodo', d, 90000),
 
     /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
@@ -3541,6 +3607,22 @@ function BackendLocal() {
         p.consultas++; if (l.r === 'FALLA') p.falla++;
       });
       return { personas: Object.values(personas), desde, ahora: Date.now() };
+    },
+    /* Consultas por nodo en la demostración: las de esta PC, igual que las devuelve el servidor */
+    async consultasNodo({ nodo, desde }) {
+      const n = String(nodo || '').trim().toUpperCase();
+      if (!n) throw errorAlertas('DATOS', 'Escribe el código del nodo, por ejemplo GRA01.');
+      const c = await indice();
+      const logs = (await Store.leerLogs(desde)).filter((l) => String(l.n || '').toUpperCase() === n).sort((a, b) => a.t - b.t);
+      const filas = logs.map((l) => [l.t, l.canal, l.tienda || '', l.tipo === 'reporte' ? 'reporte' : (l.q || 'contrato'), l.c ? String(l.c) : '', l.r || '']);
+      const clientes = {};
+      [...new Set(logs.filter((l) => l.c && !Model.esInterno(l.canal)).map((l) => String(l.c)))].slice(0, 300).forEach((k) => {
+        const b = c.ix ? Model.buscar(c.ix, k) : null;
+        const regs = b && b.filas ? b.filas.map((i) => Model.registro(c.ix, i)) : [];
+        const x = regs.find((y) => y.nodo === n) || regs[0];
+        if (x) clientes[k] = { nombre: x.nombre, colonia: x.colonia, municipio: x.municipio, nap: x.nap, categoria: x.categoria };
+      });
+      return { nodo: n, desde, ahora: Date.now(), recortado: false, filas, clientes };
     },
     salir() { ses = null; guardarSesionEn(CLAVE, null); },
 
@@ -6351,19 +6433,153 @@ const ACCESOS_CONEX = [['todos', 'Todos'], ['Concentrix', 'Concentrix'], ['Tiend
 const FILTROS_CONEX = [['todos', 'Todos'], ['entraron', 'Entraron'], ['no', 'No entraron'], ['avisos', 'Sin avisos activados']];
 const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend', 'No disponibles': 'nd' };
 
-/* ---------- Reportes (Workforce y Jefatura): Conexiones y SMS de Notifícame ---------- */
+/* ---------- Reportes (Workforce y Jefatura): Conexiones, Consultas por nodo y SMS de Notifícame ---------- */
+const PESTANAS_REPORTE = { conexiones: 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.',
+  nodo: 'Cuántos clientes de un nodo consultaron a los asesores, por qué canal, de qué tiendas y cuándo.',
+  sms: 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.' };
 function VistaReportes() {
-  const [tab, setTab] = useState(() => (leerLS('alertas-reporte', 'conexiones') === 'sms' ? 'sms' : 'conexiones'));
+  const [tab, setTab] = useState(() => { const t = leerLS('alertas-reporte', 'conexiones'); return PESTANAS_REPORTE[t] ? t : 'conexiones'; });
   const elegir = (t) => { setTab(t); guardarLS('alertas-reporte', t); };
   return html`<div>
-    <div class="titulo-vista"><div><h1>Reportes</h1><p>${tab === 'sms'
-      ? 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.'
-      : 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.'}</p></div></div>
+    <div class="titulo-vista"><div><h1>Reportes</h1><p>${PESTANAS_REPORTE[tab]}</p></div></div>
     <div class="pestanas" role="tablist">
       <button role="tab" aria-selected=${tab === 'conexiones'} onClick=${() => elegir('conexiones')}>Conexiones</button>
+      <button role="tab" aria-selected=${tab === 'nodo'} onClick=${() => elegir('nodo')}>Consultas por nodo</button>
       <button role="tab" aria-selected=${tab === 'sms'} onClick=${() => elegir('sms')}>SMS de Notifícame</button>
     </div>
-    ${tab === 'sms' ? html`<${ReporteSms} />` : html`<${ReporteConexiones} />`}
+    ${tab === 'sms' ? html`<${ReporteSms} />` : tab === 'nodo' ? html`<${ReporteNodo} />` : html`<${ReporteConexiones} />`}
+  </div>`;
+}
+
+/* ---------- Consultas por nodo ----------
+   Se escribe un nodo y dice cuántos de sus clientes consultaron en el periodo (de los que tiene en la base), por qué
+   canal, de qué tiendas, a qué hora o qué día, qué fallas tuvo el nodo y quiénes son esos clientes. Sale de las
+   consultas de los asesores (call center, redes sociales y tiendas); las búsquedas de Workforce, Jefatura y los
+   supervisores van aparte. El detalle de cada consulta se guarda 30 días. */
+const PERIODOS_NODO = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']];
+const CLIENTES_A_LA_VISTA = 15;
+function ReporteNodo() {
+  const s = useG();
+  const [per, setPer] = useState(() => leerLS('alertas-reporte-nodo-per', '7'));
+  const [texto, setTexto] = useState(() => leerLS('alertas-reporte-nodo', ''));
+  const [nodo, setNodo] = useState(() => leerLS('alertas-reporte-nodo', ''));
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState(null);
+  const [intento, setIntento] = useState(0);
+  const [todos, setTodos] = useState(false);
+  const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
+  useEffect(() => {
+    if (!nodo) { setDatos(null); return undefined; }
+    let vivo = true;
+    setError(null); setDatos(null);
+    Backend.consultasNodo({ nodo, desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
+    return () => { vivo = false; };
+  }, [nodo, desde, intento]);
+  const codigos = useMemo(() => (s.cat ? [...s.cat.nodos.keys()].sort() : []), [s.cat]);
+  const buscar = (e) => {
+    if (e) e.preventDefault();
+    const n = texto.trim().toUpperCase();
+    if (!n) return;
+    setTexto(n); setNodo(n); setTodos(false); guardarLS('alertas-reporte-nodo', n);
+    if (n === nodo) setIntento(intento + 1);
+  };
+  const elegirPer = (v) => { setPer(v); guardarLS('alertas-reporte-nodo-per', v); };
+
+  const info = nodo && s.cat ? s.cat.nodos.get(nodo) : null;
+  const zona = useMemo(() => (info ? Model.zonaFalla(s.cat, { nodos: [nodo] }) : null), [s.cat, nodo, info]);
+  const R = useMemo(() => (datos ? Model.resumenNodo(datos) : null), [datos]);
+  const dePer = per === 'hoy' ? 'hoy' : 'en ' + per + ' días';
+  const L = U.lugar;
+
+  // Las fallas del nodo en el periodo, con cuántas consultas hubo mientras duraron
+  const fallas = useMemo(() => (nodo ? s.fallas.filter((f) => f.nodos.includes(nodo) && f.inicio <= s.now && (f.estado === 'ACTIVA' || (f.cerradaEn || 0) >= desde))
+    .sort((a, b) => b.inicio - a.inicio)
+    .map((f) => ({ f, n: R ? R.consultasExternas.filter((x) => x.t >= f.inicio && x.t <= (f.cerradaEn || s.now)).length : 0 })) : []), [s.fallas, nodo, desde, R, s.now]);
+
+  // Serie para la gráfica: cada hora de hoy o cada día del periodo
+  const serie = useMemo(() => {
+    if (!R) return [];
+    const por = new Map();
+    R.consultasExternas.forEach((x) => {
+      const k = per === 'hoy' ? String(new Date(x.t).getHours()) : claveDia(x.t);
+      const v = por.get(k) || { falla: 0, otras: 0 };
+      if (x.falla) v.falla++; else v.otras++;
+      por.set(k, v);
+    });
+    const out = [];
+    if (per === 'hoy') for (let h = 0; h < 24; h++) { const v = por.get(String(h)) || {}; out.push({ k: h, t: desde + h * U.HORA, falla: v.falla || 0, otras: v.otras || 0 }); }
+    else for (let t = desde, k = 0; t <= s.now && k < 40; t = U.inicioDia(t + 30 * U.HORA), k++) { const v = por.get(claveDia(t)) || {}; out.push({ k, t, falla: v.falla || 0, otras: v.otras || 0 }); }
+    return out;
+  }, [R, per, desde, s.now]);
+
+  const fecha = (t) => (t ? U.dia(t) + ' ' + U.hora(t).replace(/ /g, ' ') : '');
+  function descargar() {
+    U.descargarCsv('Consultas del nodo ' + nodo + ' ' + new Date(s.now).toISOString().slice(0, 10) + '.csv', [
+      ['Contrato', 'Cliente', 'Colonia', 'Municipio', 'NAP', 'Consultas (' + dePer + ')', 'Primera', 'Última', 'Dónde consultó', 'Consultó estando en falla general', 'Reportó posible falla']
+    ].concat(R.lista.map((c) => [c.contrato, c.nombre ? U.titulo(c.nombre) : '', U.colonia(c.colonia), L(c.municipio || ''), c.nap || '', c.veces, fecha(c.primera), fecha(c.ultima),
+      c.canales.join(' / '), c.conFalla ? 'Sí' : 'No', c.reporte ? 'Sí' : 'No'])));
+  }
+
+  const lista = R ? (todos ? R.lista : R.lista.slice(0, CLIENTES_A_LA_VISTA)) : [];
+  const pct = R && info && info.total ? Math.round((R.clientes / info.total) * 100) : null;
+  return html`<div>
+    <form class="reporte-barra nodo-barra" onSubmit=${buscar}>
+      <label class="conex-buscar nodo-buscar"><span class="sr">Nodo</span><${Ico} n="lupa" s=${16} />
+        <input class="input" list="nodos-reporte" value=${texto} onInput=${(e) => setTexto(e.currentTarget.value.toUpperCase())}
+          placeholder="Escribe un nodo, por ejemplo GRA01" autocomplete="off" spellcheck="false" aria-label="Nodo" /></label>
+      <datalist id="nodos-reporte">${codigos.map((c) => html`<option value=${c} key=${c} />`)}</datalist>
+      <button class="btn btn-primario btn-chico" type="submit" disabled=${!texto.trim()}>Buscar</button>
+      <div class="seg" role="group" aria-label="Periodo">${PERIODOS_NODO.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => elegirPer(v)} key=${v}>${t}</button>`)}</div>
+    </form>
+    ${!nodo ? html`<div class="panel vacio"><b>Busca un nodo</b>Escribe su código para ver cuántos de sus clientes consultaron a los asesores, por qué canal y cuándo.</div>`
+      : error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
+        <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
+        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setIntento(intento + 1)}>Intentar de nuevo</button></div></div>`
+      : !R ? html`<div class="panel vacio"><b>Cargando…</b>Buscando las consultas de ${nodo}.</div>` : html`
+      <section class="panel nodo-cab">
+        <div class="nodo-titulo"><h2 class="codigo">${nodo}</h2>
+          ${info ? html`<span class="tec" data-t=${info.gpon > info.hfc ? 'GPON' : 'HFC'}>${info.gpon > info.hfc ? 'GPON' : 'HFC'}</span>` : ''}
+          <span class="sub">${info ? html`${zona && zona.deps.length ? html`<b>${U.listaNatural(zona.deps.map(L), 2)}</b>${zona.munis.length ? ' · ' + U.listaNatural(zona.munis.map(L), 3) : ''} · ` : ''}${U.plural(info.total, '1 cliente en la base', U.n(info.total) + ' clientes en la base')}`
+            : 'Este nodo no está en la base actual: salen sus consultas, pero no cuántos clientes tiene.'}</span></div>
+      </section>
+      <div class="panel kpis conex-kpis nodo-kpis">
+        <div class="kpi"><div class="l">Clientes que consultaron ${dePer}</div><div class="v">${U.n(R.clientes)}</div>
+          <div class="d">${info ? 'de ' + U.n(info.total) + ' clientes del nodo' + (pct !== null ? ' (' + pct + ' %)' : '') : 'clientes distintos'}</div></div>
+        <div class="kpi"><div class="l">Consultas</div><div class="v">${U.n(R.consultas)}</div>
+          <div class="d">${R.conFalla ? U.n(R.conFalla) + ' estando en falla general' : 'de call center, redes sociales y tiendas'}</div></div>
+        <div class="kpi"><div class="l">Reportes de posible falla</div><div class="v">${U.n(R.reportes)}</div><div class="d">que mandaron los asesores</div></div>
+        <div class="kpi"><div class="l">Búsquedas internas</div><div class="v">${U.n(R.totalInternas)}</div><div class="d">de Workforce, Jefatura y supervisores</div></div>
+      </div>
+      ${datos.recortado && html`<div class="nota" style="margin-top:12px"><${Ico} n="info" s=${18} /><span>El nodo tiene muchísimas consultas en este periodo: se cuentan las ${U.n(datos.filas.length)} más recientes. Elige un periodo más corto para verlas todas.</span></div>`}
+      <div class="stats-grid">
+        <section class="panel c-7"><div class="panel-cab"><h3>${per === 'hoy' ? 'Consultas por hora' : 'Consultas por día'}</h3></div>
+          <div class="panel-cuerpo">${R.consultas ? html`<${GraficaConsultas} serie=${serie} porHora=${per === 'hoy'} />` : html`<div class="vacio">Sin consultas de clientes ${dePer}.</div>`}</div></section>
+        <section class="panel c-5"><div class="panel-cab"><h3>De dónde vienen</h3><span class="der sub">consultas y clientes</span></div>
+          <div class="panel-cuerpo">
+            ${R.canales.length ? R.canales.map((k) => html`<div key=${k.canal}><${HBar} etiqueta=${k.canal} valor=${k.consultas} max=${R.canales[0].consultas} />
+              <div class="sub nodo-canal-cli">${U.plural(k.clientes, '1 cliente', U.n(k.clientes) + ' clientes')}</div></div>`)
+              : html`<div class="vacio">Ningún asesor consultó este nodo ${dePer}.</div>`}
+            ${R.tiendas.length > 0 && html`<h4 class="nodo-sub">Tiendas</h4>${R.tiendas.slice(0, 8).map(([t, n]) => html`<${HBar} etiqueta=${t} valor=${n} max=${R.tiendas[0][1]} key=${t} color="var(--chart-rest)" />`)}`}
+            ${R.totalInternas > 0 && html`<div class="sub" style="margin-top:12px">Búsquedas internas: ${R.internas.map(([a, n]) => (a === 'Supervisor' ? 'supervisores' : a) + ' ' + U.n(n)).join(', ')}.</div>`}
+          </div></section>
+        <section class="panel c-12"><div class="panel-cab"><div><h3>Fallas del nodo ${dePer}</h3><div class="sub">Con cuántas consultas hubo mientras duraron</div></div></div>
+          <div class="panel-cuerpo">${fallas.length ? html`<ul class="nodo-fallas">${fallas.map(({ f, n }) => html`<li key=${f.id} data-s=${f.estado}>
+              <b>${U.numeroFalla(f)}</b><span>${nombreMotivo(f)}</span>
+              <span class="sub">Desde ${U.cuandoCorto(f.inicio, s.now)}${f.estado === 'ACTIVA' ? ', activa' : f.cerradaEn ? ' hasta ' + U.cuandoCorto(f.cerradaEn, s.now) : ''}</span>
+              <span class="num">${U.plural(n, '1 consulta', U.n(n) + ' consultas')}</span></li>`)}</ul>`
+            : html`<div class="vacio">${nodo} no tuvo fallas publicadas ${dePer}.</div>`}</div></section>
+        <section class="panel c-12"><div class="panel-cab conex-cab nodo-tabla-cab"><div><h3>Clientes que consultaron</h3><div class="sub">Los que más consultaron primero</div></div>
+            <button class="btn btn-borde btn-chico" style="margin-left:auto" disabled=${!R.lista.length} onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button></div>
+          <div class="panel-cuerpo tabla-envoltura">${R.lista.length ? html`<table class="tabla nodo-tabla"><thead><tr><th>Contrato</th><th>Cliente</th><th class="der">Consultas</th><th>Última</th><th>Dónde</th></tr></thead>
+            <tbody>${lista.map((c) => html`<tr key=${c.contrato}>
+              <td class="codigo">${c.contrato}</td>
+              <td><b class="fuerte">${c.nombre ? U.titulo(c.nombre) : 'Sin dato'}</b><div class="sub">${[U.colonia(c.colonia), L(c.municipio || '')].filter(Boolean).join(', ')}</div></td>
+              <td class="der num">${U.n(c.veces)}${c.reporte ? html`<div class="sub">reportó</div>` : ''}</td>
+              <td>${U.cuandoCorto(c.ultima, s.now)}${c.conFalla ? html`<div class="sub">en falla general</div>` : ''}</td>
+              <td>${c.canales.join(', ')}</td></tr>`)}</tbody></table>
+            ${R.lista.length > CLIENTES_A_LA_VISTA && html`<button class="ver-tabla" onClick=${() => setTodos(!todos)}>${todos ? 'Ver menos' : 'Ver los ' + U.n(R.lista.length) + ' clientes'}</button>`}`
+            : html`<div class="vacio">Ningún cliente de ${nodo} consultó ${dePer}.</div>`}</div></section>
+      </div>`}
   </div>`;
 }
 

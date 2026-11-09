@@ -397,6 +397,28 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const dPos = posibles();
   pa = deNodo(dPos, nodoAlerta);
   ok(pa && pa.nivel === 'alerta' && pa.nClientes === 5 && dPos.umbral.clientes === 5 && dPos.umbral.minutos === 60, 'con 5 clientes distintos en 60 min es posible falla', pa);
+  {
+    // Reportes, Consultas por nodo: lo que consultaron los asesores del nodo; las búsquedas de Workforce, aparte
+    let rn = g.post({ accion: 'consultasNodo', token: tAgente, datos: { nodo: nodoAlerta } });
+    ok(!rn.ok && rn.codigo === 'PERMISO', 'Concentrix no ve el reporte de consultas por nodo', rn);
+    rn = g.post({ accion: 'consultasNodo', token: tWf, datos: { nodo: ' ' + nodoAlerta.toLowerCase() + ' ', desde: Date.now() } });
+    const R = rn.ok ? Model.resumenNodo(rn.datos) : null;
+    const cc = R && R.canales.find((k) => k.canal === 'Call center y redes sociales'), ti = R && R.canales.find((k) => k.canal === 'Tiendas');
+    // Lo esperado, contado directo en la bitácora de hoy (otras pruebas también consultaron ese nodo)
+    const hcN = g.SpreadsheetApp.openById(g.E.props.get('CONSULTAS_ID')).getSheetByName('Consultas');
+    const hoyNodo = hcN.getRange(2, 1, hcN.getLastRow() - 1, 10).getValues().filter((f) => String(f[7]) === nodoAlerta && new Date(f[0]).toDateString() === new Date().toDateString());
+    const ext = hoyNodo.filter((f) => !['Workforce HN', 'Jefatura', 'Supervisor'].includes(String(f[3])));
+    const esp = { clientes: new Set(ext.map((f) => String(f[6]))).size, consultas: ext.filter((f) => f[5] !== 'reporte').length,
+      cc: ext.filter((f) => f[3] === 'Concentrix' && f[5] !== 'reporte').length, ti: ext.filter((f) => f[3] === 'Tiendas' && f[5] !== 'reporte').length,
+      internas: hoyNodo.length - ext.length };
+    ok(rn.ok && rn.datos.nodo === nodoAlerta && esp.clientes >= 5 && esp.cc >= 5 && esp.ti >= 1 && esp.internas >= 5
+      && R.clientes === esp.clientes && R.consultas === esp.consultas && R.totalInternas === esp.internas && cc && cc.consultas === esp.cc && ti && ti.consultas === esp.ti
+      && Object.keys(rn.datos.clientes).length === esp.clientes && R.lista.every((c) => c.nombre) && !JSON.stringify(rn.datos).match(/504\d{8}/),
+      `consultas por nodo: ${R && R.clientes} clientes y ${R && R.consultas} consultas de asesores (${esp.cc} de call center, ${esp.ti} de tiendas), ${esp.internas} búsquedas de Workforce aparte, con nombres y sin teléfonos`,
+      R && { R: { clientes: R.clientes, consultas: R.consultas, internas: R.totalInternas, canales: R.canales }, esp });
+    rn = g.post({ accion: 'consultasNodo', token: tWf, datos: { nodo: 'GRA01"; =1' } });
+    ok(!rn.ok && rn.codigo === 'DATOS', 'un nodo con caracteres raros se rechaza', rn);
+  }
   // Detalle para el correo
   r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'detalle', nodo: nodoAlerta } });
   const det = r.ok ? r.datos : {};
@@ -1186,7 +1208,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   filas2.forEach((f) => porContrato.set(f[iCo], (porContrato.get(f[iCo]) || 0) + 1));
   const nodosDistintos = [...new Set(filas2.map((f) => f[iNo]))];
   const sale = new Set(), cambia = new Set();
-  for (let i = 500; sale.size < 150 && i < filas2.length; i += 7) sale.add(i);
+  // Salen contratos de un solo servicio: si saliera la primera fila de un contrato con varios, el nodo de la siguiente
+  // podría ser otro y contaría como cambio de nodo (los datos de prueba cambian con la fecha)
+  for (let i = 500; sale.size < 150 && i < filas2.length; i += 7) if (porContrato.get(filas2[i][iCo]) === 1) sale.add(i);
   for (let i = 3; cambia.size < 40 && i < filas2.length; i += 53) if (!sale.has(i) && porContrato.get(filas2[i][iCo]) === 1) cambia.add(i);
   const filas3 = [];
   filas2.forEach((f, i) => {

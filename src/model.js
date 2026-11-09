@@ -476,6 +476,51 @@ const Model = (() => {
   /* ---------- Posibles fallas (demostración; en el servidor es accionAlertas_) ---------- */
   const INTERNOS = new Set([CONFIG.roles.workforce.canal, CONFIG.roles.jefatura.canal, CONFIG.roles.supervisor.canal]);
   const esInterno = (canal) => INTERNOS.has(canal);
+
+  /* ---------- Consultas por nodo (Reportes) ----------
+     De las consultas sueltas de un nodo ([fecha, acceso, tienda, tipo, contrato, resultado]): cuántos clientes
+     distintos consultaron, cuántas consultas, por qué canal, de qué tiendas y a qué hora o día. Las búsquedas de
+     Workforce, Jefatura y los supervisores van aparte: son ellos revisando el nodo, no clientes llamando. Un
+     reporte de posible falla de un asesor cuenta a su cliente, pero no como otra consulta. */
+  const CANAL_CC = 'Call center y redes sociales';
+  function resumenNodo(r) {
+    const porCliente = new Map(), canales = new Map(), tiendas = new Map(), internas = new Map();
+    let consultas = 0, conFalla = 0, reportes = 0;
+    const consultasExternas = [];
+    for (const [t, acceso, tienda, tipo, contrato, res] of (r && r.filas) || []) {
+      if (esInterno(acceso)) { internas.set(acceso, (internas.get(acceso) || 0) + 1); continue; }
+      const canal = acceso === CONFIG.roles.tiendas.canal ? 'Tiendas' : CANAL_CC;
+      const reporte = tipo === 'reporte';
+      let k = canales.get(canal);
+      if (!k) canales.set(canal, (k = { canal, consultas: 0, clientes: new Set() }));
+      if (reporte) reportes++;
+      else {
+        consultas++; k.consultas++;
+        if (res === 'FALLA') conFalla++;
+        consultasExternas.push({ t, falla: res === 'FALLA' });
+        if (canal === 'Tiendas') tiendas.set(tienda || 'Sin tienda', (tiendas.get(tienda || 'Sin tienda') || 0) + 1);
+      }
+      if (!contrato) continue;
+      k.clientes.add(contrato);
+      let c = porCliente.get(contrato);
+      if (!c) porCliente.set(contrato, (c = { contrato, veces: 0, primera: t, ultima: t, canales: [], conFalla: false, reporte: false }));
+      if (!reporte) c.veces++;
+      c.primera = Math.min(c.primera, t); c.ultima = Math.max(c.ultima, t);
+      const donde = canal === 'Tiendas' ? (tienda || 'Tiendas') : CANAL_CC;
+      if (!c.canales.includes(donde)) c.canales.push(donde);
+      if (res === 'FALLA') c.conFalla = true;
+      if (reporte) c.reporte = true;
+    }
+    const datos = (r && r.clientes) || {};
+    const lista = [...porCliente.values()].map((c) => Object.assign(c, datos[c.contrato] || {}))
+      .sort((a, b) => b.veces - a.veces || b.ultima - a.ultima);
+    return {
+      consultas, conFalla, reportes, clientes: porCliente.size, lista, consultasExternas,
+      canales: [...canales.values()].map((k) => ({ canal: k.canal, consultas: k.consultas, clientes: k.clientes.size })).sort((a, b) => b.consultas - a.consultas),
+      tiendas: [...tiendas.entries()].sort((a, b) => b[1] - a[1]),
+      internas: [...internas.entries()].sort((a, b) => b[1] - a[1]), totalInternas: [...internas.values()].reduce((a, n) => a + n, 0)
+    };
+  }
   /* Nodo -> cuándo se registró el cierre de su última falla (resuelta o descartada): lo de antes ya lo explicó esa falla */
   const cierreDe = (f) => (f.historial || []).reduce((t, h) => (h.accion === 'CERRADA' && h.en > t ? h.en : t), f.cerradaEn || 0);
   function cierresPorNodo(fallas) {
@@ -700,6 +745,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
     dniNormal, diasAIso, isoADias };
 })();

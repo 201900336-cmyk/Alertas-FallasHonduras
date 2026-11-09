@@ -28,7 +28,7 @@ function BackendRemoto() {
 
   /* Las consultas de solo lectura se reintentan solas si el servidor estuvo ocupado un momento
      (con cientos de personas a la vez, Apps Script a veces rechaza una solicitud suelta). */
-  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1, conexiones: 1, uso: 1 };
+  const REINTENTABLES = { config: 1, estado: 1, cargar: 1, buscar: 1, alertas: 1, alerta: 1, estadisticas: 1, contactos: 1, conexiones: 1, uso: 1, consultasNodo: 1 };
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
@@ -148,6 +148,7 @@ function BackendRemoto() {
     sms: (d) => llamar('sms', d, d.op === 'lote' ? 200000 : 120000),
     uso: (d) => llamar('uso', d),
     conexiones: (d) => llamar('conexiones', d, 60000),
+    consultasNodo: (d) => llamar('consultasNodo', d, 90000),
 
     /* Primero intenta subir solo lo que cambió. Va completa si la base interna todavía no tiene huella
        (la primera vez), si cambiaron las columnas, si hay demasiados cambios o filas vacías, o si el
@@ -321,6 +322,22 @@ function BackendLocal() {
         p.consultas++; if (l.r === 'FALLA') p.falla++;
       });
       return { personas: Object.values(personas), desde, ahora: Date.now() };
+    },
+    /* Consultas por nodo en la demostración: las de esta PC, igual que las devuelve el servidor */
+    async consultasNodo({ nodo, desde }) {
+      const n = String(nodo || '').trim().toUpperCase();
+      if (!n) throw errorAlertas('DATOS', 'Escribe el código del nodo, por ejemplo GRA01.');
+      const c = await indice();
+      const logs = (await Store.leerLogs(desde)).filter((l) => String(l.n || '').toUpperCase() === n).sort((a, b) => a.t - b.t);
+      const filas = logs.map((l) => [l.t, l.canal, l.tienda || '', l.tipo === 'reporte' ? 'reporte' : (l.q || 'contrato'), l.c ? String(l.c) : '', l.r || '']);
+      const clientes = {};
+      [...new Set(logs.filter((l) => l.c && !Model.esInterno(l.canal)).map((l) => String(l.c)))].slice(0, 300).forEach((k) => {
+        const b = c.ix ? Model.buscar(c.ix, k) : null;
+        const regs = b && b.filas ? b.filas.map((i) => Model.registro(c.ix, i)) : [];
+        const x = regs.find((y) => y.nodo === n) || regs[0];
+        if (x) clientes[k] = { nombre: x.nombre, colonia: x.colonia, municipio: x.municipio, nap: x.nap, categoria: x.categoria };
+      });
+      return { nodo: n, desde, ahora: Date.now(), recortado: false, filas, clientes };
     },
     salir() { ses = null; guardarSesionEn(CLAVE, null); },
 

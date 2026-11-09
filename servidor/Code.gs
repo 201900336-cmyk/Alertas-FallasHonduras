@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.4',                // se ve en la pestaña INICIO
+  VERSION: '3.5',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -36,6 +36,7 @@ const ALERTAS = {
   INTENTOS_CUENTA_TIENDAS: 100,  // de todas las personas juntas, antes de bloquear la cuenta de Tiendas 15 minutos
   DIAS_DETALLE: 30,              // días de detalle de cada consulta (quién consultó qué)
   MAX_FILAS_DETALLE: 600000,     // tope de filas de detalle: el archivo admite 10 millones de celdas
+  MAX_CONSULTAS_NODO: 3000,      // consultas de un nodo que lee el reporte Consultas por nodo (las más recientes)
   DIAS_RESUMEN: 120,             // días de resumen diario para las estadísticas
   DIAS_ESTADISTICAS: 90,         // periodo más largo que muestra Estadísticas
   DIAS_FALLAS_CARGA: 120,        // historial de fallas que recibe Workforce al entrar
@@ -114,10 +115,10 @@ const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
   telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_, monitoreo: accionMonitoreo_,
-  uso: accionUso_, conexiones: accionConexiones_
+  uso: accionUso_, conexiones: accionConexiones_, consultasNodo: accionConsultasNodo_
 };
 const PUBLICAS = { config: true, login: true, monitoreo: true };
-const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true, conexiones: true };
+const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true, conexiones: true, consultasNodo: true };
 const DE_ALERTAS = { alertas: true, alerta: true };   // Workforce, Jefatura y los supervisores de Call Center
 
 /* ============================================================================
@@ -554,6 +555,56 @@ function accionConexiones_(d) {
   if (txt.length < 95000) cache_().put(clave, txt, 60);
   return res;
 }
+/* ----- Consultas por nodo (Reportes, Workforce y Jefatura) -----
+   Las consultas de un nodo en el periodo (hoy, 7 o 30 días: el detalle que se guarda), una por una y sin
+   teléfonos: [fecha, acceso, tienda, tipo, contrato, resultado]. La página las cuenta (cuántos clientes
+   distintos, por qué canal y cuándo). Con los datos de los clientes que más consultaron, para la tabla.
+   Busca el nodo en la columna Nodo del periodo y lee solo esas filas (las cercanas, de una vez). */
+function accionConsultasNodo_(d) {
+  const nodo = String(d.nodo || '').trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9 _.\-]{0,39}$/.test(nodo)) throw fallo_('DATOS', 'Escribe el código del nodo, por ejemplo GRA01.');
+  const ahora = Date.now(), reloj = reloj_(), DIA = 86400000;
+  const hoy = reloj.inicio(ahora);
+  const desde = Math.max(reloj.inicio(Number(d.desde) || hoy), hoy - (ALERTAS.DIAS_DETALLE - 1) * DIA);
+  const clave = 'nodo:' + nodo + ':' + desde;
+  const hit = cache_().get(clave);
+  if (hit) return JSON.parse(hit);
+
+  const h = hojaConsultas_(), ult = h ? h.getLastRow() : 0;
+  const filas = [];
+  let recortado = false;
+  if (ult >= 2) {
+    const a = filaDesde_(h, desde, ult);
+    if (a <= ult) {
+      let nums = h.getRange(a, 8, ult - a + 1, 1).createTextFinder(nodo).matchEntireCell(true).findAll()
+        .map((r) => r.getRow()).sort((x, y) => x - y);
+      if (nums.length > ALERTAS.MAX_CONSULTAS_NODO) { nums = nums.slice(-ALERTAS.MAX_CONSULTAS_NODO); recortado = true; }
+      const quiero = {};
+      nums.forEach((f) => { quiero[f] = true; });
+      const tramos = [];
+      nums.forEach((f) => { const t = tramos[tramos.length - 1]; if (t && f - t[1] <= 50) t[1] = f; else tramos.push([f, f]); });
+      tramos.forEach((t) => h.getRange(t[0], 1, t[1] - t[0] + 1, COL_CONSULTAS.length).getValues().forEach((v, i) => {
+        if (!quiero[t[0] + i] || String(v[7]).toUpperCase() !== nodo) return;
+        filas.push([fechaMs_(v[0]), String(v[3] || ''), String(v[4] || ''), String(v[5] || ''), String(v[6] || ''), String(v[8] || '')]);
+      }));
+    }
+  }
+  // Los datos de los clientes (los que más consultaron, hasta 300); las búsquedas de Workforce, Jefatura y
+  // los supervisores no son clientes llamando
+  const veces = {};
+  filas.forEach((f) => { if (f[4] && !ACCESOS_INTERNOS_[f[1]]) veces[f[4]] = (veces[f[4]] || 0) + 1; });
+  const top = Object.keys(veces).sort((x, y) => veces[y] - veces[x]).slice(0, 300);
+  const datos = datosDeContratos_(top, nodo), clientes = {};
+  Object.keys(datos).forEach((c) => {
+    const b = datos[c];
+    clientes[c] = { nombre: b.nombre || '', colonia: b.colonia || '', municipio: b.municipio || '', nap: b.nap || '', categoria: b.categoria || '' };
+  });
+  const res = { nodo: nodo, desde: desde, ahora: ahora, recortado: recortado, filas: filas, clientes: clientes };
+  const txt = JSON.stringify(res);
+  if (txt.length < 95000) cache_().put(clave, txt, 60);
+  return res;
+}
+
 function usuarioPublico_(p) {
   return { u: p.u, nombre: p.n, rol: p.r, acceso: ALERTAS.ROLES[p.r], tienda: p.t || '', origen: p.o };
 }

@@ -9,7 +9,7 @@
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
 - **Todos** tienen que permitir los avisos en el escritorio al entrar: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
-- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
+- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados), **Consultas por nodo** (cuántos clientes de un nodo consultaron, por qué canal y cuándo) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
 
 ---
 
@@ -189,7 +189,7 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 
 ## Reportes
 
-Sección **Reportes** (Workforce y Jefatura), con dos pestañas.
+Sección **Reportes** (Workforce y Jefatura), con tres pestañas.
 
 ### Conexiones: quién usa Alertas
 
@@ -200,6 +200,17 @@ Para darle seguimiento a quien no está usando Alertas:
 - La tabla trae a cada persona con su acceso (Concentrix, Tiendas con su tienda, supervisor, Workforce o Jefatura), su última entrada, cuántas veces entró, sus consultas del periodo (hoy, 7 o 30 días) y el estado de sus avisos. Se filtra por acceso, por "Entraron", "No entraron" o "Sin avisos activados", y se busca por nombre o tienda.
 - **Descargar CSV** baja lo que se ve en la tabla, para mandárselo a los supervisores.
 - Alertas solo conoce a quien ya entró alguna vez: quien nunca ha entrado no aparece.
+
+### Consultas por nodo
+
+Se escribe un nodo (por ejemplo GRA01) y dice, para hoy, 7 o 30 días (el detalle de cada consulta se guarda 30 días):
+
+- **Clientes que consultaron** de los que tiene el nodo en la base (por ejemplo, 100 de 365, el 27 %), cuántas consultas hubo (y cuántas con la falla general ya publicada) y cuántos reportes de posible falla mandaron los asesores.
+- **De dónde vienen**: call center y redes sociales (Concentrix) o tiendas, con sus clientes, y de qué tiendas.
+- **Consultas por hora** (hoy) o **por día**, y las **fallas del nodo** en el periodo con cuántas consultas hubo mientras duraron.
+- **Clientes que consultaron**: contrato, nombre, colonia, cuántas veces, la última y dónde; **Descargar CSV** los baja todos, sin teléfonos.
+- Sale de las consultas de los asesores. Las búsquedas de Workforce, Jefatura y los supervisores van aparte (son ellos revisando el nodo, no clientes llamando). Si un nodo tiene más de 3,000 consultas en el periodo, se cuentan las más recientes.
+- Necesita la versión 3.5 del servidor.
 
 ### SMS de Notifícame
 

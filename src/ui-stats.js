@@ -412,19 +412,153 @@ const ACCESOS_CONEX = [['todos', 'Todos'], ['Concentrix', 'Concentrix'], ['Tiend
 const FILTROS_CONEX = [['todos', 'Todos'], ['entraron', 'Entraron'], ['no', 'No entraron'], ['avisos', 'Sin avisos activados']];
 const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend', 'No disponibles': 'nd' };
 
-/* ---------- Reportes (Workforce y Jefatura): Conexiones y SMS de Notifícame ---------- */
+/* ---------- Reportes (Workforce y Jefatura): Conexiones, Consultas por nodo y SMS de Notifícame ---------- */
+const PESTANAS_REPORTE = { conexiones: 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.',
+  nodo: 'Cuántos clientes de un nodo consultaron a los asesores, por qué canal, de qué tiendas y cuándo.',
+  sms: 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.' };
 function VistaReportes() {
-  const [tab, setTab] = useState(() => (leerLS('alertas-reporte', 'conexiones') === 'sms' ? 'sms' : 'conexiones'));
+  const [tab, setTab] = useState(() => { const t = leerLS('alertas-reporte', 'conexiones'); return PESTANAS_REPORTE[t] ? t : 'conexiones'; });
   const elegir = (t) => { setTab(t); guardarLS('alertas-reporte', t); };
   return html`<div>
-    <div class="titulo-vista"><div><h1>Reportes</h1><p>${tab === 'sms'
-      ? 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.'
-      : 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.'}</p></div></div>
+    <div class="titulo-vista"><div><h1>Reportes</h1><p>${PESTANAS_REPORTE[tab]}</p></div></div>
     <div class="pestanas" role="tablist">
       <button role="tab" aria-selected=${tab === 'conexiones'} onClick=${() => elegir('conexiones')}>Conexiones</button>
+      <button role="tab" aria-selected=${tab === 'nodo'} onClick=${() => elegir('nodo')}>Consultas por nodo</button>
       <button role="tab" aria-selected=${tab === 'sms'} onClick=${() => elegir('sms')}>SMS de Notifícame</button>
     </div>
-    ${tab === 'sms' ? html`<${ReporteSms} />` : html`<${ReporteConexiones} />`}
+    ${tab === 'sms' ? html`<${ReporteSms} />` : tab === 'nodo' ? html`<${ReporteNodo} />` : html`<${ReporteConexiones} />`}
+  </div>`;
+}
+
+/* ---------- Consultas por nodo ----------
+   Se escribe un nodo y dice cuántos de sus clientes consultaron en el periodo (de los que tiene en la base), por qué
+   canal, de qué tiendas, a qué hora o qué día, qué fallas tuvo el nodo y quiénes son esos clientes. Sale de las
+   consultas de los asesores (call center, redes sociales y tiendas); las búsquedas de Workforce, Jefatura y los
+   supervisores van aparte. El detalle de cada consulta se guarda 30 días. */
+const PERIODOS_NODO = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']];
+const CLIENTES_A_LA_VISTA = 15;
+function ReporteNodo() {
+  const s = useG();
+  const [per, setPer] = useState(() => leerLS('alertas-reporte-nodo-per', '7'));
+  const [texto, setTexto] = useState(() => leerLS('alertas-reporte-nodo', ''));
+  const [nodo, setNodo] = useState(() => leerLS('alertas-reporte-nodo', ''));
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState(null);
+  const [intento, setIntento] = useState(0);
+  const [todos, setTodos] = useState(false);
+  const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
+  useEffect(() => {
+    if (!nodo) { setDatos(null); return undefined; }
+    let vivo = true;
+    setError(null); setDatos(null);
+    Backend.consultasNodo({ nodo, desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
+    return () => { vivo = false; };
+  }, [nodo, desde, intento]);
+  const codigos = useMemo(() => (s.cat ? [...s.cat.nodos.keys()].sort() : []), [s.cat]);
+  const buscar = (e) => {
+    if (e) e.preventDefault();
+    const n = texto.trim().toUpperCase();
+    if (!n) return;
+    setTexto(n); setNodo(n); setTodos(false); guardarLS('alertas-reporte-nodo', n);
+    if (n === nodo) setIntento(intento + 1);
+  };
+  const elegirPer = (v) => { setPer(v); guardarLS('alertas-reporte-nodo-per', v); };
+
+  const info = nodo && s.cat ? s.cat.nodos.get(nodo) : null;
+  const zona = useMemo(() => (info ? Model.zonaFalla(s.cat, { nodos: [nodo] }) : null), [s.cat, nodo, info]);
+  const R = useMemo(() => (datos ? Model.resumenNodo(datos) : null), [datos]);
+  const dePer = per === 'hoy' ? 'hoy' : 'en ' + per + ' días';
+  const L = U.lugar;
+
+  // Las fallas del nodo en el periodo, con cuántas consultas hubo mientras duraron
+  const fallas = useMemo(() => (nodo ? s.fallas.filter((f) => f.nodos.includes(nodo) && f.inicio <= s.now && (f.estado === 'ACTIVA' || (f.cerradaEn || 0) >= desde))
+    .sort((a, b) => b.inicio - a.inicio)
+    .map((f) => ({ f, n: R ? R.consultasExternas.filter((x) => x.t >= f.inicio && x.t <= (f.cerradaEn || s.now)).length : 0 })) : []), [s.fallas, nodo, desde, R, s.now]);
+
+  // Serie para la gráfica: cada hora de hoy o cada día del periodo
+  const serie = useMemo(() => {
+    if (!R) return [];
+    const por = new Map();
+    R.consultasExternas.forEach((x) => {
+      const k = per === 'hoy' ? String(new Date(x.t).getHours()) : claveDia(x.t);
+      const v = por.get(k) || { falla: 0, otras: 0 };
+      if (x.falla) v.falla++; else v.otras++;
+      por.set(k, v);
+    });
+    const out = [];
+    if (per === 'hoy') for (let h = 0; h < 24; h++) { const v = por.get(String(h)) || {}; out.push({ k: h, t: desde + h * U.HORA, falla: v.falla || 0, otras: v.otras || 0 }); }
+    else for (let t = desde, k = 0; t <= s.now && k < 40; t = U.inicioDia(t + 30 * U.HORA), k++) { const v = por.get(claveDia(t)) || {}; out.push({ k, t, falla: v.falla || 0, otras: v.otras || 0 }); }
+    return out;
+  }, [R, per, desde, s.now]);
+
+  const fecha = (t) => (t ? U.dia(t) + ' ' + U.hora(t).replace(/ /g, ' ') : '');
+  function descargar() {
+    U.descargarCsv('Consultas del nodo ' + nodo + ' ' + new Date(s.now).toISOString().slice(0, 10) + '.csv', [
+      ['Contrato', 'Cliente', 'Colonia', 'Municipio', 'NAP', 'Consultas (' + dePer + ')', 'Primera', 'Última', 'Dónde consultó', 'Consultó estando en falla general', 'Reportó posible falla']
+    ].concat(R.lista.map((c) => [c.contrato, c.nombre ? U.titulo(c.nombre) : '', U.colonia(c.colonia), L(c.municipio || ''), c.nap || '', c.veces, fecha(c.primera), fecha(c.ultima),
+      c.canales.join(' / '), c.conFalla ? 'Sí' : 'No', c.reporte ? 'Sí' : 'No'])));
+  }
+
+  const lista = R ? (todos ? R.lista : R.lista.slice(0, CLIENTES_A_LA_VISTA)) : [];
+  const pct = R && info && info.total ? Math.round((R.clientes / info.total) * 100) : null;
+  return html`<div>
+    <form class="reporte-barra nodo-barra" onSubmit=${buscar}>
+      <label class="conex-buscar nodo-buscar"><span class="sr">Nodo</span><${Ico} n="lupa" s=${16} />
+        <input class="input" list="nodos-reporte" value=${texto} onInput=${(e) => setTexto(e.currentTarget.value.toUpperCase())}
+          placeholder="Escribe un nodo, por ejemplo GRA01" autocomplete="off" spellcheck="false" aria-label="Nodo" /></label>
+      <datalist id="nodos-reporte">${codigos.map((c) => html`<option value=${c} key=${c} />`)}</datalist>
+      <button class="btn btn-primario btn-chico" type="submit" disabled=${!texto.trim()}>Buscar</button>
+      <div class="seg" role="group" aria-label="Periodo">${PERIODOS_NODO.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => elegirPer(v)} key=${v}>${t}</button>`)}</div>
+    </form>
+    ${!nodo ? html`<div class="panel vacio"><b>Busca un nodo</b>Escribe su código para ver cuántos de sus clientes consultaron a los asesores, por qué canal y cuándo.</div>`
+      : error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
+        <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
+        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setIntento(intento + 1)}>Intentar de nuevo</button></div></div>`
+      : !R ? html`<div class="panel vacio"><b>Cargando…</b>Buscando las consultas de ${nodo}.</div>` : html`
+      <section class="panel nodo-cab">
+        <div class="nodo-titulo"><h2 class="codigo">${nodo}</h2>
+          ${info ? html`<span class="tec" data-t=${info.gpon > info.hfc ? 'GPON' : 'HFC'}>${info.gpon > info.hfc ? 'GPON' : 'HFC'}</span>` : ''}
+          <span class="sub">${info ? html`${zona && zona.deps.length ? html`<b>${U.listaNatural(zona.deps.map(L), 2)}</b>${zona.munis.length ? ' · ' + U.listaNatural(zona.munis.map(L), 3) : ''} · ` : ''}${U.plural(info.total, '1 cliente en la base', U.n(info.total) + ' clientes en la base')}`
+            : 'Este nodo no está en la base actual: salen sus consultas, pero no cuántos clientes tiene.'}</span></div>
+      </section>
+      <div class="panel kpis conex-kpis nodo-kpis">
+        <div class="kpi"><div class="l">Clientes que consultaron ${dePer}</div><div class="v">${U.n(R.clientes)}</div>
+          <div class="d">${info ? 'de ' + U.n(info.total) + ' clientes del nodo' + (pct !== null ? ' (' + pct + ' %)' : '') : 'clientes distintos'}</div></div>
+        <div class="kpi"><div class="l">Consultas</div><div class="v">${U.n(R.consultas)}</div>
+          <div class="d">${R.conFalla ? U.n(R.conFalla) + ' estando en falla general' : 'de call center, redes sociales y tiendas'}</div></div>
+        <div class="kpi"><div class="l">Reportes de posible falla</div><div class="v">${U.n(R.reportes)}</div><div class="d">que mandaron los asesores</div></div>
+        <div class="kpi"><div class="l">Búsquedas internas</div><div class="v">${U.n(R.totalInternas)}</div><div class="d">de Workforce, Jefatura y supervisores</div></div>
+      </div>
+      ${datos.recortado && html`<div class="nota" style="margin-top:12px"><${Ico} n="info" s=${18} /><span>El nodo tiene muchísimas consultas en este periodo: se cuentan las ${U.n(datos.filas.length)} más recientes. Elige un periodo más corto para verlas todas.</span></div>`}
+      <div class="stats-grid">
+        <section class="panel c-7"><div class="panel-cab"><h3>${per === 'hoy' ? 'Consultas por hora' : 'Consultas por día'}</h3></div>
+          <div class="panel-cuerpo">${R.consultas ? html`<${GraficaConsultas} serie=${serie} porHora=${per === 'hoy'} />` : html`<div class="vacio">Sin consultas de clientes ${dePer}.</div>`}</div></section>
+        <section class="panel c-5"><div class="panel-cab"><h3>De dónde vienen</h3><span class="der sub">consultas y clientes</span></div>
+          <div class="panel-cuerpo">
+            ${R.canales.length ? R.canales.map((k) => html`<div key=${k.canal}><${HBar} etiqueta=${k.canal} valor=${k.consultas} max=${R.canales[0].consultas} />
+              <div class="sub nodo-canal-cli">${U.plural(k.clientes, '1 cliente', U.n(k.clientes) + ' clientes')}</div></div>`)
+              : html`<div class="vacio">Ningún asesor consultó este nodo ${dePer}.</div>`}
+            ${R.tiendas.length > 0 && html`<h4 class="nodo-sub">Tiendas</h4>${R.tiendas.slice(0, 8).map(([t, n]) => html`<${HBar} etiqueta=${t} valor=${n} max=${R.tiendas[0][1]} key=${t} color="var(--chart-rest)" />`)}`}
+            ${R.totalInternas > 0 && html`<div class="sub" style="margin-top:12px">Búsquedas internas: ${R.internas.map(([a, n]) => (a === 'Supervisor' ? 'supervisores' : a) + ' ' + U.n(n)).join(', ')}.</div>`}
+          </div></section>
+        <section class="panel c-12"><div class="panel-cab"><div><h3>Fallas del nodo ${dePer}</h3><div class="sub">Con cuántas consultas hubo mientras duraron</div></div></div>
+          <div class="panel-cuerpo">${fallas.length ? html`<ul class="nodo-fallas">${fallas.map(({ f, n }) => html`<li key=${f.id} data-s=${f.estado}>
+              <b>${U.numeroFalla(f)}</b><span>${nombreMotivo(f)}</span>
+              <span class="sub">Desde ${U.cuandoCorto(f.inicio, s.now)}${f.estado === 'ACTIVA' ? ', activa' : f.cerradaEn ? ' hasta ' + U.cuandoCorto(f.cerradaEn, s.now) : ''}</span>
+              <span class="num">${U.plural(n, '1 consulta', U.n(n) + ' consultas')}</span></li>`)}</ul>`
+            : html`<div class="vacio">${nodo} no tuvo fallas publicadas ${dePer}.</div>`}</div></section>
+        <section class="panel c-12"><div class="panel-cab conex-cab nodo-tabla-cab"><div><h3>Clientes que consultaron</h3><div class="sub">Los que más consultaron primero</div></div>
+            <button class="btn btn-borde btn-chico" style="margin-left:auto" disabled=${!R.lista.length} onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button></div>
+          <div class="panel-cuerpo tabla-envoltura">${R.lista.length ? html`<table class="tabla nodo-tabla"><thead><tr><th>Contrato</th><th>Cliente</th><th class="der">Consultas</th><th>Última</th><th>Dónde</th></tr></thead>
+            <tbody>${lista.map((c) => html`<tr key=${c.contrato}>
+              <td class="codigo">${c.contrato}</td>
+              <td><b class="fuerte">${c.nombre ? U.titulo(c.nombre) : 'Sin dato'}</b><div class="sub">${[U.colonia(c.colonia), L(c.municipio || '')].filter(Boolean).join(', ')}</div></td>
+              <td class="der num">${U.n(c.veces)}${c.reporte ? html`<div class="sub">reportó</div>` : ''}</td>
+              <td>${U.cuandoCorto(c.ultima, s.now)}${c.conFalla ? html`<div class="sub">en falla general</div>` : ''}</td>
+              <td>${c.canales.join(', ')}</td></tr>`)}</tbody></table>
+            ${R.lista.length > CLIENTES_A_LA_VISTA && html`<button class="ver-tabla" onClick=${() => setTodos(!todos)}>${todos ? 'Ver menos' : 'Ver los ' + U.n(R.lista.length) + ' clientes'}</button>`}`
+            : html`<div class="vacio">Ningún cliente de ${nodo} consultó ${dePer}.</div>`}</div></section>
+      </div>`}
   </div>`;
 }
 

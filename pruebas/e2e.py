@@ -482,6 +482,21 @@ with sync_playwright() as p:
     ok(crudo[0].startswith('Nombre,Acceso,Tienda,Usuario,Primera entrada,Última entrada,Entradas,Consultas (hoy)') and any(l.startswith('Daniela Ramirez,Tiendas,CAC Metromall,,') and l.endswith(',Bloqueados') for l in crudo),
        'Descargar CSV: ' + dl.value.suggested_filename + ', con Daniela Ramirez y sus avisos bloqueados', crudo[:3])
     x.fill('.conex-buscar input', '')
+    # Consultas por nodo: el nodo de la posible falla, que consultó Karla Zelaya (Concentrix) en el paso 5
+    x.click('.pestanas button:has-text("Consultas por nodo")'); x.wait_for_selector('.nodo-buscar input', timeout=10000)
+    x.fill('.nodo-buscar input', nodoPF.lower()); x.click('.nodo-barra button[type=submit]')
+    x.wait_for_selector('.nodo-kpis', timeout=30000); x.wait_for_timeout(300)
+    total = x.evaluate("(n) => G.s.cat.nodos.get(n).total", nodoPF)
+    kp = x.locator('.nodo-kpis .kpi').all_inner_texts()
+    n_cli = int(re.sub(r'\D', '', x.locator('.nodo-kpis .kpi .v').first.inner_text()))
+    tabla = x.locator('.nodo-tabla').inner_text()
+    ok(n_cli >= 5 and f'de {total} clientes del nodo' in kp[0].replace(',', '') and 'Call center y redes sociales' in x.locator('.stats-grid').inner_text()
+       and all(c in tabla for c in contratosPF), f'Consultas por nodo: {nodoPF} con {n_cli} de sus {total} clientes, de dónde vienen y quiénes son', kp)
+    with x.expect_download() as dl: x.click('.nodo-tabla-cab button:has-text("Descargar CSV")')
+    crudo = open(dl.value.path(), 'rb').read().decode('utf-8-sig').split('\r\n')
+    ok(crudo[0].startswith('Contrato,Cliente,Colonia,Municipio,NAP,Consultas') and any(l.startswith(contratosPF[0] + ',') for l in crudo)
+       and not any(re.search(r'504\d{8}', l) for l in crudo), 'Descargar CSV: ' + dl.value.suggested_filename + ', sin teléfonos', crudo[:2])
+    x.screenshot(path=OUT + 'e07a_consultas_nodo.png', full_page=True)
     # Reporte de SMS: el envío de F1254600 (caída de postes) que mandó Mario Rivera en 7b
     x.click('.pestanas button:has-text("SMS de Notifícame")'); x.wait_for_selector('.sms-tabla tbody tr', timeout=30000); x.wait_for_timeout(300)
     env = x.locator('.sms-tabla tbody tr', has_text='F1254600')
