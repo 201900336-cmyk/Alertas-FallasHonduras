@@ -16,6 +16,8 @@ const U = (() => {
   const n1 = (v) => nf1.format(v || 0);
   const n2 = (v) => nf2.format(v || 0);
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  /* Para leer: "27 %", "4.2 %", "0.4 %" o "menos de 0.1 %" (con pocos clientes de muchos, el redondeo no los borra) */
+  const pctTxt = (a, b) => { if (!b) return '—'; if (!a) return '0 %'; const p = (a / b) * 100; return p < 0.1 ? 'menos de 0.1 %' : (p >= 10 ? Math.round(p) : nf1.format(p)) + ' %'; };
   const compact = (v) => {
     v = v || 0;
     if (v >= 1e6) return nf1.format(v / 1e6) + ' M';
@@ -263,7 +265,7 @@ const U = (() => {
     return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
   };
 
-  return { MIN, HORA, DIA, n, n1, n2, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
+  return { MIN, HORA, DIA, n, n1, n2, pct, pctTxt, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
     dur, durCorto, durHM, conPunto, conMayuscula, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, colonia, claveColonia, coloniaNoUsar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();

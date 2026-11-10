@@ -418,6 +418,26 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
       R && { R: { clientes: R.clientes, consultas: R.consultas, internas: R.totalInternas, canales: R.canales }, esp });
     rn = g.post({ accion: 'consultasNodo', token: tWf, datos: { nodo: 'GRA01"; =1' } });
     ok(!rn.ok && rn.codigo === 'DATOS', 'un nodo con caracteres raros se rechaza', rn);
+    // Una OLT: la página manda sus nodos y el servidor junta sus consultas en una sola búsqueda (3.6)
+    const filasHoy = hcN.getRange(2, 1, hcN.getLastRow() - 1, 10).getValues().filter((f) => new Date(f[0]).toDateString() === new Date().toDateString());
+    const conConsultas = [...new Set(filasHoy.map((f) => String(f[7])).filter(Boolean))];
+    const otro = conConsultas.find((n) => n !== nodoAlerta);
+    const varios = [nodoAlerta, otro, 'ZZZ99'];
+    rn = g.post({ accion: 'consultasNodo', token: tWf, datos: { nodos: varios.map((n) => n.toLowerCase()).concat(' ' + nodoAlerta + ' '), desde: Date.now() } });
+    const deVarios = filasHoy.filter((f) => varios.includes(String(f[7])));
+    const extV = deVarios.filter((f) => !['Workforce HN', 'Jefatura', 'Supervisor'].includes(String(f[3])));
+    const RV = rn.ok ? Model.resumenNodo(rn.datos) : null;
+    const solo = (n) => Model.resumenNodo(g.post({ accion: 'consultasNodo', token: tWf, datos: { nodo: n, desde: Date.now() } }).datos);
+    ok(!!otro && rn.ok && rn.datos.nodos.join() === varios.join() && rn.datos.nodo === '' && rn.datos.filas.length === deVarios.length
+      && rn.datos.filas.every((f) => varios.includes(f[6])) && RV.clientes === new Set(extV.map((f) => String(f[6]))).size
+      && RV.consultas === solo(nodoAlerta).consultas + solo(otro).consultas && RV.porNodo.get(nodoAlerta).clientes === solo(nodoAlerta).clientes
+      && RV.porNodo.get(otro).consultas === solo(otro).consultas && !RV.porNodo.has('ZZZ99') && RV.lista.every((c) => varios.includes(c.nodo)),
+      `varios nodos a la vez (${varios.join(', ')}): ${RV && RV.clientes} clientes y ${RV && RV.consultas} consultas, lo mismo que sumando cada nodo, y cada consulta con su nodo`,
+      RV && { clientes: RV.clientes, consultas: RV.consultas, filas: rn.datos.filas.length, esperadas: deVarios.length });
+    rn = g.post({ accion: 'consultasNodo', token: tWf, datos: { nodos: Array.from({ length: 81 }, (_, i) => 'N' + i) } });
+    ok(!rn.ok && rn.codigo === 'DATOS' && /80/.test(rn.mensaje || rn.error || JSON.stringify(rn)), 'más de 80 nodos en un reporte no', rn);
+    rn = g.post({ accion: 'consultasNodo', token: tWf, datos: { nodos: [nodoAlerta, 'GRA01"; =1'] } });
+    ok(!rn.ok && rn.codigo === 'DATOS', 'ni un nodo con caracteres raros en la lista', rn);
   }
   // Detalle para el correo
   r = g.post({ accion: 'alerta', token: tWf, datos: { op: 'detalle', nodo: nodoAlerta } });

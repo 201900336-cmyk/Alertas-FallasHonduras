@@ -9,7 +9,7 @@
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
 - **Todos** tienen que permitir los avisos en el escritorio al entrar: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
-- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados), **Nodo o cliente** (cuántos clientes de un nodo consultaron, por qué canal y cuándo; o todas las fallas de un cliente, cuántas veces llamó y el tiempo total que estuvo afectado, para las notas de crédito de Ajustes) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
+- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados), **Nodo o cliente** (cuántos clientes de un nodo o de una OLT consultaron, qué porcentaje representan, por qué canal y cuándo; o todas las fallas de un cliente, cuántas veces llamó y el tiempo total que estuvo afectado, para las notas de crédito de Ajustes) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
 
 ---
 
@@ -203,7 +203,7 @@ Para darle seguimiento a quien no está usando Alertas:
 
 ### Nodo o cliente
 
-Un solo buscador: un nodo (lleva letras, por ejemplo GRA01) o un contrato o DNI (solo números).
+Un solo buscador: un nodo (lleva letras, por ejemplo GRA01), una **OLT** (por su nombre, por ejemplo OLT Ventu, o su código M00_…) o un contrato o DNI (solo números).
 
 **Con un contrato o DNI** sale el cliente igual que en Consulta, sin el guion para el cliente: su estado de ahora, sus datos y **todas las fallas de su nodo** (activas y resueltas), cuántas veces llamó en 30 días y en qué fallas llamó. Las búsquedas de Workforce no cuentan como llamadas. El contrato buscado no se guarda en la PC (sí el último periodo elegido).
 
@@ -223,7 +223,18 @@ Un solo buscador: un nodo (lleva letras, por ejemplo GRA01) o un contrato o DNI 
 - **Consultas por hora** (hoy) o **por día**, y las **fallas del nodo** en el periodo con cuántas consultas hubo mientras duraron.
 - **Clientes que consultaron**: contrato, nombre, colonia, cuántas veces, la última y dónde; **Descargar CSV** los baja todos, sin teléfonos.
 - Sale de las consultas de los asesores. Las búsquedas de Workforce, Jefatura y los supervisores van aparte (son ellos revisando el nodo, no clientes llamando). Si un nodo tiene más de 3,000 consultas en el periodo, se cuentan las más recientes.
+- Si el nodo es GPON, **Ver la OLT** abre el reporte de su OLT.
 - Necesita la versión 3.5 del servidor.
+
+**Con una OLT** junta todos sus nodos GPON y dice lo mismo que un nodo, para hoy, 7 o 30 días:
+
+- **Clientes que consultaron** de los que tienen sus nodos en la base, y qué porcentaje **representan** (por ejemplo, 100 de 2,400 clientes, el 4.2 %). Con pocos clientes de muchos, el porcentaje lleva un decimal para que no salga 0 %.
+- **Consultas** (y qué porcentaje fue con la falla general ya publicada), **nodos con consultas** (por ejemplo, 12 de 40) y reportes de posible falla.
+- **Sus nodos**: cada nodo con sus clientes, cuántos consultaron, qué porcentaje son (con una barra para comparar), sus consultas, la última y si está en falla. Clic en un nodo abre su reporte. **Descargar CSV** baja la tabla (el porcentaje va como número para Excel).
+- **Consultas por hora o por día**, **de dónde vienen**, las **fallas en sus nodos** (con cuántas consultas hubo de los nodos afectados mientras duraron) y los **clientes que consultaron**, con su nodo.
+- Se reconoce por el nombre (Ventu, OLT Ventu, DANLI03 o Danli 03) o por el código. Si lo escrito está en el nombre de varias OLT, se dan a elegir.
+- Si la OLT tiene más de 6,000 consultas en el periodo, se cuentan las más recientes.
+- Necesita la versión 3.6 del servidor.
 
 ### SMS de Notifícame
 

@@ -694,6 +694,21 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .nodo-fallas li .sub { grid-column: 1 / 3; }
 .nodo-fallas li .num { grid-row: 1 / 3; grid-column: 3; align-self: center; font-weight: 650; font-variant-numeric: tabular-nums; }
 .nodo-tabla td.codigo { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Reporte por OLT: el código, el % que representan y la tabla de sus nodos */
+.nodo-olt { margin-left: auto; font-size: 13.5px; }
+.nodo-olt-codigo { margin-top: 4px; font-size: 12.5px; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+.kpi .v small { font-size: 0.55em; font-weight: 600; color: var(--ink-3); }
+.olt-nodos th, .olt-nodos td { white-space: nowrap; }
+.olt-nodos .enlace.codigo { font-weight: 700; text-decoration-thickness: 1px; }
+.olt-nodos .marca-estado { margin-left: 4px; }
+.olt-pct { min-width: 170px; }
+.olt-pct .num { display: inline-block; min-width: 4.4em; font-weight: 650; }
+.olt-barra { display: inline-block; vertical-align: middle; width: 96px; height: 8px; margin-left: 6px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.olt-barra i { display: block; height: 100%; border-radius: 4px; background: var(--gpon); }
+.olt-opciones { padding: 18px 20px; }
+.olt-opciones h3 { margin: 0 0 4px; }
+.olt-lista { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.olt-lista .btn .sub { margin-left: 6px; font-weight: 500; }
 @media (max-width: 720px) { .nodo-barra .seg { margin-left: 0; } .nodo-barra .nodo-buscar { flex: 1 1 100%; max-width: none; } }
 .sms-personas { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 16px; }
 .sms-tabla td .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }

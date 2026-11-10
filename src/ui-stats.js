@@ -414,7 +414,7 @@ const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend
 
 /* ---------- Reportes (Workforce y Jefatura): Conexiones, Nodo o cliente y SMS de Notifícame ---------- */
 const PESTANAS_REPORTE = { conexiones: 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.',
-  nodo: 'Un nodo: cuántos de sus clientes consultaron a los asesores, por qué canal y cuándo. Un contrato o DNI: todas las fallas que ha tenido ese cliente y cuántas veces llamó.',
+  nodo: 'Un nodo o una OLT: cuántos de sus clientes consultaron a los asesores, qué porcentaje representan, por qué canal y cuándo. Un contrato o DNI: todas las fallas que ha tenido ese cliente, cuántas veces llamó y cuánto tiempo estuvo afectado.',
   sms: 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.' };
 function VistaReportes() {
   const [tab, setTab] = useState(() => { const t = leerLS('alertas-reporte', 'conexiones'); return PESTANAS_REPORTE[t] ? t : 'conexiones'; });
@@ -431,17 +431,21 @@ function VistaReportes() {
 }
 
 /* ---------- Nodo o cliente ----------
-   Un solo buscador: un nodo (lleva letras, como GRA01) o un contrato o DNI (solo números).
-   - Nodo: cuántos de sus clientes consultaron en el periodo (de los que tiene en la base), por qué canal, de qué
-     tiendas, a qué hora o qué día, qué fallas tuvo el nodo y quiénes son esos clientes. Sale de las consultas de los
-     asesores (call center, redes sociales y tiendas); las búsquedas de Workforce, Jefatura y los supervisores van
-     aparte. El detalle de cada consulta se guarda 30 días.
+   Un solo buscador: un nodo (lleva letras, como GRA01), una OLT (por su nombre, como "OLT Ventu", o su código
+   M00_...) o un contrato o DNI (solo números).
+   - Nodo u OLT: cuántos de sus clientes consultaron en el periodo (de los que tiene en la base) y qué porcentaje
+     representan, por qué canal, de qué tiendas, a qué hora o qué día, qué fallas tuvo y quiénes son esos clientes.
+     Una OLT junta todos sus nodos GPON y dice cómo va cada uno. Sale de las consultas de los asesores (call center,
+     redes sociales y tiendas); las búsquedas de Workforce, Jefatura y los supervisores van aparte. El detalle de
+     cada consulta se guarda 30 días.
    - Contrato o DNI: el cliente como en Consulta (sin el guion para el cliente), con todas las fallas que ha tenido
-     su nodo, activas y resueltas, y cuántas veces llamó durante cada una.
-   Solo se recuerda el último nodo buscado (un contrato no se guarda en la PC). */
+     su nodo, activas y resueltas, cuántas veces llamó durante cada una y el tiempo total que estuvo afectado.
+   Solo se recuerda el último nodo u OLT buscado (un contrato no se guarda en la PC). */
 const PERIODOS_NODO = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']];
 const CLIENTES_A_LA_VISTA = 15;
+const NODOS_OLT_A_LA_VISTA = 15;
 const esCodigoNodo = (q) => /[A-Z]/i.test(q);
+const textoOlt = (o) => 'OLT ' + U.sinAcentos(o.nombre).toUpperCase();
 function ReporteBuscar() {
   const s = useG();
   const [texto, setTexto] = useState(() => leerLS('alertas-reporte-nodo', ''));
@@ -449,28 +453,46 @@ function ReporteBuscar() {
   const [per, setPer] = useState(() => leerLS('alertas-reporte-nodo-per', '7'));
   const [intento, setIntento] = useState(0);
   const codigos = useMemo(() => (s.cat ? [...s.cat.nodos.keys()].sort() : []), [s.cat]);
-  const nodo = !!q && esCodigoNodo(q);
-  const buscar = (e) => {
-    if (e) e.preventDefault();
-    const t = texto.trim();
-    if (!t) return;
+  const olts = useMemo(() => (s.cat ? s.cat.olts.map(textoOlt).sort() : []), [s.cat]);
+  // Un nodo de la base va primero; si no, una OLT (por su nombre o su código); si no, se busca como nodo
+  const que = useMemo(() => {
+    if (!q) return null;
+    if (!esCodigoNodo(q)) return { tipo: 'cliente' };
+    if (!s.cat || s.cat.nodos.has(q)) return { tipo: 'nodo' };
+    const o = Model.buscarOlt(s.cat, q);
+    return !o ? { tipo: 'nodo' } : o.olt ? { tipo: 'olt', olt: o.olt } : { tipo: 'opciones', opciones: o.opciones, mas: o.mas };
+  }, [q, s.cat]);
+  const ir = (t) => {
     const n = esCodigoNodo(t) ? t.toUpperCase() : t;
     setTexto(n); setQ(n); guardarLS('alertas-reporte-nodo', esCodigoNodo(n) ? n : '');
-    if (n === q) setIntento(intento + 1);
+    if (n === q) setIntento((i) => i + 1);
   };
+  const buscar = (e) => { if (e) e.preventDefault(); const t = texto.trim(); if (t) ir(t); };
   const elegirPer = (v) => { setPer(v); guardarLS('alertas-reporte-nodo-per', v); };
   return html`<div>
     <form class="reporte-barra nodo-barra" onSubmit=${buscar}>
-      <label class="conex-buscar nodo-buscar"><span class="sr">Nodo, contrato o DNI</span><${Ico} n="lupa" s=${16} />
+      <label class="conex-buscar nodo-buscar"><span class="sr">Nodo, OLT, contrato o DNI</span><${Ico} n="lupa" s=${16} />
         <input class="input" list="nodos-reporte" value=${texto} onInput=${(e) => setTexto(e.currentTarget.value.toUpperCase())}
-          placeholder="Nodo (GRA01), contrato o DNI" autocomplete="off" spellcheck="false" aria-label="Nodo, contrato o DNI" /></label>
-      <datalist id="nodos-reporte">${codigos.map((c) => html`<option value=${c} key=${c} />`)}</datalist>
+          placeholder="Nodo (GRA01), OLT, contrato o DNI" autocomplete="off" spellcheck="false" aria-label="Nodo, OLT, contrato o DNI" /></label>
+      <datalist id="nodos-reporte">${olts.map((c) => html`<option value=${c} key=${c} />`)}${codigos.map((c) => html`<option value=${c} key=${c} />`)}</datalist>
       <button class="btn btn-primario btn-chico" type="submit" disabled=${!texto.trim()}>Buscar</button>
-      ${(!q || nodo) && html`<div class="seg" role="group" aria-label="Periodo">${PERIODOS_NODO.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => elegirPer(v)} key=${v}>${t}</button>`)}</div>`}
+      ${(!que || que.tipo !== 'cliente') && html`<div class="seg" role="group" aria-label="Periodo">${PERIODOS_NODO.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => elegirPer(v)} key=${v}>${t}</button>`)}</div>`}
     </form>
-    ${!q ? html`<div class="panel vacio"><b>Busca un nodo o un cliente</b>Un nodo, para ver cuántos de sus clientes consultaron a los asesores, por qué canal y cuándo. Un contrato o DNI, para ver todas las fallas que ha tenido ese cliente y cuántas veces llamó.</div>`
-      : nodo ? html`<${ReporteNodo} nodo=${q} per=${per} intento=${intento} key=${'n' + q} />`
+    ${!que ? html`<div class="panel vacio"><b>Busca un nodo, una OLT o un cliente</b>Un nodo o una OLT (por ejemplo, OLT Ventu), para ver cuántos de sus clientes consultaron a los asesores, qué porcentaje representan, por qué canal y cuándo. Un contrato o DNI, para ver todas las fallas que ha tenido ese cliente, cuántas veces llamó y cuánto tiempo estuvo afectado.</div>`
+      : que.tipo === 'opciones' ? html`<${OltOpciones} q=${q} opciones=${que.opciones} mas=${que.mas} elegir=${(o) => ir(textoOlt(o))} />`
+      : que.tipo === 'olt' ? html`<${ReporteNodo} olt=${que.olt} per=${per} intento=${intento} abrir=${ir} key=${'o' + que.olt.base} />`
+      : que.tipo === 'nodo' ? html`<${ReporteNodo} nodo=${q} per=${per} intento=${intento} abrir=${ir} key=${'n' + q} />`
       : html`<${ReporteCliente} q=${q} intento=${intento} key=${'c' + q} />`}
+  </div>`;
+}
+
+/* Lo escrito está en el nombre de varias OLT: se elige una */
+function OltOpciones({ q, opciones, mas, elegir }) {
+  return html`<div class="panel olt-opciones">
+    <h3>¿Cuál OLT?</h3><p class="sub">Hay ${opciones.length + mas} con «${q.replace(/^OLT /, '')}» en el nombre:</p>
+    <div class="olt-lista">${opciones.map((o) => html`<button type="button" class="btn btn-borde btn-chico" key=${o.base} onClick=${() => elegir(o)}>
+      OLT ${o.nombre}<span class="sub">${U.plural(o.nodos.length, '1 nodo', o.nodos.length + ' nodos')}</span></button>`)}</div>
+    ${mas > 0 && html`<p class="sub">Y ${mas} más: escribe más del nombre.</p>`}
   </div>`;
 }
 
@@ -507,31 +529,66 @@ function ReporteCliente({ q, intento }) {
   return html`<div class="reporte-cliente"><${Resultado} res=${res} sel=${sel} setSel=${setSel} now=${s.now} reporte /></div>`;
 }
 
-/* Un nodo: cuántos de sus clientes consultaron, por qué canal y cuándo */
-function ReporteNodo({ nodo, per, intento }) {
+/* Un nodo, o una OLT con todos sus nodos GPON: cuántos de sus clientes consultaron, qué porcentaje representan,
+   por qué canal y cuándo. Con una OLT, además, cómo va cada uno de sus nodos. */
+function ReporteNodo({ nodo, olt, per, intento, abrir }) {
   const s = useG();
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
   const [reintento, setReintento] = useState(0);
   const [todos, setTodos] = useState(false);
+  const [todosNodos, setTodosNodos] = useState(false);
   const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
+  const nodos = useMemo(() => (olt ? olt.nodos.slice().sort() : [nodo]), [olt, nodo]);
+  const clave = olt ? 'olt:' + olt.base : nodo;
   useEffect(() => {
     let vivo = true;
     setError(null); setDatos(null);
-    Backend.consultasNodo({ nodo, desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
+    Backend.consultasNodo(olt ? { nodos, desde } : { nodo, desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
     return () => { vivo = false; };
-  }, [nodo, desde, intento, reintento]);
+  }, [clave, desde, intento, reintento]);
 
-  const info = nodo && s.cat ? s.cat.nodos.get(nodo) : null;
-  const zona = useMemo(() => (info ? Model.zonaFalla(s.cat, { nodos: [nodo] }) : null), [s.cat, nodo, info]);
+  // Los clientes en la base: los del nodo, o la suma de los nodos de la OLT
+  const info = useMemo(() => {
+    if (!s.cat) return null;
+    if (!olt) return s.cat.nodos.get(nodo) || null;
+    const xs = nodos.map((c) => s.cat.nodos.get(c)).filter(Boolean);
+    return xs.length ? { total: xs.reduce((a, n) => a + n.total, 0), hfc: xs.reduce((a, n) => a + n.hfc, 0), gpon: xs.reduce((a, n) => a + n.gpon, 0) } : null;
+  }, [s.cat, clave]);
+  const zona = useMemo(() => (info ? Model.zonaFalla(s.cat, { nodos }) : null), [s.cat, clave, info]);
   const R = useMemo(() => (datos ? Model.resumenNodo(datos) : null), [datos]);
   const dePer = per === 'hoy' ? 'hoy' : 'en ' + per + ' días';
+  const titulo = olt ? 'OLT ' + olt.nombre : nodo;
+  const delQue = olt ? 'de la OLT' : 'del nodo';
   const L = U.lugar;
+  const enNodos = useMemo(() => new Set(nodos), [nodos]);
 
-  // Las fallas del nodo en el periodo, con cuántas consultas hubo mientras duraron
-  const fallas = useMemo(() => (nodo ? s.fallas.filter((f) => f.nodos.includes(nodo) && f.inicio <= s.now && (f.estado === 'ACTIVA' || (f.cerradaEn || 0) >= desde))
+  // Las fallas del nodo (o de los nodos de la OLT) en el periodo, con cuántas consultas hubo mientras duraron:
+  // en una OLT, solo las de los nodos que esa falla afectó
+  // (una falla activa cuenta hasta la hora del servidor: el reloj de la página va un poco atrás)
+  const ahora = Math.max(s.now, (datos && datos.ahora) || 0);
+  const fallas = useMemo(() => s.fallas.filter((f) => f.nodos.some((n) => enNodos.has(n)) && f.inicio <= ahora && (f.estado === 'ACTIVA' || (f.cerradaEn || 0) >= desde))
     .sort((a, b) => b.inicio - a.inicio)
-    .map((f) => ({ f, n: R ? R.consultasExternas.filter((x) => x.t >= f.inicio && x.t <= (f.cerradaEn || s.now)).length : 0 })) : []), [s.fallas, nodo, desde, R, s.now]);
+    .map((f) => {
+      const de = f.nodos.filter((n) => enNodos.has(n)), en = new Set(de);
+      return { f, de, n: R ? R.consultasExternas.filter((x) => (!olt || en.has(x.nodo)) && x.t >= f.inicio && x.t <= (f.cerradaEn || ahora)).length : 0 };
+    }), [s.fallas, enNodos, desde, R, ahora]);
+
+  // Con una OLT: cada nodo, con sus clientes, cuántos consultaron y qué porcentaje son
+  const porNodo = useMemo(() => {
+    if (!olt || !R) return [];
+    const activas = new Set();
+    s.fallas.forEach((f) => { if (f.estado === 'ACTIVA') f.nodos.forEach((n) => activas.add(n)); });
+    const p = (x) => (x.total ? x.clientes / x.total : 0);
+    return nodos.map((code) => {
+      const n = s.cat ? s.cat.nodos.get(code) : null;
+      const x = R.porNodo.get(code) || { consultas: 0, reportes: 0, clientes: 0, ultima: 0 };
+      const muni = n && n.munis.length ? n.munis.reduce((m, y) => (y[1] > m[1] ? y : m))[0] : '';
+      return { code, total: n ? n.total : 0, muni, clientes: x.clientes, consultas: x.consultas, reportes: x.reportes, ultima: x.ultima, activa: activas.has(code) };
+    }).sort((a, b) => b.clientes - a.clientes || p(b) - p(a) || b.consultas - a.consultas || a.code.localeCompare(b.code));
+  }, [olt, R, s.cat, s.fallas, nodos]);
+  const pctMax = porNodo.reduce((m, x) => Math.max(m, x.total ? x.clientes / x.total : 0), 0);
+  const nodosConConsultas = porNodo.filter((x) => x.consultas > 0).length;
 
   // Serie para la gráfica: cada hora de hoy o cada día del periodo
   const serie = useMemo(() => {
@@ -550,35 +607,48 @@ function ReporteNodo({ nodo, per, intento }) {
   }, [R, per, desde, s.now]);
 
   const fecha = (t) => (t ? U.dia(t) + ' ' + U.hora(t).replace(/ /g, ' ') : '');
+  const hoyIso = new Date(s.now).toISOString().slice(0, 10);
   function descargar() {
-    U.descargarCsv('Consultas del nodo ' + nodo + ' ' + new Date(s.now).toISOString().slice(0, 10) + '.csv', [
-      ['Contrato', 'Cliente', 'Colonia', 'Municipio', 'NAP', 'Consultas (' + dePer + ')', 'Primera', 'Última', 'Dónde consultó', 'Consultó estando en falla general', 'Reportó posible falla']
-    ].concat(R.lista.map((c) => [c.contrato, c.nombre ? U.titulo(c.nombre) : '', U.colonia(c.colonia), L(c.municipio || ''), c.nap || '', c.veces, fecha(c.primera), fecha(c.ultima),
-      c.canales.join(' / '), c.conFalla ? 'Sí' : 'No', c.reporte ? 'Sí' : 'No'])));
+    U.descargarCsv((olt ? 'Consultas de la ' + titulo : 'Consultas del nodo ' + nodo) + ' ' + hoyIso + '.csv', [
+      ['Contrato'].concat(olt ? ['Nodo'] : [], ['Cliente', 'Colonia', 'Municipio', 'NAP', 'Consultas (' + dePer + ')', 'Primera', 'Última', 'Dónde consultó', 'Consultó estando en falla general', 'Reportó posible falla'])
+    ].concat(R.lista.map((c) => [c.contrato].concat(olt ? [c.nodo || ''] : [], [c.nombre ? U.titulo(c.nombre) : '', U.colonia(c.colonia), L(c.municipio || ''), c.nap || '', c.veces, fecha(c.primera), fecha(c.ultima),
+      c.canales.join(' / '), c.conFalla ? 'Sí' : 'No', c.reporte ? 'Sí' : 'No']))));
+  }
+  function descargarNodos() {
+    U.descargarCsv('Nodos de la ' + titulo + ' ' + hoyIso + '.csv', [['Nodo', 'Municipio', 'Clientes en la base', 'Clientes que consultaron (' + dePer + ')', '% de sus clientes', 'Consultas', 'Reportes de posible falla', 'Última consulta', 'Falla activa']]
+      .concat(porNodo.map((x) => [x.code, L(x.muni), x.total, x.clientes, x.total ? Math.round((x.clientes / x.total) * 1000) / 10 : '', x.consultas, x.reportes, fecha(x.ultima), x.activa ? 'Sí' : 'No'])));
   }
 
   const lista = R ? (todos ? R.lista : R.lista.slice(0, CLIENTES_A_LA_VISTA)) : [];
-  const pct = R && info && info.total ? Math.round((R.clientes / info.total) * 100) : null;
+  const verNodos = todosNodos ? porNodo : porNodo.slice(0, NODOS_OLT_A_LA_VISTA);
+  const sinServidor = error && (/desconocida/i.test(error.message) || (olt && error.codigo === 'DATOS'));
+  const deLosNodos = (de) => (de.length === nodos.length ? (nodos.length > 1 ? 'todos sus nodos' : '') : de.length > 3 ? de.slice(0, 3).join(', ') + ' y ' + (de.length - 3) + ' más' : U.listaNatural(de));
   return html`<div>
     ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
-        <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
+        <p>${sinServidor ? (olt ? 'Para buscar por OLT, el servidor necesita la versión 3.6.' : 'El servidor todavía no tiene esta función.') + ' Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
         <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setReintento(reintento + 1)}>Intentar de nuevo</button></div></div>`
-      : !R ? html`<div class="panel vacio"><b>Cargando…</b>Buscando las consultas de ${nodo}.</div>` : html`
+      : !R ? html`<div class="panel vacio"><b>Cargando…</b>Buscando las consultas ${olt ? 'de los ' + U.n(nodos.length) + ' nodos de la ' + titulo : 'de ' + nodo}.</div>` : html`
       <section class="panel nodo-cab">
-        <div class="nodo-titulo"><h2 class="codigo">${nodo}</h2>
-          ${info ? html`<span class="tec" data-t=${info.gpon > info.hfc ? 'GPON' : 'HFC'}>${info.gpon > info.hfc ? 'GPON' : 'HFC'}</span>` : ''}
-          <span class="sub">${info ? html`${zona && zona.deps.length ? html`<b>${U.listaNatural(zona.deps.map(L), 2)}</b>${zona.munis.length ? ' · ' + U.listaNatural(zona.munis.map(L), 3) : ''} · ` : ''}${U.plural(info.total, '1 cliente en la base', U.n(info.total) + ' clientes en la base')}`
-            : 'Este nodo no está en la base actual: salen sus consultas, pero no cuántos clientes tiene.'}</span></div>
+        <div class="nodo-titulo"><h2 class="codigo">${titulo}</h2>
+          ${olt ? html`<span class="tec" data-t="GPON">GPON</span>` : info ? html`<span class="tec" data-t=${info.gpon > info.hfc ? 'GPON' : 'HFC'}>${info.gpon > info.hfc ? 'GPON' : 'HFC'}</span>` : ''}
+          <span class="sub">${info ? html`${zona && zona.deps.length ? html`<b>${U.listaNatural(zona.deps.map(L), 2)}</b>${zona.munis.length ? ' · ' + U.listaNatural(zona.munis.map(L), 3) : ''} · ` : ''}${olt ? U.n(nodos.length) + ' nodos · ' : ''}${U.plural(info.total, '1 cliente en la base', U.n(info.total) + ' clientes en la base')}`
+            : 'Este nodo no está en la base actual: salen sus consultas, pero no cuántos clientes tiene.'}</span>
+          ${!olt && info && info.olt && html`<button type="button" class="enlace nodo-olt" onClick=${() => abrir(textoOlt(info.olt))} title="Ver todos los nodos de esta OLT">Ver la OLT ${info.olt.nombre}</button>`}</div>
+        ${olt && html`<div class="sub nodo-olt-codigo">${olt.base}</div>`}
       </section>
       <div class="panel kpis conex-kpis nodo-kpis">
         <div class="kpi"><div class="l">Clientes que consultaron ${dePer}</div><div class="v">${U.n(R.clientes)}</div>
-          <div class="d">${info ? 'de ' + U.n(info.total) + ' clientes del nodo' + (pct !== null ? ' (' + pct + ' %)' : '') : 'clientes distintos'}</div></div>
+          <div class="d">${info ? 'de ' + U.n(info.total) + (olt ? ' clientes de sus ' + U.n(nodos.length) + ' nodos' : ' clientes del nodo') : 'clientes distintos'}</div></div>
+        <div class="kpi kpi-pct"><div class="l">Representan</div><div class="v">${info && info.total ? U.pctTxt(R.clientes, info.total) : '—'}</div>
+          <div class="d">${info ? 'de los clientes ' + delQue : 'sin el total de clientes en la base'}</div></div>
         <div class="kpi"><div class="l">Consultas</div><div class="v">${U.n(R.consultas)}</div>
-          <div class="d">${R.conFalla ? U.n(R.conFalla) + ' estando en falla general' : 'de call center, redes sociales y tiendas'}</div></div>
-        <div class="kpi"><div class="l">Reportes de posible falla</div><div class="v">${U.n(R.reportes)}</div><div class="d">que mandaron los asesores</div></div>
+          <div class="d">${R.conFalla ? U.n(R.conFalla) + ' (' + U.pctTxt(R.conFalla, R.consultas) + ') estando en falla general' : 'de call center, redes sociales y tiendas'}</div></div>
+        ${olt ? html`<div class="kpi"><div class="l">Nodos con consultas</div><div class="v">${U.n(nodosConConsultas)} <small>de ${U.n(nodos.length)}</small></div>
+            <div class="d">${U.plural(R.reportes, '1 reporte de posible falla', U.n(R.reportes) + ' reportes de posible falla')}</div></div>`
+          : html`<div class="kpi"><div class="l">Reportes de posible falla</div><div class="v">${U.n(R.reportes)}</div><div class="d">que mandaron los asesores</div></div>`}
         <div class="kpi"><div class="l">Búsquedas internas</div><div class="v">${U.n(R.totalInternas)}</div><div class="d">de Workforce, Jefatura y supervisores</div></div>
       </div>
-      ${datos.recortado && html`<div class="nota" style="margin-top:12px"><${Ico} n="info" s=${18} /><span>El nodo tiene muchísimas consultas en este periodo: se cuentan las ${U.n(datos.filas.length)} más recientes. Elige un periodo más corto para verlas todas.</span></div>`}
+      ${datos.recortado && html`<div class="nota" style="margin-top:12px"><${Ico} n="info" s=${18} /><span>${olt ? 'La OLT' : 'El nodo'} tiene muchísimas consultas en este periodo: se cuentan las ${U.n(datos.filas.length)} más recientes. Elige un periodo más corto para verlas todas.</span></div>`}
       <div class="stats-grid">
         <section class="panel c-7"><div class="panel-cab"><h3>${per === 'hoy' ? 'Consultas por hora' : 'Consultas por día'}</h3></div>
           <div class="panel-cuerpo">${R.consultas ? html`<${GraficaConsultas} serie=${serie} porHora=${per === 'hoy'} />` : html`<div class="vacio">Sin consultas de clientes ${dePer}.</div>`}</div></section>
@@ -586,27 +656,40 @@ function ReporteNodo({ nodo, per, intento }) {
           <div class="panel-cuerpo">
             ${R.canales.length ? R.canales.map((k) => html`<div key=${k.canal}><${HBar} etiqueta=${k.canal} valor=${k.consultas} max=${R.canales[0].consultas} />
               <div class="sub nodo-canal-cli">${U.plural(k.clientes, '1 cliente', U.n(k.clientes) + ' clientes')}</div></div>`)
-              : html`<div class="vacio">Ningún asesor consultó este nodo ${dePer}.</div>`}
+              : html`<div class="vacio">Ningún asesor consultó ${olt ? 'esta OLT' : 'este nodo'} ${dePer}.</div>`}
             ${R.tiendas.length > 0 && html`<h4 class="nodo-sub">Tiendas</h4>${R.tiendas.slice(0, 8).map(([t, n]) => html`<${HBar} etiqueta=${t} valor=${n} max=${R.tiendas[0][1]} key=${t} color="var(--chart-rest)" />`)}`}
             ${R.totalInternas > 0 && html`<div class="sub" style="margin-top:12px">Búsquedas internas: ${R.internas.map(([a, n]) => (a === 'Supervisor' ? 'supervisores' : a) + ' ' + U.n(n)).join(', ')}.</div>`}
           </div></section>
-        <section class="panel c-12"><div class="panel-cab"><div><h3>Fallas del nodo ${dePer}</h3><div class="sub">Con cuántas consultas hubo mientras duraron</div></div></div>
-          <div class="panel-cuerpo">${fallas.length ? html`<ul class="nodo-fallas">${fallas.map(({ f, n }) => html`<li key=${f.id} data-s=${f.estado}>
+        ${olt && html`<section class="panel c-12"><div class="panel-cab conex-cab nodo-tabla-cab olt-nodos-cab"><div><h3>Sus nodos</h3><div class="sub">Cuántos clientes de cada nodo consultaron ${dePer} y qué porcentaje son de sus clientes</div></div>
+            <button class="btn btn-borde btn-chico" style="margin-left:auto" onClick=${descargarNodos}><${Ico} n="descargar" s=${15} />Descargar CSV</button></div>
+          <div class="panel-cuerpo tabla-envoltura"><table class="tabla olt-nodos"><thead><tr><th>Nodo</th><th class="der">Clientes</th><th class="der">Consultaron</th><th class="olt-pct">% de sus clientes</th><th class="der">Consultas</th><th>Última</th></tr></thead>
+            <tbody>${verNodos.map((x) => html`<tr key=${x.code}>
+              <td><button type="button" class="enlace codigo" onClick=${() => abrir(x.code)} title="Ver el reporte de este nodo">${x.code}</button>${x.activa ? html` <span class="marca-estado" data-s="FALLA">En falla</span>` : ''}<div class="sub">${L(x.muni)}</div></td>
+              <td class="der num">${U.n(x.total)}</td>
+              <td class="der num"><b class="fuerte">${U.n(x.clientes)}</b></td>
+              <td class="olt-pct"><span class="num">${x.total ? U.pctTxt(x.clientes, x.total) : '—'}</span><span class="olt-barra" aria-hidden="true"><i style=${'width:' + (pctMax && x.total ? Math.max(x.clientes ? 3 : 0, Math.round((x.clientes / x.total / pctMax) * 100)) : 0) + '%'}></i></span></td>
+              <td class="der num">${U.n(x.consultas)}${x.reportes ? html`<div class="sub">${U.plural(x.reportes, '1 reporte', x.reportes + ' reportes')}</div>` : ''}</td>
+              <td>${x.ultima ? U.cuandoCorto(x.ultima, s.now) : html`<span class="sub">Sin consultas</span>`}</td></tr>`)}</tbody></table>
+            ${porNodo.length > NODOS_OLT_A_LA_VISTA && html`<button class="ver-tabla" onClick=${() => setTodosNodos(!todosNodos)}>${todosNodos ? 'Ver menos' : 'Ver los ' + U.n(porNodo.length) + ' nodos'}</button>`}
+          </div></section>`}
+        <section class="panel c-12"><div class="panel-cab"><div><h3>${olt ? 'Fallas en sus nodos' : 'Fallas del nodo'} ${dePer}</h3><div class="sub">Con cuántas consultas hubo mientras duraron${olt ? ' (de los nodos afectados)' : ''}</div></div></div>
+          <div class="panel-cuerpo">${fallas.length ? html`<ul class="nodo-fallas">${fallas.map(({ f, de, n }) => html`<li key=${f.id} data-s=${f.estado}>
               <b>${U.numeroFalla(f)}</b><span>${nombreMotivo(f)}</span>
-              <span class="sub">Desde ${U.cuandoCorto(f.inicio, s.now)}${f.estado === 'ACTIVA' ? ', activa' : f.cerradaEn ? ' hasta ' + U.cuandoCorto(f.cerradaEn, s.now) : ''}</span>
+              <span class="sub">Desde ${U.cuandoCorto(f.inicio, s.now)}${f.estado === 'ACTIVA' ? ', activa' : f.cerradaEn ? ' hasta ' + U.cuandoCorto(f.cerradaEn, s.now) : ''}${olt && deLosNodos(de) ? ' · ' + deLosNodos(de) : ''}</span>
               <span class="num">${U.plural(n, '1 consulta', U.n(n) + ' consultas')}</span></li>`)}</ul>`
-            : html`<div class="vacio">${nodo} no tuvo fallas publicadas ${dePer}.</div>`}</div></section>
+            : html`<div class="vacio">${olt ? 'Sus nodos no tuvieron' : nodo + ' no tuvo'} fallas publicadas ${dePer}.</div>`}</div></section>
         <section class="panel c-12"><div class="panel-cab conex-cab nodo-tabla-cab"><div><h3>Clientes que consultaron</h3><div class="sub">Los que más consultaron primero</div></div>
             <button class="btn btn-borde btn-chico" style="margin-left:auto" disabled=${!R.lista.length} onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button></div>
-          <div class="panel-cuerpo tabla-envoltura">${R.lista.length ? html`<table class="tabla nodo-tabla"><thead><tr><th>Contrato</th><th>Cliente</th><th class="der">Consultas</th><th>Última</th><th>Dónde</th></tr></thead>
+          <div class="panel-cuerpo tabla-envoltura">${R.lista.length ? html`<table class="tabla nodo-tabla"><thead><tr><th>Contrato</th>${olt && html`<th>Nodo</th>`}<th>Cliente</th><th class="der">Consultas</th><th>Última</th><th>Dónde</th></tr></thead>
             <tbody>${lista.map((c) => html`<tr key=${c.contrato}>
               <td class="codigo">${c.contrato}</td>
+              ${olt && html`<td class="codigo">${c.nodo || ''}</td>`}
               <td><b class="fuerte">${c.nombre ? U.titulo(c.nombre) : 'Sin dato'}</b><div class="sub">${[U.colonia(c.colonia), L(c.municipio || '')].filter(Boolean).join(', ')}</div></td>
               <td class="der num">${U.n(c.veces)}${c.reporte ? html`<div class="sub">reportó</div>` : ''}</td>
               <td>${U.cuandoCorto(c.ultima, s.now)}${c.conFalla ? html`<div class="sub">en falla general</div>` : ''}</td>
               <td>${c.canales.join(', ')}</td></tr>`)}</tbody></table>
             ${R.lista.length > CLIENTES_A_LA_VISTA && html`<button class="ver-tabla" onClick=${() => setTodos(!todos)}>${todos ? 'Ver menos' : 'Ver los ' + U.n(R.lista.length) + ' clientes'}</button>`}`
-            : html`<div class="vacio">Ningún cliente de ${nodo} consultó ${dePer}.</div>`}</div></section>
+            : html`<div class="vacio">Ningún cliente de ${titulo} consultó ${dePer}.</div>`}</div></section>
       </div>`}
   </div>`;
 }

@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.5',                // se ve en la pestaña INICIO
+  VERSION: '3.6',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -37,6 +37,8 @@ const ALERTAS = {
   DIAS_DETALLE: 30,              // días de detalle de cada consulta (quién consultó qué)
   MAX_FILAS_DETALLE: 600000,     // tope de filas de detalle: el archivo admite 10 millones de celdas
   MAX_CONSULTAS_NODO: 3000,      // consultas de un nodo que lee el reporte Consultas por nodo (las más recientes)
+  MAX_CONSULTAS_OLT: 6000,       // y de todos los nodos de una OLT juntos
+  MAX_NODOS_REPORTE: 80,         // nodos de un mismo reporte (una OLT trae unas decenas)
   DIAS_RESUMEN: 120,             // días de resumen diario para las estadísticas
   DIAS_ESTADISTICAS: 90,         // periodo más largo que muestra Estadísticas
   DIAS_FALLAS_CARGA: 120,        // historial de fallas que recibe Workforce al entrar
@@ -560,32 +562,50 @@ function accionConexiones_(d) {
    teléfonos: [fecha, acceso, tienda, tipo, contrato, resultado]. La página las cuenta (cuántos clientes
    distintos, por qué canal y cuándo). Con los datos de los clientes que más consultaron, para la tabla.
    Busca el nodo en la columna Nodo del periodo y lee solo esas filas (las cercanas, de una vez). */
+/* Reportes › Nodo o cliente: las consultas de los asesores de un nodo, o de varios a la vez (los nodos GPON de
+   una OLT, que manda la página desde su catálogo). Cada fila lleva su nodo. */
 function accionConsultasNodo_(d) {
-  const nodo = String(d.nodo || '').trim().toUpperCase();
-  if (!/^[A-Z0-9][A-Z0-9 _.\-]{0,39}$/.test(nodo)) throw fallo_('DATOS', 'Escribe el código del nodo, por ejemplo GRA01.');
+  const lista = Array.isArray(d.nodos) && d.nodos.length ? d.nodos : [d.nodo];
+  const nodos = [];
+  lista.forEach((x) => { const n = String(x || '').trim().toUpperCase(); if (n && nodos.indexOf(n) < 0) nodos.push(n); });
+  if (!nodos.length || !nodos.every((n) => /^[A-Z0-9][A-Z0-9 _.\-]{0,39}$/.test(n))) throw fallo_('DATOS', 'Escribe el código del nodo, por ejemplo GRA01.');
+  if (nodos.length > ALERTAS.MAX_NODOS_REPORTE) throw fallo_('DATOS', 'Son demasiados nodos para un solo reporte (el tope es ' + ALERTAS.MAX_NODOS_REPORTE + ').');
+  const varios = nodos.length > 1, deEstos = {};
+  nodos.forEach((n) => { deEstos[n] = true; });
   const ahora = Date.now(), reloj = reloj_(), DIA = 86400000;
   const hoy = reloj.inicio(ahora);
   const desde = Math.max(reloj.inicio(Number(d.desde) || hoy), hoy - (ALERTAS.DIAS_DETALLE - 1) * DIA);
-  const clave = 'nodo:' + nodo + ':' + desde;
+  const clave = 'nodo:' + (varios ? nodos.length + ':' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, nodos.slice().sort().join(','))).slice(0, 24) : nodos[0]) + ':' + desde;
   const hit = cache_().get(clave);
   if (hit) return JSON.parse(hit);
 
   const h = hojaConsultas_(), ult = h ? h.getLastRow() : 0;
-  const filas = [];
+  const filas = [], tope = varios ? ALERTAS.MAX_CONSULTAS_OLT : ALERTAS.MAX_CONSULTAS_NODO;
   let recortado = false;
   if (ult >= 2) {
     const a = filaDesde_(h, desde, ult);
     if (a <= ult) {
-      let nums = h.getRange(a, 8, ult - a + 1, 1).createTextFinder(nodo).matchEntireCell(true).findAll()
-        .map((r) => r.getRow()).sort((x, y) => x - y);
-      if (nums.length > ALERTAS.MAX_CONSULTAS_NODO) { nums = nums.slice(-ALERTAS.MAX_CONSULTAS_NODO); recortado = true; }
+      const rango = h.getRange(a, 8, ult - a + 1, 1);
+      let celdas;
+      if (!varios) celdas = rango.createTextFinder(nodos[0]).matchEntireCell(true).findAll();
+      else {
+        try {
+          celdas = rango.createTextFinder('^(' + nodos.map((n) => n.replace(/\./g, '\\.')).join('|') + ')$').useRegularExpression(true).matchEntireCell(true).findAll();
+        } catch (e) {
+          celdas = [];
+          nodos.forEach((n) => { celdas = celdas.concat(rango.createTextFinder(n).matchEntireCell(true).findAll()); });
+        }
+      }
+      let nums = celdas.map((r) => r.getRow()).sort((x, y) => x - y);
+      if (nums.length > tope) { nums = nums.slice(-tope); recortado = true; }
       const quiero = {};
       nums.forEach((f) => { quiero[f] = true; });
       const tramos = [];
       nums.forEach((f) => { const t = tramos[tramos.length - 1]; if (t && f - t[1] <= 50) t[1] = f; else tramos.push([f, f]); });
       tramos.forEach((t) => h.getRange(t[0], 1, t[1] - t[0] + 1, COL_CONSULTAS.length).getValues().forEach((v, i) => {
-        if (!quiero[t[0] + i] || String(v[7]).toUpperCase() !== nodo) return;
-        filas.push([fechaMs_(v[0]), String(v[3] || ''), String(v[4] || ''), String(v[5] || ''), String(v[6] || ''), String(v[8] || '')]);
+        const nodo = String(v[7]).toUpperCase();
+        if (!quiero[t[0] + i] || !deEstos[nodo]) return;
+        filas.push([fechaMs_(v[0]), String(v[3] || ''), String(v[4] || ''), String(v[5] || ''), String(v[6] || ''), String(v[8] || ''), nodo]);
       }));
     }
   }
@@ -594,12 +614,12 @@ function accionConsultasNodo_(d) {
   const veces = {};
   filas.forEach((f) => { if (f[4] && !ACCESOS_INTERNOS_[f[1]]) veces[f[4]] = (veces[f[4]] || 0) + 1; });
   const top = Object.keys(veces).sort((x, y) => veces[y] - veces[x]).slice(0, 300);
-  const datos = datosDeContratos_(top, nodo), clientes = {};
+  const datos = datosDeContratos_(top, varios ? deEstos : nodos[0]), clientes = {};
   Object.keys(datos).forEach((c) => {
     const b = datos[c];
     clientes[c] = { nombre: b.nombre || '', colonia: b.colonia || '', municipio: b.municipio || '', nap: b.nap || '', categoria: b.categoria || '' };
   });
-  const res = { nodo: nodo, desde: desde, ahora: ahora, recortado: recortado, filas: filas, clientes: clientes };
+  const res = { nodo: varios ? '' : nodos[0], nodos: nodos, desde: desde, ahora: ahora, recortado: recortado, filas: filas, clientes: clientes };
   const txt = JSON.stringify(res);
   if (txt.length < 95000) cache_().put(clave, txt, 60);
   return res;
@@ -2606,9 +2626,10 @@ function detallePosibleFalla_(nodo) {
   };
 }
 /* Datos de varios contratos con una sola búsqueda en la base. Si un contrato tiene varios
-   servicios, se queda con el del nodo de la posible falla. */
+   servicios, se queda con el del nodo de la posible falla (nodo: un código, o { código: true } con varios). */
 function datosDeContratos_(contratos, nodo) {
   const out = {};
+  const esDe = typeof nodo === 'object' && nodo ? (n) => nodo[n] === true : (n) => n === nodo;
   const lista = contratos.filter((c) => /^\d{1,12}$/.test(c));
   if (!lista.length) return out;
   const h = libro_().getSheetByName(ALERTAS.HOJAS.base);
@@ -2634,7 +2655,7 @@ function datosDeContratos_(contratos, nodo) {
       const reg = registro_(cols, v), c = String(reg.contrato).replace(/\D+/g, '');
       if (lista.indexOf(c) < 0) return;
       const prev = out[c];
-      if (!prev || (prev.nodo !== nodo && reg.nodo === nodo)) out[c] = reg;
+      if (!prev || (!esDe(prev.nodo) && esDe(reg.nodo))) out[c] = reg;
     });
   });
   return out;

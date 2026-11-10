@@ -323,21 +323,23 @@ function BackendLocal() {
       });
       return { personas: Object.values(personas), desde, ahora: Date.now() };
     },
-    /* Consultas por nodo en la demostración: las de esta PC, igual que las devuelve el servidor */
-    async consultasNodo({ nodo, desde }) {
-      const n = String(nodo || '').trim().toUpperCase();
-      if (!n) throw errorAlertas('DATOS', 'Escribe el código del nodo, por ejemplo GRA01.');
+    /* Consultas por nodo en la demostración: las de esta PC, igual que las devuelve el servidor (un nodo, o
+       varios a la vez: los de una OLT) */
+    async consultasNodo({ nodo, nodos, desde }) {
+      const lista = [...new Set((Array.isArray(nodos) && nodos.length ? nodos : [nodo]).map((x) => String(x || '').trim().toUpperCase()).filter(Boolean))];
+      if (!lista.length) throw errorAlertas('DATOS', 'Escribe el código del nodo, por ejemplo GRA01.');
+      const de = new Set(lista);
       const c = await indice();
-      const logs = (await Store.leerLogs(desde)).filter((l) => String(l.n || '').toUpperCase() === n).sort((a, b) => a.t - b.t);
-      const filas = logs.map((l) => [l.t, l.canal, l.tienda || '', l.tipo === 'reporte' ? 'reporte' : (l.q || 'contrato'), l.c ? String(l.c) : '', l.r || '']);
+      const logs = (await Store.leerLogs(desde)).filter((l) => de.has(String(l.n || '').toUpperCase())).sort((a, b) => a.t - b.t);
+      const filas = logs.map((l) => [l.t, l.canal, l.tienda || '', l.tipo === 'reporte' ? 'reporte' : (l.q || 'contrato'), l.c ? String(l.c) : '', l.r || '', String(l.n).toUpperCase()]);
       const clientes = {};
       [...new Set(logs.filter((l) => l.c && !Model.esInterno(l.canal)).map((l) => String(l.c)))].slice(0, 300).forEach((k) => {
         const b = c.ix ? Model.buscar(c.ix, k) : null;
         const regs = b && b.filas ? b.filas.map((i) => Model.registro(c.ix, i)) : [];
-        const x = regs.find((y) => y.nodo === n) || regs[0];
+        const x = regs.find((y) => de.has(y.nodo)) || regs[0];
         if (x) clientes[k] = { nombre: x.nombre, colonia: x.colonia, municipio: x.municipio, nap: x.nap, categoria: x.categoria };
       });
-      return { nodo: n, desde, ahora: Date.now(), recortado: false, filas, clientes };
+      return { nodo: lista.length > 1 ? '' : lista[0], nodos: lista, desde, ahora: Date.now(), recortado: false, filas, clientes };
     },
     salir() { ses = null; guardarSesionEn(CLAVE, null); },
 

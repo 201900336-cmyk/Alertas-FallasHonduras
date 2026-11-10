@@ -497,6 +497,39 @@ with sync_playwright() as p:
     ok(crudo[0].startswith('Contrato,Cliente,Colonia,Municipio,NAP,Consultas') and any(l.startswith(contratosPF[0] + ',') for l in crudo)
        and not any(re.search(r'504\d{8}', l) for l in crudo), 'Descargar CSV: ' + dl.value.suggested_filename + ', sin teléfonos', crudo[:2])
     x.screenshot(path=OUT + 'e07a_consultas_nodo.png', full_page=True)
+    # Una OLT: todos sus nodos GPON juntos, con el % de sus clientes que consultó y cómo va cada nodo
+    olt = x.evaluate("""(ns) => { for (const n of ns) { const o = G.s.cat.olts.find((y) => y.nodos.includes(n)); if (o) return { nombre: o.nombre, base: o.base, nodos: o.nodos, nodo: n,
+        total: o.nodos.reduce((a, c) => a + G.s.cat.nodos.get(c).total, 0) }; } return null; }""", [nodoPF, nodoPF2] + ejemplos)
+    if not olt:
+        print('  (sin OLT entre los nodos consultados: no se prueba la búsqueda por OLT)')
+    else:
+        x.fill('.nodo-buscar input', 'olt ' + olt['nombre'].lower()); x.click('.nodo-barra button[type=submit]')
+        x.wait_for_selector('.olt-nodos', timeout=30000); x.wait_for_timeout(300)
+        kp = x.locator('.nodo-kpis .kpi').all_inner_texts()
+        n_olt = int(re.sub(r'\D', '', x.locator('.nodo-kpis .kpi .v').first.inner_text()))
+        pct = x.evaluate("([a, b]) => U.pctTxt(a, b)", [n_olt, olt['total']])
+        filas_n = x.locator('.olt-nodos tbody tr').count()
+        ok(x.locator('.nodo-cab h2').inner_text() == 'OLT ' + olt['nombre'] and olt['base'] in x.locator('.nodo-cab').inner_text()
+           and f"de {olt['total']} clientes de sus {len(olt['nodos'])} nodos" in kp[0].replace(',', '') and kp[1].split('\n')[1] == pct
+           and filas_n == min(15, len(olt['nodos'])) and n_olt >= 1,
+           f"OLT {olt['nombre']}: {n_olt} de {olt['total']} clientes de sus {len(olt['nodos'])} nodos consultaron, el {pct}", kp[:2])
+        fila = x.locator('.olt-nodos tbody tr', has=x.locator(f"button:text-is('{olt['nodo']}')"))
+        cons_olt = int(re.sub(r'\D', '', fila.locator('td').nth(2).inner_text())) if fila.count() else -1
+        with x.expect_download() as dl: x.click('.olt-nodos-cab button:has-text("Descargar CSV")')
+        crudo = [l for l in open(dl.value.path(), 'rb').read().decode('utf-8-sig').split('\r\n') if l]
+        ok(crudo[0].startswith('Nodo,Municipio,Clientes en la base,Clientes que consultaron') and len(crudo) == len(olt['nodos']) + 1 and any(l.startswith(olt['nodo'] + ',') for l in crudo),
+           'Descargar CSV de sus nodos: ' + dl.value.suggested_filename + ', uno por fila', crudo[:2])
+        fila.locator('button.enlace').click(); x.wait_for_selector('.nodo-olt', timeout=30000); x.wait_for_timeout(300)
+        cons_nodo = int(re.sub(r'\D', '', x.locator('.nodo-kpis .kpi .v').first.inner_text()))
+        ok(x.locator('.nodo-buscar input').input_value() == olt['nodo'] and cons_nodo == cons_olt and cons_nodo >= 1,
+           f"desde la tabla se abre el nodo {olt['nodo']}, con los mismos {cons_nodo} clientes que dice la OLT", [cons_olt, cons_nodo])
+        x.click('.nodo-olt'); x.wait_for_selector('.olt-nodos', timeout=30000)
+        ok(x.locator('.nodo-buscar input').input_value() == 'OLT ' + x.evaluate("(t) => U.sinAcentos(t).toUpperCase()", olt['nombre']), 'y del nodo se vuelve a su OLT')
+        x.fill('.nodo-buscar input', 'M00'); x.click('.nodo-barra button[type=submit]'); x.wait_for_selector('.olt-opciones', timeout=10000)
+        n_ops = x.locator('.olt-lista button').count()
+        ok(n_ops >= 2 and '¿Cuál OLT?' in x.locator('.olt-opciones').inner_text(), f'si el texto está en varias OLT, se dan a elegir ({n_ops})')
+        x.screenshot(path=OUT + 'e07a2_olt.png', full_page=True)
+        x.fill('.nodo-buscar input', nodoPF.lower()); x.click('.nodo-barra button[type=submit]'); x.wait_for_selector('.nodo-kpis', timeout=30000)
     # El mismo buscador con un contrato: el cliente sin el guion, con todas las fallas de su nodo (un año) y sus llamadas
     x.fill('.nodo-buscar input', contratosPF[0]); x.click('.nodo-barra button[type=submit]')
     x.wait_for_selector('.reporte-cliente .historial-cliente', timeout=30000); x.wait_for_timeout(800)

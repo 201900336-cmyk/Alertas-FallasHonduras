@@ -336,6 +336,22 @@ const Model = (() => {
     }
     return oltOut.slice(0, 3).concat(out.slice(0, max));
   }
+  /* Una OLT por lo que se escriba en Reportes: su nombre ("Ventu", "OLT Ventu", "Danli 03" o "DANLI03") o su código
+     (M00_..._OLT_VENTU). Si no es exacto y el texto está en el nombre de varias, se dan a elegir. */
+  function buscarOlt(cat, q) {
+    if (!cat || !cat.olts) return null;
+    const norm = (x) => U.sinAcentos(String(x || '')).toUpperCase().replace(/[_\s]+/g, ' ').trim();
+    const pegado = (x) => x.replace(/ /g, '');
+    let k = norm(q);
+    if (/^OLT /.test(k) && k.length > 5) k = k.slice(4);
+    if (k.length < 3) return null;
+    const exacta = cat.olts.find((o) => { const n = norm(o.nombre), b = norm(o.base); return k === n || k === b || pegado(k) === pegado(n) || pegado(k) === pegado(b); });
+    if (exacta) return { olt: exacta };
+    const parecidas = cat.olts.filter((o) => pegado(norm(o.nombre)).includes(pegado(k)) || pegado(norm(o.base)).includes(pegado(k)))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    if (parecidas.length === 1) return { olt: parecidas[0] };
+    return parecidas.length ? { opciones: parecidas.slice(0, 12), mas: Math.max(0, parecidas.length - 12) } : null;
+  }
 
   /* ---------- Filas para subir la base al servidor ---------- */
   const COLUMNAS = ['CONTRATO', 'PRODUCT_ID', 'GRUPO_NODO', 'OLT', 'NAP', 'CATEGORIA_CLIENTE', 'FECHA_INICIO', 'TECNOLOGIA', 'PLAY',
@@ -610,37 +626,46 @@ const Model = (() => {
   const CANAL_CC = 'Call center y redes sociales';
   function resumenNodo(r) {
     const porCliente = new Map(), canales = new Map(), tiendas = new Map(), internas = new Map();
+    // Con varios nodos (una OLT), cada consulta trae su nodo (servidor 3.6): lo de cada nodo va en porNodo
+    const porNodo = new Map();
+    const delNodo = (n) => { let x = porNodo.get(n); if (!x) porNodo.set(n, (x = { nodo: n, consultas: 0, reportes: 0, clientes: 0, contratos: new Set(), ultima: 0 })); return x; };
     let consultas = 0, conFalla = 0, reportes = 0;
     const consultasExternas = [];
-    for (const [t, acceso, tienda, tipo, contrato, res] of (r && r.filas) || []) {
+    for (const [t, acceso, tienda, tipo, contrato, res, nodoFila] of (r && r.filas) || []) {
       if (esInterno(acceso)) { internas.set(acceso, (internas.get(acceso) || 0) + 1); continue; }
+      const nodo = nodoFila || (r && r.nodo) || '';
       const canal = acceso === CONFIG.roles.tiendas.canal ? 'Tiendas' : CANAL_CC;
       const reporte = tipo === 'reporte';
+      const xn = nodo ? delNodo(nodo) : null;
       let k = canales.get(canal);
       if (!k) canales.set(canal, (k = { canal, consultas: 0, clientes: new Set() }));
-      if (reporte) reportes++;
+      if (reporte) { reportes++; if (xn) xn.reportes++; }
       else {
         consultas++; k.consultas++;
         if (res === 'FALLA') conFalla++;
-        consultasExternas.push({ t, falla: res === 'FALLA' });
+        consultasExternas.push({ t, falla: res === 'FALLA', nodo });
         if (canal === 'Tiendas') tiendas.set(tienda || 'Sin tienda', (tiendas.get(tienda || 'Sin tienda') || 0) + 1);
+        if (xn) { xn.consultas++; xn.ultima = Math.max(xn.ultima, t); }
       }
       if (!contrato) continue;
       k.clientes.add(contrato);
+      if (xn) xn.contratos.add(contrato);
       let c = porCliente.get(contrato);
-      if (!c) porCliente.set(contrato, (c = { contrato, veces: 0, primera: t, ultima: t, canales: [], conFalla: false, reporte: false }));
+      if (!c) porCliente.set(contrato, (c = { contrato, veces: 0, primera: t, ultima: t, canales: [], conFalla: false, reporte: false, nodo }));
       if (!reporte) c.veces++;
-      c.primera = Math.min(c.primera, t); c.ultima = Math.max(c.ultima, t);
+      c.primera = Math.min(c.primera, t);
+      if (t >= c.ultima) { c.ultima = t; if (nodo) c.nodo = nodo; }
       const donde = canal === 'Tiendas' ? (tienda || 'Tiendas') : CANAL_CC;
       if (!c.canales.includes(donde)) c.canales.push(donde);
       if (res === 'FALLA') c.conFalla = true;
       if (reporte) c.reporte = true;
     }
+    porNodo.forEach((x) => { x.clientes = x.contratos.size; delete x.contratos; });
     const datos = (r && r.clientes) || {};
     const lista = [...porCliente.values()].map((c) => Object.assign(c, datos[c.contrato] || {}))
       .sort((a, b) => b.veces - a.veces || b.ultima - a.ultima);
     return {
-      consultas, conFalla, reportes, clientes: porCliente.size, lista, consultasExternas,
+      consultas, conFalla, reportes, clientes: porCliente.size, lista, consultasExternas, porNodo,
       canales: [...canales.values()].map((k) => ({ canal: k.canal, consultas: k.consultas, clientes: k.clientes.size })).sort((a, b) => b.consultas - a.consultas),
       tiendas: [...tiendas.entries()].sort((a, b) => b[1] - a[1]),
       internas: [...internas.entries()].sort((a, b) => b[1] - a[1]), totalInternas: [...internas.values()].reduce((a, n) => a + n, 0)
@@ -870,6 +895,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
     dniNormal, diasAIso, isoADias };
 })();
