@@ -26,14 +26,26 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.6',                // se ve en la pestaña INICIO
+  VERSION: '3.7',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
-  LIMITE_CONSULTAS_HORA: 400,    // por persona
-  LIMITE_TIENDAS_HORA: 8000,     // para toda la cuenta compartida de Tiendas (unas 200 personas)
+  // Topes de consultas (3.7): un asesor atiende unas 10 a 15 por hora; con esto nadie saca la base de a poco.
+  // Si a alguien de verdad no le alcanza, se sube el número aquí y se publica una versión nueva.
+  LIMITE_CONSULTAS_HORA: 400,    // por persona de Workforce HN y Jefatura (revisan nodos y reportes)
+  LIMITE_ASESOR_HORA: 60,        // por asesor (Concentrix, supervisores y cada persona de Tiendas)
+  LIMITE_ASESOR_DIA: 300,        // y por día
+  // En Tiendas el nombre lo escribe la persona (se puede inventar otro): por eso también hay tope por tienda y
+  // para toda la cuenta compartida (unas 200 personas en 38 tiendas)
+  LIMITE_TIENDA_HORA: 200,       // por tienda
+  LIMITE_TIENDAS_HORA: 2000,     // toda la cuenta, por hora
+  LIMITE_TIENDAS_DIA: 15000,     // toda la cuenta, por día
   INTENTOS_PERSONA: 5,           // contraseñas equivocadas de una misma persona antes de bloquearla 15 minutos
   INTENTOS_CUENTA_TIENDAS: 100,  // de todas las personas juntas, antes de bloquear la cuenta de Tiendas 15 minutos
+  // Cambiando el nombre se salta el bloqueo por persona, y el servidor no ve desde qué PC llega cada intento.
+  // Lo que sí se puede es contar los intentos de todos: pasados 300 en el día, alguien está probando contraseñas
+  // y la cuenta se bloquea 1 hora cada 20 intentos más (unas 700 pruebas al día como mucho, en vez de 9,600).
+  INTENTOS_DIA_TIENDAS: 300, INTENTOS_BAJO_ATAQUE: 20, MINUTOS_BAJO_ATAQUE: 60,
   DIAS_DETALLE: 30,              // días de detalle de cada consulta (quién consultó qué)
   MAX_FILAS_DETALLE: 600000,     // tope de filas de detalle: el archivo admite 10 millones de celdas
   MAX_CONSULTAS_NODO: 3000,      // consultas de un nodo que lee el reporte Consultas por nodo (las más recientes)
@@ -418,13 +430,20 @@ function loginClave_(d) {
   const cache = cache_();
   const kp = 'fallidos:' + usuario + ':' + nombre.toLowerCase() + '@' + normTienda_(tienda);
   const kc = 'fallidos-cuenta:' + usuario;
+  const kd = 'fallidos-dia:' + usuario + ':' + Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyyMMdd'), kb = 'bloqueo-cuenta:' + usuario;
   const topeCuenta = ALERTAS.INTENTOS_CUENTA_TIENDAS;
-  const malosCuenta = Number(cache.get(kc) || 0), malosPersona = Number(cache.get(kp) || 0);
+  const malosCuenta = Number(cache.get(kc) || 0), malosPersona = Number(cache.get(kp) || 0), malosDia = Number(cache.get(kd) || 0);
+  if (cache.get(kb)) throw fallo_('LIMITE', 'Hay demasiados intentos fallidos con esta cuenta. Espera una hora o avisa a Workforce HN.');
   if (malosCuenta >= topeCuenta) throw fallo_('LIMITE', 'Hay demasiados intentos fallidos con esta cuenta. Espera 15 minutos o avisa a Workforce HN.');
   if (malosPersona >= ALERTAS.INTENTOS_PERSONA) throw fallo_('LIMITE', 'Demasiados intentos fallidos. Espera 15 minutos.');
   if (!c || !verificarClave_(clave, c)) {
     cache.put(kp, String(malosPersona + 1), 900);
     cache.put(kc, String(malosCuenta + 1), 900);
+    cache.put(kd, String(malosDia + 1), 21600);
+    if (malosDia + 1 > ALERTAS.INTENTOS_DIA_TIENDAS && (malosDia + 1 - ALERTAS.INTENTOS_DIA_TIENDAS) % ALERTAS.INTENTOS_BAJO_ATAQUE === 0) {
+      cache.put(kb, '1', ALERTAS.MINUTOS_BAJO_ATAQUE * 60);
+      console.warn('Cuenta ' + usuario + ' bloqueada ' + ALERTAS.MINUTOS_BAJO_ATAQUE + ' min: ' + (malosDia + 1) + ' contraseñas equivocadas hoy');
+    }
     Utilities.sleep(500);
     throw fallo_('ACCESO', 'Usuario o contraseña incorrectos.');
   }
@@ -701,18 +720,20 @@ function iguales_(a, b) {
 }
 
 function limitar_(ses) {
-  const hora = Math.floor(Date.now() / 3600000);
+  const hora = Math.floor(Date.now() / 3600000), dia = Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyyMMdd');
   const c = cache_();
-  const k = 'limite:' + ses.u + ':' + hora;
-  const n = Number(c.get(k) || 0) + 1;
-  if (n > ALERTAS.LIMITE_CONSULTAS_HORA) throw fallo_('LIMITE', 'Llegaste al límite de ' + ALERTAS.LIMITE_CONSULTAS_HORA + ' consultas por hora.');
-  c.put(k, String(n), 3700);
-  if (ses.o === 'clave' && ses.r === 'tiendas') {
-    const kc = 'limite-cuenta:' + ses.a + ':' + hora;
-    const m = Number(c.get(kc) || 0) + 1;
-    if (m > ALERTAS.LIMITE_TIENDAS_HORA) throw fallo_('LIMITE', 'La cuenta de Tiendas llegó a su límite de consultas por hora.');
-    c.put(kc, String(m), 3700);
+  const interno = ALERTAS.ESCRIBEN.indexOf(ses.r) >= 0, tiendas = ses.o === 'clave' && ses.r === 'tiendas';
+  // Cada tope: su clave, cuánto dura y el mensaje. Primero se revisan todos; solo si pasa, se anotan.
+  const topes = [['limite:' + ses.u + ':' + hora, interno ? ALERTAS.LIMITE_CONSULTAS_HORA : ALERTAS.LIMITE_ASESOR_HORA, 3700, 'Llegaste al límite de # consultas por hora.']];
+  if (!interno) topes.push(['limite-dia:' + ses.u + ':' + dia, ALERTAS.LIMITE_ASESOR_DIA, 21600, 'Llegaste al límite de # consultas por día. Si lo necesitas, avisa a Workforce HN.']);
+  if (tiendas) {
+    topes.push(['limite-tienda:' + normTienda_(ses.t) + ':' + hora, ALERTAS.LIMITE_TIENDA_HORA, 3700, 'Tu tienda llegó a su límite de # consultas por hora. Avisa a Workforce HN.']);
+    topes.push(['limite-cuenta:' + ses.a + ':' + hora, ALERTAS.LIMITE_TIENDAS_HORA, 3700, 'La cuenta de Tiendas llegó a su límite de consultas por hora. Avisa a Workforce HN.']);
+    topes.push(['limite-cuenta-dia:' + ses.a + ':' + dia, ALERTAS.LIMITE_TIENDAS_DIA, 21600, 'La cuenta de Tiendas llegó a su límite de consultas por día. Avisa a Workforce HN.']);
   }
+  const van = c.getAll(topes.map((t) => t[0]));
+  topes.forEach((t) => { t.n = Number(van[t[0]] || 0) + 1; if (t.n > t[1]) throw fallo_('LIMITE', t[3].replace('#', t[1])); });
+  topes.forEach((t) => c.put(t[0], String(t.n), t[2]));
 }
 
 /* ============================================================================
@@ -3260,7 +3281,8 @@ function guardarCuenta(usuario, rol, clave) {
   const cuentas = JSON.parse(props_().getProperty('CUENTAS') || '{}');
   cuentas[usuario] = { rol: rol, sal: sal, iter: ALERTAS.ITERACIONES_CLAVE, hash: hashClave_(String(clave), sal, ALERTAS.ITERACIONES_CLAVE), creada: Date.now() };
   props_().setProperty('CUENTAS', JSON.stringify(cuentas));
-  cache_().remove('fallidos-cuenta:' + usuario);   // con la contraseña nueva, la cuenta queda desbloqueada
+  // con la contraseña nueva, la cuenta queda desbloqueada
+  cache_().removeAll(['fallidos-cuenta:' + usuario, 'bloqueo-cuenta:' + usuario, 'fallidos-dia:' + usuario + ':' + Utilities.formatDate(new Date(), ALERTAS.ZONA, 'yyyyMMdd')]);
   limpiarCfg_();
   return true;
 }

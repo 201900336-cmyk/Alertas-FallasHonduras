@@ -580,12 +580,33 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   r = g.post({ accion: 'alertas', token: tSup2 });
   ok(!r.ok && r.codigo === 'PERMISO', 'si en Usuarios le cambian el rol a concentrix, deja de ver las posibles fallas al instante', r);
   hu.getRange(filaLuis, 3).setValue('supervisor'); C.onEdit({ range: hu.getRange(filaLuis, 3) });
-  g.ejecutar('ALERTAS.LIMITE_CONSULTAS_HORA = 3');
+  // Topes de consultas (3.7): 60 por hora y 300 por día cada asesor; Workforce, 400 por hora
+  ok(g.ejecutar('[ALERTAS.LIMITE_ASESOR_HORA, ALERTAS.LIMITE_ASESOR_DIA, ALERTAS.LIMITE_CONSULTAS_HORA, ALERTAS.LIMITE_TIENDA_HORA, ALERTAS.LIMITE_TIENDAS_HORA, ALERTAS.LIMITE_TIENDAS_DIA].join()') === '60,300,400,200,2000,15000',
+    'los topes: 60 por hora y 300 por día cada asesor, 400 por hora Workforce, 200 por tienda y 2,000 por hora (15,000 por día) toda la cuenta de Tiendas');
+  const horaL = Math.floor(Date.now() / 3600000), limpiarLimites = () => [...g.E.cache.keys()].filter((k) => /^limite/.test(k)).forEach((k) => g.cache.remove(k));
   const tLim = g.post({ accion: 'login', datos: { tipo: 'genesys', accessToken: 'tok-agente' } }).datos.token;
-  g.cache.remove('limite:karla.zelaya@concentrix.com:' + Math.floor(Date.now() / 3600000));
-  let ultimo; for (let k = 0; k < 4; k++) ultimo = g.post({ accion: 'buscar', token: tLim, datos: { q: '9999999' } });
-  ok(!ultimo.ok && ultimo.codigo === 'LIMITE', 'límite de consultas por hora', ultimo);
-  g.ejecutar('ALERTAS.LIMITE_CONSULTAS_HORA = 400');
+  const hasta = (token, n) => { let u; for (let k = 0; k < n; k++) u = g.post({ accion: 'buscar', token, datos: { q: '9999999' } }); return u; };
+  limpiarLimites(); g.ejecutar('ALERTAS.LIMITE_ASESOR_HORA = 3');
+  let ultimo = hasta(tLim, 3);
+  ok(ultimo.ok, 'un asesor consulta hasta su tope de la hora', ultimo);
+  ultimo = hasta(tLim, 1);
+  ok(!ultimo.ok && ultimo.codigo === 'LIMITE' && /3 consultas por hora/.test(ultimo.error), 'y la siguiente ya no pasa: límite de consultas por hora', ultimo);
+  ok(hasta(tWf, 5).ok, 'Workforce no usa el tope de los asesores');
+  g.ejecutar('ALERTAS.LIMITE_ASESOR_HORA = 60; ALERTAS.LIMITE_ASESOR_DIA = 5'); limpiarLimites();
+  ultimo = hasta(tLim, 6);
+  ok(!ultimo.ok && ultimo.codigo === 'LIMITE' && /por día/.test(ultimo.error), 'un asesor tampoco pasa de su tope del día', ultimo);
+  g.ejecutar('ALERTAS.LIMITE_ASESOR_DIA = 300; ALERTAS.LIMITE_TIENDA_HORA = 4'); limpiarLimites();
+  // En Tiendas, cambiar el nombre no da más consultas: la tienda y la cuenta tienen su propio tope
+  const entraT = (nombre, tienda) => { const x = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre, tienda } }); if (!x.ok) throw new Error('entraT ' + nombre + ': ' + JSON.stringify(x)); return x.datos.token; };
+  hasta(entraT('Rosa Pineda', 'CAC Mall Premier'), 2); hasta(entraT('Elena Cruz', 'CAC Mall Premier'), 2);
+  ultimo = hasta(entraT('Julio Banegas', 'CAC Mall Premier'), 1);
+  ok(!ultimo.ok && ultimo.codigo === 'LIMITE' && /Tu tienda/.test(ultimo.error), 'en Tiendas, entrar con otro nombre no da más consultas: la tienda tiene su tope', ultimo);
+  ok(hasta(entraT('Marta Díaz', 'CAC Metromall'), 1).ok, 'y las demás tiendas siguen consultando');
+  g.ejecutar('ALERTAS.LIMITE_TIENDA_HORA = 200; ALERTAS.LIMITE_TIENDAS_HORA = 2'); limpiarLimites();
+  hasta(entraT('Rosa Pineda', 'CAC Mall Premier'), 1); hasta(entraT('Marta Díaz', 'CAC Metromall'), 1);
+  ultimo = hasta(entraT('Elena Cruz', 'CAC Danli'), 1);
+  ok(!ultimo.ok && ultimo.codigo === 'LIMITE' && /cuenta de Tiendas/.test(ultimo.error), 'ni cambiando de tienda: toda la cuenta de Tiendas tiene su tope', ultimo);
+  g.ejecutar('ALERTAS.LIMITE_TIENDAS_HORA = 2000'); limpiarLimites();
   // La cuenta de Tiendas la comparten ~200 personas: los errores de una no bloquean a las demás
   for (let k = 0; k < 5; k++) g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'mala' + k, nombre: 'Rosa Pineda', tienda: 'CAC Mall Premier' } });
   r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Rosa Pineda', tienda: 'CAC Mall Premier' } });
@@ -595,6 +616,12 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   for (let k = 0; k < 100; k++) g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'adivina' + k, nombre: 'Intruso ' + k, tienda: 'X' + k } });
   r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Marta Díaz', tienda: 'CAC Mall Premier' } });
   ok(!r.ok && r.codigo === 'LIMITE', 'con 100 contraseñas equivocadas de distintas personas, la cuenta se bloquea 15 minutos', r);
+  // Alguien probando contraseñas con nombres distintos: pasadas 300 en el día, la cuenta se bloquea 1 hora cada 20 más
+  const probar = (n, pref) => { for (let k = 0; k < n; k++) { g.cache.remove('fallidos-cuenta:tiendas'); g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: pref + k, nombre: 'Persona ' + pref + k, tienda: 'X' } }); } };
+  probar(230, 'a');   // con las de arriba pasan de 320: al llegar ahí queda bloqueada
+  g.cache.remove('fallidos-cuenta:tiendas');
+  r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'NuevaClaveTiendas2026', nombre: 'Marta Díaz', tienda: 'CAC Mall Premier' } });
+  ok(!r.ok && r.codigo === 'LIMITE' && /una hora/.test(r.error), 'cambiar el nombre ya no sirve para seguir probando: con más de 300 contraseñas equivocadas en el día, la cuenta se bloquea 1 hora cada 20 intentos', r);
   C.guardarCuenta('tiendas', 'tiendas', 'ClaveTiendasNueva2026');
   r = g.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaveTiendasNueva2026', nombre: 'Marta Díaz', tienda: 'CAC Mall Premier' } });
   ok(r.ok, 'al cambiar la contraseña, la cuenta se desbloquea', r);

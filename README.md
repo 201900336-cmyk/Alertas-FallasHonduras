@@ -234,7 +234,7 @@ Un solo buscador: un nodo (lleva letras, por ejemplo GRA01), una **OLT** (por su
 - **Consultas por hora o por día**, **de dónde vienen**, las **fallas en sus nodos** (con cuántas consultas hubo de los nodos afectados mientras duraron) y los **clientes que consultaron**, con su nodo.
 - Se reconoce por el nombre (Ventu, OLT Ventu, DANLI03 o Danli 03) o por el código. Si lo escrito está en el nombre de varias OLT, se dan a elegir.
 - Si la OLT tiene más de 6,000 consultas en el periodo, se cuentan las más recientes.
-- Necesita la versión 3.6 del servidor.
+- Necesita la versión 3.6 del servidor (o más nueva).
 
 ### SMS de Notifícame
 
@@ -351,8 +351,8 @@ Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-0
 - **La página no tiene contraseñas.** La de Tiendas no está en GitHub ni en el navegador: el servidor guarda solo una huella con sal (SHA-256 repetido 1,500 veces) y la compara al entrar.
 - **Genesys**: el servidor valida cada ingreso con Genesys y exige que el token sea de la organización de Claro y del cliente OAuth de Alertas. Así nadie puede entrar con una cuenta de otra organización de Genesys aunque use el correo de alguien de Workforce.
 - **Sesiones firmadas** (HMAC-SHA256) que vencen a las 12 horas. Los permisos se revisan contra la hoja Usuarios en cada acción de Workforce.
-- **Límites**: 400 búsquedas por hora por persona y 8,000 por hora para toda la cuenta de Tiendas.
-- **Contraseñas equivocadas**: cinco errores bloquean 15 minutos solo a esa persona (por nombre y tienda), no a las demás tiendas. Si llegan 100 intentos fallidos en 15 minutos (alguien probando contraseñas), se bloquea la cuenta de Tiendas; cambiar la contraseña la desbloquea.
+- **Límites de consultas** (servidor 3.7): cada asesor (Concentrix, supervisores y cada persona de Tiendas), 60 por hora y 300 por día; Workforce HN y Jefatura, 400 por hora. En Tiendas el nombre lo escribe la persona, así que además hay tope por tienda (200 por hora) y para toda la cuenta (2,000 por hora y 15,000 por día): entrar con otro nombre u otra tienda no da más consultas. Los números están al inicio de `Code.gs` (`LIMITE_...`).
+- **Contraseñas equivocadas**: cinco errores bloquean 15 minutos solo a esa persona (por nombre y tienda), no a las demás tiendas. Si llegan 100 intentos fallidos en 15 minutos (alguien probando contraseñas), se bloquea la cuenta de Tiendas; cambiar la contraseña la desbloquea. Cambiando el nombre se salta el bloqueo por persona (el servidor no ve desde qué PC llega cada intento), por eso también se cuentan los intentos de todos en el día: pasados 300, la cuenta se bloquea 1 hora cada 20 intentos más. Cambiar la contraseña de Tiendas la desbloquea.
 - **Sin accesos temporales**: la única cuenta con usuario y contraseña es la de Tiendas. Todos los demás entran con Genesys, así que si Genesys no está disponible, solo Tiendas puede entrar hasta que vuelva.
 - **No hay búsquedas parciales**: solo contrato o DNI completos, máximo 20 resultados. No se puede listar la base desde la página.
 - **Lo interno de cada falla** (referencia, notas, historial de cambios y correos de Workforce) solo viaja a Workforce y Jefatura. A Concentrix y Tiendas el servidor les manda solo lo que muestra su pantalla, que incluye el número de falla.
