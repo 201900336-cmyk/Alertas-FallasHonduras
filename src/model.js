@@ -434,6 +434,25 @@ const Model = (() => {
   const esPosible = (f) => !!f && f.motivo === 'VALIDACION';
   const descartada = (f) => esPosible(f) && f.estado !== 'ACTIVA';
   const visible = (f, now) => f.estado === 'ACTIVA' || (f.estado === 'CERRADA' && f.cerradaEn && !descartada(f) && now - f.cerradaEn < CONFIG.horasVisibleTrasCierre * U.HORA);
+  /* Un nodo solo puede estar en una falla activa a la vez (dos personas publicando la misma falla dejaban dos
+     iguales). Las fallas activas que ya tienen alguno de estos nodos, la más reciente primero, con los nodos que
+     comparten; propiaId: la que se está editando, que no choca consigo misma. */
+  function choquesNodos(fallas, nodos, propiaId) {
+    const de = new Set(nodos);
+    if (!de.size) return [];
+    return (fallas || []).filter((f) => f.estado === 'ACTIVA' && f.id !== propiaId)
+      .map((f) => ({ falla: f, nodos: f.nodos.filter((n) => de.has(n)) })).filter((c) => c.nodos.length)
+      .sort((a, b) => b.falla.publicadaEn - a.falla.publicadaEn);
+  }
+  /* El aviso de un choque, con las mismas palabras que el servidor */
+  function textoChoque(choques, now) {
+    const c = choques[0], n = c.nodos, f = c.falla, por = f.publicadaPor && f.publicadaPor.nombre;
+    const motivo = f.motivo !== 'OTRO' && MOTIVO[f.motivo] ? MOTIVO[f.motivo].nombre : f.motivoTexto || 'Otro motivo';
+    return U.listaNatural(n, 3) + (n.length === 1 ? ' ya está' : ' ya están') + ' en la falla activa ' + U.numeroFalla(f) + ' (' + motivo + ')'
+      + (por ? ', que publicó ' + por + ' ' + U.hace(f.publicadaEn, now) : '') + '. Un nodo solo puede estar en una falla activa a la vez: edita esa falla o quita '
+      + (n.length === 1 ? 'ese nodo' : 'esos nodos') + ' de esta.';
+  }
+
   function mapaFallas(fallas, now) {
     const visibles = fallas.filter((f) => visible(f, now));
     const porNodo = new Map();
@@ -895,6 +914,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
     dniNormal, diasAIso, isoADias };
 })();

@@ -390,8 +390,11 @@ function BackendLocal() {
       const por = quien();
       const resumir = (imp) => ({ total: imp.total, hfc: imp.hfc, gpon: imp.gpon, corp: imp.corp, deps: imp.deps.slice(0, 8), munis: imp.munis.slice(0, 8) });
       let f, tipo, texto;
+      // Como el servidor: un nodo solo puede estar en una falla activa a la vez
+      const libres = (nodos, propia) => { const ch = Model.choquesNodos(fallas, nodos, propia); if (ch.length) throw errorAlertas('DUPLICADA', Model.textoChoque(ch, ahora)); };
       if (op === 'publicar') {
         const x = d.falla;
+        libres(x.nodos, null);
         f = {
           id: Model.nuevoId(fallas, ahora), nodos: x.nodos.slice(), motivo: x.motivo, motivoTexto: x.motivoTexto || '', clienteTexto: x.clienteTexto || '',
           detalle: x.detalle || '', referencia: x.referencia || '', numero: x.numero || '', inicio: x.inicio || ahora, eta: x.eta || null, estado: 'ACTIVA',
@@ -405,6 +408,7 @@ function BackendLocal() {
         f = fallas.find((x) => x.id === d.id);
         if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
         if (op === 'editar') {
+          if (f.estado === 'ACTIVA' && d.falla.nodos) libres(d.falla.nodos.filter((n) => !f.nodos.includes(n)), f.id);
           Object.assign(f, d.falla);
           if (d.falla.nodos) f.impacto = resumir(Model.impacto(c.cat, f.nodos));
           f.historial.push({ accion: 'EDITADA', en: ahora, por, detalle: d.detalle || '' });
@@ -415,6 +419,7 @@ function BackendLocal() {
           f.historial.push({ accion: 'CERRADA', en: ahora, por, detalle: d.nota || '' });
           tipo = 'FALLA_CERRADA'; texto = 'cerró la falla ' + U.numeroFalla(f) + ' (' + nombreMotivo(f) + ')';
         } else if (op === 'reabrir') {
+          libres(f.nodos, f.id);
           Object.assign(f, { estado: 'ACTIVA', cerradaEn: null, cerradaPor: null, notaCierre: '' });
           f.historial.push({ accion: 'REABIERTA', en: ahora, por, detalle: '' });
           tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.numeroFalla(f);

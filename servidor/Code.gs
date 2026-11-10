@@ -26,7 +26,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.7',                // se ve en la pestaña INICIO
+  VERSION: '3.8',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -984,6 +984,7 @@ function accionFalla_(d, ses) {
     let f, texto, tipo;
     if (d.op === 'publicar') {
       const datos = validarFalla_(d.falla || {}, ahora, true);
+      exigirNodosLibres_(todas, datos.nodos, null, ahora);
       f = Object.assign(datos, {
         id: nuevoId_(todas, ahora), estado: 'ACTIVA', publicadaEn: ahora, publicadaPor: por, cerradaEn: null, cerradaPor: null, notaCierre: '',
         historial: [{ accion: 'PUBLICADA', en: ahora, por: por, detalle: datos.nodos.length === 1 ? '1 nodo' : datos.nodos.length + ' nodos' }]
@@ -996,6 +997,8 @@ function accionFalla_(d, ses) {
       if (!f) throw fallo_('DATOS', 'La falla ya no existe.');
       if (d.op === 'editar') {
         const datos = validarFalla_(Object.assign({}, f, d.falla || {}), ahora, false);
+        // Solo los nodos que se agregan: lo que ya tenía la falla no frena corregirle otro dato
+        if (f.estado === 'ACTIVA') exigirNodosLibres_(todas, datos.nodos.filter((n) => f.nodos.indexOf(n) < 0), f.id, ahora);
         Object.assign(f, datos);
         const det = texto_(d.detalle, 200);
         f.historial.push({ accion: 'EDITADA', en: ahora, por: por, detalle: det });
@@ -1010,6 +1013,7 @@ function accionFalla_(d, ses) {
         texto = 'cerró la falla ' + nombreFalla_(f) + ' (' + nombreMotivo_(f) + ')';
       } else if (d.op === 'reabrir') {
         if (f.estado === 'ACTIVA') throw fallo_('DATOS', 'La falla ya está activa.');
+        exigirNodosLibres_(todas, f.nodos, f.id, ahora);
         f.estado = 'ACTIVA'; f.cerradaEn = null; f.cerradaPor = null; f.notaCierre = '';
         f.historial.push({ accion: 'REABIERTA', en: ahora, por: por, detalle: '' });
         tipo = 'FALLA_REABIERTA';
@@ -1028,6 +1032,24 @@ function accionFalla_(d, ses) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* Un nodo solo puede estar en una falla activa a la vez (3.8). Antes, dos personas publicando la misma falla (o
+   un doble clic) dejaban dos fallas iguales: SMS repetidos al cliente y el historial contando doble. Se revisa
+   aquí, con el candado puesto, porque la página de cada persona no ve lo que las demás están por publicar.
+   nodos: los que se quieren poner; propia: la falla que se edita o reabre (no choca consigo misma). */
+function exigirNodosLibres_(todas, nodos, propia, ahora) {
+  const de = {};
+  nodos.forEach((n) => { de[n] = true; });
+  const choques = todas.filter((x) => x.estado === 'ACTIVA' && x.id !== propia && x.nodos.some((n) => de[n]));
+  if (!choques.length) return;
+  const c = choques.sort((a, b) => b.publicadaEn - a.publicadaEn)[0];
+  const comunes = c.nodos.filter((n) => de[n]);
+  const min = Math.max(0, Math.round((ahora - c.publicadaEn) / 60000));
+  const hace = min < 1 ? 'hace un momento' : min < 60 ? 'hace ' + min + ' min' : min < 2880 ? 'hace ' + Math.round(min / 60) + ' h' : 'hace ' + Math.round(min / 1440) + ' días';
+  throw fallo_('DUPLICADA', lista_(comunes, 3) + (comunes.length === 1 ? ' ya está' : ' ya están') + ' en la falla activa ' + nombreFalla_(c) + ' (' + nombreMotivo_(c) + ')'
+    + (c.publicadaPor && c.publicadaPor.nombre ? ', que publicó ' + c.publicadaPor.nombre + ' ' + hace : '') + '. Un nodo solo puede estar en una falla activa a la vez: edita esa falla o quita '
+    + (comunes.length === 1 ? 'ese nodo' : 'esos nodos') + ' de esta.');
 }
 
 function validarFalla_(x, ahora, nueva) {

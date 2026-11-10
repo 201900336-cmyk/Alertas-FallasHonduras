@@ -17,6 +17,14 @@ function VistaFallas() {
     if (!s.semillaFalla) return;
     setEdicion(null); setSemilla(s.semillaFalla); setTab('publicar'); G.set({ semillaFalla: null });
   }, [s.semillaFalla]);
+  // Aquí, lo que publican los demás se carga solo, sin esperar a "Actualizar": así el formulario sabe enseguida
+  // si un nodo ya está en otra falla (dos personas publicaban la misma sin verse)
+  const cambioRemoto = s.remoto ? s.remoto.version : 0;
+  useEffect(() => {
+    if (!cambioRemoto) return;
+    const c = (G.s.remoto && G.s.remoto.cambio) || {};
+    A.recargar().then(() => { if (c.texto) tostada(U.conPunto((c.por ? c.por.nombre : 'Alguien') + ' ' + c.texto)); }).catch(() => {});
+  }, [cambioRemoto]);
 
   if (s.cargando) return html`<div class="panel vacio" style="margin-top:20px"><b>Cargando…</b></div>`;
   if (!s.cat) return html`<${SinBase} />`;
@@ -38,7 +46,7 @@ function VistaFallas() {
     </div>
     ${tab === 'publicar' && html`<${FormFalla} key=${edicion ? edicion.id : 'nueva' + (semilla ? semilla.k : '')} edicion=${edicion} semilla=${semilla} mf=${mf}
         onListo=${(f, editada) => { setEdicion(null); setSemilla(null); setTab('activas'); tostada(editada ? 'Cambios guardados en ' + U.numeroFalla(f) : 'Falla ' + U.numeroFalla(f) + ' publicada'); }}
-        onCancelar=${() => { setEdicion(null); setTab('activas'); }} />`}
+        onCancelar=${() => { setEdicion(null); setTab('activas'); }} onAbrir=${editar} />`}
     ${tab === 'activas' && html`<${ListaFallas} fallas=${mf.activas} vacio="No hay fallas activas. Cuando llegue un correo con nodos afectados, publícala en la pestaña Publicar falla."
         onEditar=${editar} onCerrar=${setCerrando} smsTodas=${true} />`}
     ${tab === 'resueltas' && html`<${ListaFallas} fallas=${mf.resueltas} vacio=${'No hay fallas cerradas en las últimas ' + CONFIG.horasVisibleTrasCierre + ' horas.'} />`}
@@ -206,7 +214,7 @@ function ModalPosibleFalla({ nodo }) {
 }
 
 /* ---------- Formulario de publicación / edición ---------- */
-function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
+function FormFalla({ edicion, semilla, mf, onListo, onCancelar, onAbrir }) {
   const s = useG();
   const cat = s.cat;
   const ini = edicion || {};
@@ -226,6 +234,9 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const [activo, setActivo] = useState(0);
   const [confirmar, setConfirmar] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [revisando, setRevisando] = useState(false);
+  const enviando = useRef(false);
+  const choqueRef = useRef(null);
   const [nota, setNota] = useState(null);
   const taRef = useRef(null);
   const agregadoEn = useRef(0);
@@ -236,11 +247,10 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const clientesDe = (lista) => lista.reduce((a, n) => a + ((cat.nodos.get(n) || {}).total || 0), 0);
 
   const imp = useMemo(() => Model.impacto(cat, nodos), [cat, nodos]);
-  const ocupados = useMemo(() => {
-    const m = new Map();
-    for (const f of mf.activas) if (!edicion || f.id !== edicion.id) for (const n of f.nodos) m.set(n, U.numeroFalla(f));
-    return m;
-  }, [mf, edicion]);
+  // Un nodo solo puede estar en una falla activa a la vez. Al editar, los nodos que la falla ya tenía no cuentan.
+  const nuevosDe = (lista) => (edicion ? lista.filter((n) => !edicion.nodos.includes(n)) : lista);
+  const choques = useMemo(() => Model.choquesNodos(s.fallas, nuevosDe(nodos), edicion ? edicion.id : null), [s.fallas, nodos, edicion]);
+  const ocupados = useMemo(() => new Set(choques.flatMap((c) => c.nodos)), [choques]);
 
   const tokenActual = (t) => { const p = t.split(/[\s,;|\/]+/); return p[p.length - 1] || ''; };
   function onInput(e) {
@@ -314,7 +324,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const etaTs = eta === 'sin' ? null : eta === 'custom' ? deLocal(etaCustom) : Date.now() + Number(eta) * U.MIN;
   const numeroLimpio = numero.trim().toUpperCase().replace(/[\s-]+/g, '');
   const motivoOk = motivo && (motivo !== 'OTRO' || (motivoTexto.trim() && clienteTexto.trim()));
-  const listo = nodos.length > 0 && motivoOk;
+  const listo = nodos.length > 0 && motivoOk && !choques.length;
   const borrador = {
     id: edicion ? edicion.id : 'Nueva', numero: numeroLimpio, nodos, motivo: motivo || 'ENERGIA', motivoTexto, clienteTexto, inicio: deLocal(inicio) || Date.now(),
     eta: etaTs, estado: 'ACTIVA', publicadaEn: Date.now(), publicadaPor: A.quien()
@@ -339,15 +349,33 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Sin cambios';
   }
 
+  function avisarChoque(texto) {
+    setConfirmar(false); tostada(texto);
+    setTimeout(() => { if (choqueRef.current) choqueRef.current.scrollIntoView({ block: 'center' }); }, 60);
+  }
+  /* Antes de confirmar se trae lo último del servidor: la página no carga sola lo que publican los demás, y otra
+     persona pudo publicar esta misma falla hace un momento. Sin conexión se sigue: el servidor revisa al guardar. */
+  async function revisar() {
+    if (revisando) return;
+    setRevisando(true);
+    try { await A.recargar(); } catch (e) { /* el servidor revisa igual */ }
+    setRevisando(false);
+    const ch = Model.choquesNodos(G.s.fallas, nuevosDe(nodosRef.current), edicion ? edicion.id : null);
+    if (ch.length) avisarChoque(Model.textoChoque(ch, Date.now())); else setConfirmar(true);
+  }
   async function guardar() {
-    setGuardando(true);
+    if (enviando.current) return;   // un doble clic no publica dos veces
+    enviando.current = true; setGuardando(true);
     try {
       const datos = { nodos, motivo, motivoTexto: motivo === 'OTRO' ? motivoTexto.trim() : '', clienteTexto: motivo === 'OTRO' ? clienteTexto.trim() : '', numero: numeroLimpio, referencia: referencia.trim(), detalle: detalle.trim(), inicio: deLocal(inicio) || Date.now(), eta: etaTs };
       let f;
       if (edicion) f = await A.editarFalla(edicion.id, datos, cambiosDetalle());
       else f = await A.publicarFalla(datos);
       setConfirmar(false); onListo(f, !!edicion);
-    } catch (e) { tostada('No se pudo guardar: ' + e.message); } finally { setGuardando(false); }
+    } catch (e) {
+      // Otra persona la publicó mientras tanto: se carga para verla aquí mismo
+      if (e.codigo === 'DUPLICADA') { avisarChoque(e.message); A.recargar().catch(() => {}); } else tostada('No se pudo guardar: ' + e.message);
+    } finally { enviando.current = false; setGuardando(false); }
   }
 
   return html`<div class="form-falla">
@@ -378,8 +406,16 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
         </div>
         <div class="fila-nodos"><span class="sub">${U.plural(nodos.length, '1 nodo agregado', nodos.length + ' nodos agregados')}</span>
           <button class="btn btn-fantasma btn-chico" onClick=${() => { setNodos([]); setDesconocidos([]); setNota(null); }}>Quitar todos</button></div>`}
-        ${nodos.some((n) => ocupados.has(n)) && html`<div class="aviso-linea"><${Ico} n="info" s=${16} />
-          <span>${U.listaNatural(nodos.filter((n) => ocupados.has(n)), 4)} ya ${nodos.filter((n) => ocupados.has(n)).length === 1 ? 'está' : 'están'} en otra falla activa (${[...new Set(nodos.filter((n) => ocupados.has(n)).map((n) => ocupados.get(n)))].join(', ')}). Puedes publicarla igual; el asesor verá la más reciente.</span></div>`}
+        ${choques.length > 0 && html`<div class="choque-nodos" role="alert" ref=${choqueRef}>
+          <div class="choque-cab"><${Ico} n="alerta" s=${20} /><div>
+            <b>${U.listaNatural(nodos.filter((n) => ocupados.has(n)), 4)} ya ${ocupados.size === 1 ? 'está' : 'están'} en ${choques.length === 1 ? 'otra falla activa' : 'otras fallas activas'}</b>
+            <p>Un nodo solo puede estar en una falla activa a la vez. Abre la que ya existe para editarla, o quita ${ocupados.size === 1 ? 'ese nodo' : 'esos nodos'} de aquí.</p></div></div>
+          <ul>${choques.map((c) => html`<li key=${c.falla.id}>
+            <div><b class="codigo">${U.numeroFalla(c.falla)}</b><span>${nombreMotivo(c.falla)}</span>
+              <span class="sub">${c.falla.publicadaPor && c.falla.publicadaPor.nombre ? 'La publicó ' + c.falla.publicadaPor.nombre + ' ' : 'Publicada '}${U.hace(c.falla.publicadaEn, s.now)} · tiene ${U.listaNatural(c.nodos, 4)}</span></div>
+            <button type="button" class="btn btn-borde btn-chico" onClick=${() => onAbrir(c.falla)}>Abrir ${U.numeroFalla(c.falla)}</button></li>`)}</ul>
+          <button type="button" class="btn btn-fantasma btn-chico" onClick=${() => { setNodos(nodos.filter((n) => !ocupados.has(n))); setNota(null); }}>Quitar ${ocupados.size === 1 ? 'ese nodo' : 'esos ' + ocupados.size + ' nodos'} de aquí</button>
+        </div>`}
       </div>
 
       <div class="paso">
@@ -443,8 +479,9 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       </div>
       <div class="publicar-barra">
         ${edicion && html`<button class="btn btn-borde btn-grande" onClick=${onCancelar}>Cancelar</button>`}
-        <button class="btn btn-primario btn-grande" disabled=${!listo} onClick=${() => setConfirmar(true)}>${edicion ? 'Guardar cambios' : 'Publicar falla'}</button>
+        <button class="btn btn-primario btn-grande" disabled=${!listo || revisando} onClick=${revisar}>${revisando ? 'Revisando…' : edicion ? 'Guardar cambios' : 'Publicar falla'}</button>
       </div>
+      ${choques.length > 0 && html`<p class="sub publicar-nota">No se puede ${edicion ? 'guardar' : 'publicar'}: hay nodos que ya están en otra falla activa.</p>`}
     </div>
 
     ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en ' + U.numeroFalla(edicion) : 'Publicar falla'} onCerrar=${() => setConfirmar(false)}

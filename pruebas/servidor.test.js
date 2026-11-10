@@ -1454,11 +1454,15 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   hf2.deleteColumns(20, hf2.getMaxColumns() - 19);           // como quedaría una hoja de 19 columnas exactas
   r = g2.post({ accion: 'cargar', token: tw2, datos: { baseVersion: -1 } });
   ok(r.ok && r.datos.fallas.length === fViejas.length && r.datos.fallas.every((f) => f.numero === ''), 'las fallas guardadas antes se leen bien, sin número', r.ok ? r.datos.fallas.length : r);
-  r = g2.post({ accion: 'falla', token: tw2, datos: { op: 'publicar', falla: { nodos: [fViejas[0].nodos[0]], motivo: 'ENERGIA', numero: 'F1254585' } } });
+  // (en un nodo sin falla activa: desde la 3.8 un nodo solo puede estar en una a la vez)
+  const libreEn2 = (token) => { const act = new Set(g2.post({ accion: 'cargar', token, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos)); return [...ixc.nodoIdx.keys()].filter((n) => !U.esVirtual(n) && !act.has(n)); };
+  r = g2.post({ accion: 'falla', token: tw2, datos: { op: 'publicar', falla: { nodos: [libreEn2(tw2)[0]], motivo: 'ENERGIA', numero: 'F1254585' } } });
+  const fNum12 = r.datos && r.datos.falla;
   ok(r.ok && hf2.getMaxColumns() === 20 && hf2.getRange(1, 20).getValue() === 'Número de falla' && r.datos.falla.numero === 'F1254585',
     'al guardar la primera falla con el código nuevo, la hoja recibe la columna Número de falla', r.ok ? hf2.getMaxColumns() : r);
   r = g2.post({ accion: 'cargar', token: tw2, datos: { baseVersion: -1 } });
   ok(r.ok && r.datos.fallas.length === fViejas.length + 1 && r.datos.fallas.filter((f) => f.numero === 'F1254585').length === 1, 'las fallas viejas y la nueva conviven bien');
+  if (fNum12) g2.post({ accion: 'falla', token: tw2, datos: { op: 'cerrar', id: fNum12.id } });
 
   /* ---------- Pestañas ocultas y protegidas, como el archivo de auditorías ---------- */
   console.log('\n13. Ocultar y proteger las pestañas (solo la cuenta dueña)');
@@ -1498,8 +1502,9 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   const tw3 = entrar2('w'), ta3 = entrar2('a1');
   r = g2.post({ accion: 'buscar', token: ta3, datos: { q: String(ixc.C.contrato[0]) } });
   ok(r.ok && r.datos.estado === 'ok', 'las búsquedas siguen funcionando (y se anotan en la bitácora oculta)', r);
-  r = g2.post({ accion: 'falla', token: tw3, datos: { op: 'publicar', falla: { nodos: [nodoF], motivo: 'FIBRA' } } });
+  r = g2.post({ accion: 'falla', token: tw3, datos: { op: 'publicar', falla: { nodos: [libreEn2(tw3)[0]], motivo: 'FIBRA' } } });
   ok(r.ok, 'Workforce sigue publicando fallas', r);
+  if (r.ok) g2.post({ accion: 'falla', token: tw3, datos: { op: 'cerrar', id: r.datos.falla.id } });
   let x3 = g2.post({ accion: 'base', token: tw3, datos: { op: 'iniciar', total: bc.filas, columnas: Model.columnasCarga(bc), archivo: 'chica2.xlsx' } });
   for (let d0 = 0; d0 < bc.filas; d0 += x3.datos.filasPorLote) g2.post({ accion: 'base', token: tw3, datos: { op: 'lote', id: x3.datos.id, desde: d0, filas: Model.filasCarga(bc, d0, Math.min(bc.filas, d0 + x3.datos.filasPorLote)) } });
   x3 = g2.post({ accion: 'base', token: tw3, datos: { op: 'finalizar', id: x3.datos.id, catalogo: catc } });
@@ -1601,6 +1606,37 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     const d90 = Model.periodoAfectacion('90', ahora);
     ok(d90.desde === L(2026, 8, 12) && d90.en === 'en 90 días' && U.durHM(0) === '0 min' && U.durHM(30000) === 'menos de 1 min' && U.durHM(75 * U.HORA + 5 * U.MIN) === '75 h 5 min',
       '"90 días" va de las 00:00 de hace 89 días a ahora; las duraciones no pasan a días (75 h 5 min)', d90);
+  }
+
+  /* ---------- Fallas duplicadas: dos personas publicando la misma, o un doble clic ---------- */
+  console.log('\n16. Un nodo solo puede estar en una falla activa a la vez');
+  {
+    const [nA, nB, nC] = libreEn2(tw3);
+    const activos = () => new Set(g2.post({ accion: 'cargar', token: tw3, datos: { baseVersion: -1 } }).datos.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
+    const pub = (nodos, extra) => g2.post({ accion: 'falla', token: tw3, datos: { op: 'publicar', falla: Object.assign({ nodos, motivo: 'ENERGIA' }, extra || {}) } });
+    const op = (o, id, extra) => g2.post({ accion: 'falla', token: tw3, datos: Object.assign({ op: o, id }, extra || {}) });
+    const fA = pub([nA, nB]).datos.falla;
+    let d = pub([nA], { motivo: 'FIBRA' });
+    ok(!d.ok && d.codigo === 'DUPLICADA' && new RegExp('^' + nA + ' ya está en la falla activa ' + U.numeroFalla(fA) + ' \\(Falla de energía comercial\\), que publicó .+ hace un momento\\. Un nodo solo puede estar en una falla activa a la vez: edita esa falla o quita ese nodo de esta\\.$').test(d.error),
+      'publicar otra falla en un nodo que ya tiene una activa no se puede, y dice cuál es y quién la publicó', d);
+    d = pub([nC, nB, nA]);
+    ok(!d.ok && d.codigo === 'DUPLICADA' && /ya están en la falla activa/.test(d.error) && d.error.includes(nA) && d.error.includes(nB) && !activos().has(nC),
+      'tampoco si solo algunos de sus nodos están en otra falla, y no queda nada publicado a medias', d);
+    const fC = pub([nC]);
+    ok(fC.ok, 'con nodos libres sí se publica', fC);
+    d = op('editar', fC.datos.falla.id, { falla: { nodos: [nC, nA] }, detalle: 'Agregó ' + nA });
+    ok(!d.ok && d.codigo === 'DUPLICADA' && d.error.includes(nA), 'al editar, agregar un nodo que está en otra falla activa tampoco', d);
+    d = op('editar', fA.id, { falla: { eta: Date.now() + 3600000 }, detalle: 'Cambió la hora estimada' });
+    ok(d.ok && d.datos.falla.nodos.join() === [nA, nB].join(), 'editar otros datos de una falla sigue igual', d);
+    op('cerrar', fA.id);
+    const fA2 = pub([nA]);
+    ok(fA2.ok, 'al cerrar la primera, el nodo queda libre para una falla nueva', fA2);
+    d = op('reabrir', fA.id);
+    ok(!d.ok && d.codigo === 'DUPLICADA' && d.error.includes(nA), 'y la primera no se puede reabrir mientras su nodo esté en la nueva', d);
+    op('cerrar', fA2.datos.falla.id);
+    d = op('reabrir', fA.id);
+    ok(d.ok && d.datos.falla.estado === 'ACTIVA', 'cerrada la nueva, sí se reabre', d);
+    op('cerrar', fA.id); op('cerrar', fC.datos.falla.id);
   }
 
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);

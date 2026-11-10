@@ -358,7 +358,8 @@ function BarraSuperior({ mf }) {
 function AvisoCambios() {
   const s = useG();
   const r = s.remoto;
-  if (!r) return null;
+  // En Fallas, Workforce no espera al botón: los cambios de los demás se cargan solos (VistaFallas)
+  if (!r || (s.ruta === 'fallas' && esWorkforce())) return null;
   const c = r.cambio || {};
   const quien = c.por ? c.por.nombre : 'Alguien';
   return html`<div class="aviso" role="alert">

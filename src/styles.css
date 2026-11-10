@@ -585,13 +585,24 @@ button { cursor: pointer; }
 .nodo-chip .cn { color: var(--ink-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .nodo-chip .x { width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink-3); display: grid; place-items: center; }
 .nodo-chip .x:hover { background: var(--surface-3); color: var(--ink); }
-.nodo-chip[data-ocupado="true"] { border-color: var(--resuelta); background: var(--resuelta-soft); }
+.nodo-chip[data-ocupado="true"] { border-color: var(--falla); background: var(--falla-soft); }
 .nodo-chip::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--ink-3)); }
 .nodo-chip[data-t="HFC"] { --c: var(--hfc); }
 .nodo-chip[data-t="GPON"] { --c: var(--gpon); }
 .aviso-linea { margin-top: 10px; font-size: 13px; color: var(--ink-2); display: flex; gap: 8px; align-items: flex-start; }
 .aviso-linea svg { flex: none; margin-top: 2px; color: var(--resuelta-text); }
 .aviso-linea button { border: 0; background: none; padding: 0; color: var(--focus); font-weight: 650; text-decoration: underline; }
+/* Un nodo que ya está en otra falla activa: no se publica dos veces la misma falla */
+.choque-nodos { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--falla); border-radius: 12px; background: var(--falla-soft); display: grid; gap: 10px; justify-items: start; }
+.choque-cab { display: flex; gap: 10px; align-items: flex-start; }
+.choque-cab svg { flex: none; margin-top: 1px; color: var(--falla-text); }
+.choque-cab b { display: block; font-size: 14.5px; color: var(--ink); }
+.choque-cab p { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
+.choque-nodos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; width: 100%; }
+.choque-nodos li { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 9px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.choque-nodos li > div { flex: 1 1 260px; min-width: 0; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; font-size: 13.5px; }
+.choque-nodos li .sub { flex-basis: 100%; font-size: 12.5px; }
+.publicar-nota { margin: 8px 0 0; text-align: right; color: var(--falla-text); font-weight: 600; }
 
 .motivos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .motivo {

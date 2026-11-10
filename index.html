@@ -597,13 +597,24 @@ button { cursor: pointer; }
 .nodo-chip .cn { color: var(--ink-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .nodo-chip .x { width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink-3); display: grid; place-items: center; }
 .nodo-chip .x:hover { background: var(--surface-3); color: var(--ink); }
-.nodo-chip[data-ocupado="true"] { border-color: var(--resuelta); background: var(--resuelta-soft); }
+.nodo-chip[data-ocupado="true"] { border-color: var(--falla); background: var(--falla-soft); }
 .nodo-chip::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--ink-3)); }
 .nodo-chip[data-t="HFC"] { --c: var(--hfc); }
 .nodo-chip[data-t="GPON"] { --c: var(--gpon); }
 .aviso-linea { margin-top: 10px; font-size: 13px; color: var(--ink-2); display: flex; gap: 8px; align-items: flex-start; }
 .aviso-linea svg { flex: none; margin-top: 2px; color: var(--resuelta-text); }
 .aviso-linea button { border: 0; background: none; padding: 0; color: var(--focus); font-weight: 650; text-decoration: underline; }
+/* Un nodo que ya está en otra falla activa: no se publica dos veces la misma falla */
+.choque-nodos { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--falla); border-radius: 12px; background: var(--falla-soft); display: grid; gap: 10px; justify-items: start; }
+.choque-cab { display: flex; gap: 10px; align-items: flex-start; }
+.choque-cab svg { flex: none; margin-top: 1px; color: var(--falla-text); }
+.choque-cab b { display: block; font-size: 14.5px; color: var(--ink); }
+.choque-cab p { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
+.choque-nodos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; width: 100%; }
+.choque-nodos li { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 9px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.choque-nodos li > div { flex: 1 1 260px; min-width: 0; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; font-size: 13.5px; }
+.choque-nodos li .sub { flex-basis: 100%; font-size: 12.5px; }
+.publicar-nota { margin: 8px 0 0; text-align: right; color: var(--falla-text); font-weight: 600; }
 
 .motivos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .motivo {
@@ -2711,6 +2722,25 @@ const Model = (() => {
   const esPosible = (f) => !!f && f.motivo === 'VALIDACION';
   const descartada = (f) => esPosible(f) && f.estado !== 'ACTIVA';
   const visible = (f, now) => f.estado === 'ACTIVA' || (f.estado === 'CERRADA' && f.cerradaEn && !descartada(f) && now - f.cerradaEn < CONFIG.horasVisibleTrasCierre * U.HORA);
+  /* Un nodo solo puede estar en una falla activa a la vez (dos personas publicando la misma falla dejaban dos
+     iguales). Las fallas activas que ya tienen alguno de estos nodos, la más reciente primero, con los nodos que
+     comparten; propiaId: la que se está editando, que no choca consigo misma. */
+  function choquesNodos(fallas, nodos, propiaId) {
+    const de = new Set(nodos);
+    if (!de.size) return [];
+    return (fallas || []).filter((f) => f.estado === 'ACTIVA' && f.id !== propiaId)
+      .map((f) => ({ falla: f, nodos: f.nodos.filter((n) => de.has(n)) })).filter((c) => c.nodos.length)
+      .sort((a, b) => b.falla.publicadaEn - a.falla.publicadaEn);
+  }
+  /* El aviso de un choque, con las mismas palabras que el servidor */
+  function textoChoque(choques, now) {
+    const c = choques[0], n = c.nodos, f = c.falla, por = f.publicadaPor && f.publicadaPor.nombre;
+    const motivo = f.motivo !== 'OTRO' && MOTIVO[f.motivo] ? MOTIVO[f.motivo].nombre : f.motivoTexto || 'Otro motivo';
+    return U.listaNatural(n, 3) + (n.length === 1 ? ' ya está' : ' ya están') + ' en la falla activa ' + U.numeroFalla(f) + ' (' + motivo + ')'
+      + (por ? ', que publicó ' + por + ' ' + U.hace(f.publicadaEn, now) : '') + '. Un nodo solo puede estar en una falla activa a la vez: edita esa falla o quita '
+      + (n.length === 1 ? 'ese nodo' : 'esos nodos') + ' de esta.';
+  }
+
   function mapaFallas(fallas, now) {
     const visibles = fallas.filter((f) => visible(f, now));
     const porNodo = new Map();
@@ -3172,7 +3202,7 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
     dniNormal, diasAIso, isoADias };
 })();
 
@@ -3870,8 +3900,11 @@ function BackendLocal() {
       const por = quien();
       const resumir = (imp) => ({ total: imp.total, hfc: imp.hfc, gpon: imp.gpon, corp: imp.corp, deps: imp.deps.slice(0, 8), munis: imp.munis.slice(0, 8) });
       let f, tipo, texto;
+      // Como el servidor: un nodo solo puede estar en una falla activa a la vez
+      const libres = (nodos, propia) => { const ch = Model.choquesNodos(fallas, nodos, propia); if (ch.length) throw errorAlertas('DUPLICADA', Model.textoChoque(ch, ahora)); };
       if (op === 'publicar') {
         const x = d.falla;
+        libres(x.nodos, null);
         f = {
           id: Model.nuevoId(fallas, ahora), nodos: x.nodos.slice(), motivo: x.motivo, motivoTexto: x.motivoTexto || '', clienteTexto: x.clienteTexto || '',
           detalle: x.detalle || '', referencia: x.referencia || '', numero: x.numero || '', inicio: x.inicio || ahora, eta: x.eta || null, estado: 'ACTIVA',
@@ -3885,6 +3918,7 @@ function BackendLocal() {
         f = fallas.find((x) => x.id === d.id);
         if (!f) throw errorAlertas('DATOS', 'La falla ya no existe.');
         if (op === 'editar') {
+          if (f.estado === 'ACTIVA' && d.falla.nodos) libres(d.falla.nodos.filter((n) => !f.nodos.includes(n)), f.id);
           Object.assign(f, d.falla);
           if (d.falla.nodos) f.impacto = resumir(Model.impacto(c.cat, f.nodos));
           f.historial.push({ accion: 'EDITADA', en: ahora, por, detalle: d.detalle || '' });
@@ -3895,6 +3929,7 @@ function BackendLocal() {
           f.historial.push({ accion: 'CERRADA', en: ahora, por, detalle: d.nota || '' });
           tipo = 'FALLA_CERRADA'; texto = 'cerró la falla ' + U.numeroFalla(f) + ' (' + nombreMotivo(f) + ')';
         } else if (op === 'reabrir') {
+          libres(f.nodos, f.id);
           Object.assign(f, { estado: 'ACTIVA', cerradaEn: null, cerradaPor: null, notaCierre: '' });
           f.historial.push({ accion: 'REABIERTA', en: ahora, por, detalle: '' });
           tipo = 'FALLA_REABIERTA'; texto = 'reabrió la falla ' + U.numeroFalla(f);
@@ -5301,6 +5336,14 @@ function VistaFallas() {
     if (!s.semillaFalla) return;
     setEdicion(null); setSemilla(s.semillaFalla); setTab('publicar'); G.set({ semillaFalla: null });
   }, [s.semillaFalla]);
+  // Aquí, lo que publican los demás se carga solo, sin esperar a "Actualizar": así el formulario sabe enseguida
+  // si un nodo ya está en otra falla (dos personas publicaban la misma sin verse)
+  const cambioRemoto = s.remoto ? s.remoto.version : 0;
+  useEffect(() => {
+    if (!cambioRemoto) return;
+    const c = (G.s.remoto && G.s.remoto.cambio) || {};
+    A.recargar().then(() => { if (c.texto) tostada(U.conPunto((c.por ? c.por.nombre : 'Alguien') + ' ' + c.texto)); }).catch(() => {});
+  }, [cambioRemoto]);
 
   if (s.cargando) return html`<div class="panel vacio" style="margin-top:20px"><b>Cargando…</b></div>`;
   if (!s.cat) return html`<${SinBase} />`;
@@ -5322,7 +5365,7 @@ function VistaFallas() {
     </div>
     ${tab === 'publicar' && html`<${FormFalla} key=${edicion ? edicion.id : 'nueva' + (semilla ? semilla.k : '')} edicion=${edicion} semilla=${semilla} mf=${mf}
         onListo=${(f, editada) => { setEdicion(null); setSemilla(null); setTab('activas'); tostada(editada ? 'Cambios guardados en ' + U.numeroFalla(f) : 'Falla ' + U.numeroFalla(f) + ' publicada'); }}
-        onCancelar=${() => { setEdicion(null); setTab('activas'); }} />`}
+        onCancelar=${() => { setEdicion(null); setTab('activas'); }} onAbrir=${editar} />`}
     ${tab === 'activas' && html`<${ListaFallas} fallas=${mf.activas} vacio="No hay fallas activas. Cuando llegue un correo con nodos afectados, publícala en la pestaña Publicar falla."
         onEditar=${editar} onCerrar=${setCerrando} smsTodas=${true} />`}
     ${tab === 'resueltas' && html`<${ListaFallas} fallas=${mf.resueltas} vacio=${'No hay fallas cerradas en las últimas ' + CONFIG.horasVisibleTrasCierre + ' horas.'} />`}
@@ -5490,7 +5533,7 @@ function ModalPosibleFalla({ nodo }) {
 }
 
 /* ---------- Formulario de publicación / edición ---------- */
-function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
+function FormFalla({ edicion, semilla, mf, onListo, onCancelar, onAbrir }) {
   const s = useG();
   const cat = s.cat;
   const ini = edicion || {};
@@ -5510,6 +5553,9 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const [activo, setActivo] = useState(0);
   const [confirmar, setConfirmar] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [revisando, setRevisando] = useState(false);
+  const enviando = useRef(false);
+  const choqueRef = useRef(null);
   const [nota, setNota] = useState(null);
   const taRef = useRef(null);
   const agregadoEn = useRef(0);
@@ -5520,11 +5566,10 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const clientesDe = (lista) => lista.reduce((a, n) => a + ((cat.nodos.get(n) || {}).total || 0), 0);
 
   const imp = useMemo(() => Model.impacto(cat, nodos), [cat, nodos]);
-  const ocupados = useMemo(() => {
-    const m = new Map();
-    for (const f of mf.activas) if (!edicion || f.id !== edicion.id) for (const n of f.nodos) m.set(n, U.numeroFalla(f));
-    return m;
-  }, [mf, edicion]);
+  // Un nodo solo puede estar en una falla activa a la vez. Al editar, los nodos que la falla ya tenía no cuentan.
+  const nuevosDe = (lista) => (edicion ? lista.filter((n) => !edicion.nodos.includes(n)) : lista);
+  const choques = useMemo(() => Model.choquesNodos(s.fallas, nuevosDe(nodos), edicion ? edicion.id : null), [s.fallas, nodos, edicion]);
+  const ocupados = useMemo(() => new Set(choques.flatMap((c) => c.nodos)), [choques]);
 
   const tokenActual = (t) => { const p = t.split(/[\s,;|\/]+/); return p[p.length - 1] || ''; };
   function onInput(e) {
@@ -5598,7 +5643,7 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
   const etaTs = eta === 'sin' ? null : eta === 'custom' ? deLocal(etaCustom) : Date.now() + Number(eta) * U.MIN;
   const numeroLimpio = numero.trim().toUpperCase().replace(/[\s-]+/g, '');
   const motivoOk = motivo && (motivo !== 'OTRO' || (motivoTexto.trim() && clienteTexto.trim()));
-  const listo = nodos.length > 0 && motivoOk;
+  const listo = nodos.length > 0 && motivoOk && !choques.length;
   const borrador = {
     id: edicion ? edicion.id : 'Nueva', numero: numeroLimpio, nodos, motivo: motivo || 'ENERGIA', motivoTexto, clienteTexto, inicio: deLocal(inicio) || Date.now(),
     eta: etaTs, estado: 'ACTIVA', publicadaEn: Date.now(), publicadaPor: A.quien()
@@ -5623,15 +5668,33 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Sin cambios';
   }
 
+  function avisarChoque(texto) {
+    setConfirmar(false); tostada(texto);
+    setTimeout(() => { if (choqueRef.current) choqueRef.current.scrollIntoView({ block: 'center' }); }, 60);
+  }
+  /* Antes de confirmar se trae lo último del servidor: la página no carga sola lo que publican los demás, y otra
+     persona pudo publicar esta misma falla hace un momento. Sin conexión se sigue: el servidor revisa al guardar. */
+  async function revisar() {
+    if (revisando) return;
+    setRevisando(true);
+    try { await A.recargar(); } catch (e) { /* el servidor revisa igual */ }
+    setRevisando(false);
+    const ch = Model.choquesNodos(G.s.fallas, nuevosDe(nodosRef.current), edicion ? edicion.id : null);
+    if (ch.length) avisarChoque(Model.textoChoque(ch, Date.now())); else setConfirmar(true);
+  }
   async function guardar() {
-    setGuardando(true);
+    if (enviando.current) return;   // un doble clic no publica dos veces
+    enviando.current = true; setGuardando(true);
     try {
       const datos = { nodos, motivo, motivoTexto: motivo === 'OTRO' ? motivoTexto.trim() : '', clienteTexto: motivo === 'OTRO' ? clienteTexto.trim() : '', numero: numeroLimpio, referencia: referencia.trim(), detalle: detalle.trim(), inicio: deLocal(inicio) || Date.now(), eta: etaTs };
       let f;
       if (edicion) f = await A.editarFalla(edicion.id, datos, cambiosDetalle());
       else f = await A.publicarFalla(datos);
       setConfirmar(false); onListo(f, !!edicion);
-    } catch (e) { tostada('No se pudo guardar: ' + e.message); } finally { setGuardando(false); }
+    } catch (e) {
+      // Otra persona la publicó mientras tanto: se carga para verla aquí mismo
+      if (e.codigo === 'DUPLICADA') { avisarChoque(e.message); A.recargar().catch(() => {}); } else tostada('No se pudo guardar: ' + e.message);
+    } finally { enviando.current = false; setGuardando(false); }
   }
 
   return html`<div class="form-falla">
@@ -5662,8 +5725,16 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
         </div>
         <div class="fila-nodos"><span class="sub">${U.plural(nodos.length, '1 nodo agregado', nodos.length + ' nodos agregados')}</span>
           <button class="btn btn-fantasma btn-chico" onClick=${() => { setNodos([]); setDesconocidos([]); setNota(null); }}>Quitar todos</button></div>`}
-        ${nodos.some((n) => ocupados.has(n)) && html`<div class="aviso-linea"><${Ico} n="info" s=${16} />
-          <span>${U.listaNatural(nodos.filter((n) => ocupados.has(n)), 4)} ya ${nodos.filter((n) => ocupados.has(n)).length === 1 ? 'está' : 'están'} en otra falla activa (${[...new Set(nodos.filter((n) => ocupados.has(n)).map((n) => ocupados.get(n)))].join(', ')}). Puedes publicarla igual; el asesor verá la más reciente.</span></div>`}
+        ${choques.length > 0 && html`<div class="choque-nodos" role="alert" ref=${choqueRef}>
+          <div class="choque-cab"><${Ico} n="alerta" s=${20} /><div>
+            <b>${U.listaNatural(nodos.filter((n) => ocupados.has(n)), 4)} ya ${ocupados.size === 1 ? 'está' : 'están'} en ${choques.length === 1 ? 'otra falla activa' : 'otras fallas activas'}</b>
+            <p>Un nodo solo puede estar en una falla activa a la vez. Abre la que ya existe para editarla, o quita ${ocupados.size === 1 ? 'ese nodo' : 'esos nodos'} de aquí.</p></div></div>
+          <ul>${choques.map((c) => html`<li key=${c.falla.id}>
+            <div><b class="codigo">${U.numeroFalla(c.falla)}</b><span>${nombreMotivo(c.falla)}</span>
+              <span class="sub">${c.falla.publicadaPor && c.falla.publicadaPor.nombre ? 'La publicó ' + c.falla.publicadaPor.nombre + ' ' : 'Publicada '}${U.hace(c.falla.publicadaEn, s.now)} · tiene ${U.listaNatural(c.nodos, 4)}</span></div>
+            <button type="button" class="btn btn-borde btn-chico" onClick=${() => onAbrir(c.falla)}>Abrir ${U.numeroFalla(c.falla)}</button></li>`)}</ul>
+          <button type="button" class="btn btn-fantasma btn-chico" onClick=${() => { setNodos(nodos.filter((n) => !ocupados.has(n))); setNota(null); }}>Quitar ${ocupados.size === 1 ? 'ese nodo' : 'esos ' + ocupados.size + ' nodos'} de aquí</button>
+        </div>`}
       </div>
 
       <div class="paso">
@@ -5727,8 +5798,9 @@ function FormFalla({ edicion, semilla, mf, onListo, onCancelar }) {
       </div>
       <div class="publicar-barra">
         ${edicion && html`<button class="btn btn-borde btn-grande" onClick=${onCancelar}>Cancelar</button>`}
-        <button class="btn btn-primario btn-grande" disabled=${!listo} onClick=${() => setConfirmar(true)}>${edicion ? 'Guardar cambios' : 'Publicar falla'}</button>
+        <button class="btn btn-primario btn-grande" disabled=${!listo || revisando} onClick=${revisar}>${revisando ? 'Revisando…' : edicion ? 'Guardar cambios' : 'Publicar falla'}</button>
       </div>
+      ${choques.length > 0 && html`<p class="sub publicar-nota">No se puede ${edicion ? 'guardar' : 'publicar'}: hay nodos que ya están en otra falla activa.</p>`}
     </div>
 
     ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en ' + U.numeroFalla(edicion) : 'Publicar falla'} onCerrar=${() => setConfirmar(false)}
@@ -7890,7 +7962,8 @@ function BarraSuperior({ mf }) {
 function AvisoCambios() {
   const s = useG();
   const r = s.remoto;
-  if (!r) return null;
+  // En Fallas, Workforce no espera al botón: los cambios de los demás se cargan solos (VistaFallas)
+  if (!r || (s.ruta === 'fallas' && esWorkforce())) return null;
   const c = r.cambio || {};
   const quien = c.por ? c.por.nombre : 'Alguien';
   return html`<div class="aviso" role="alert">

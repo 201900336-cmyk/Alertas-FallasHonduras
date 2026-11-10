@@ -694,6 +694,48 @@ with sync_playwright() as p:
         x.screenshot(path=OUT + 'e12_stats.png', full_page=True)
         ok(x.locator('.kpi .v').first.inner_text() != '0', 'estadísticas con las consultas del servidor')
 
+    print('9. Fallas duplicadas: un nodo solo puede estar en una falla activa a la vez')
+    x.goto(APP + '#fallas'); x.wait_for_selector('.entrada-nodos textarea', timeout=60000)
+    n1, n2, n3 = x.evaluate("""() => { const act = new Set(G.s.fallas.filter((f) => f.estado === 'ACTIVA').flatMap((f) => f.nodos));
+        return [...G.s.cat.nodos.keys()].filter((n) => !U.esVirtual(n) && !act.has(n) && G.s.cat.nodos.get(n).total >= 1).sort().slice(-3); }""")
+    otra_persona = "async (n) => { await Backend.falla('publicar', { falla: { nodos: [n], motivo: 'ENERGIA', inicio: Date.now() } }); }"   # la página no se entera
+    en_servidor = "async (ns) => (await Backend.cargar(G.s.meta.baseVersion)).fallas.filter((f) => f.estado === 'ACTIVA' && f.nodos.some((n) => ns.includes(n)))"
+    x.locator('.entrada-nodos textarea').fill(n1); x.click('button.agregar'); x.wait_for_timeout(300)
+    x.click('button.motivo:has-text("energía")'); x.fill('input.numero-falla', 'F7770001')
+    x.click('.publicar-barra .btn-primario'); x.wait_for_selector('.modal .btn-primario', timeout=20000)
+    x.dblclick('.modal .btn-primario')
+    x.wait_for_selector('.falla-card', timeout=20000); x.wait_for_timeout(800)
+    hay = x.evaluate(en_servidor, [n1])
+    ok(len(hay) == 1 and hay[0]['numero'] == 'F7770001', 'con doble clic en Publicar queda una sola falla', [f['id'] for f in hay])
+    x.click('.pestanas button:has-text("Publicar falla")'); x.wait_for_selector('.entrada-nodos textarea')
+    x.locator('.entrada-nodos textarea').fill(n1 + ' ' + n2); x.click('button.agregar'); x.wait_for_timeout(300)
+    x.click('button.motivo:has-text("fibra")')
+    ch = x.locator('.choque-nodos')
+    ok(ch.count() == 1 and n1 + ' ya está en otra falla activa' in ch.inner_text() and 'F7770001' in ch.inner_text() and 'La publicó ' in ch.inner_text()
+       and x.locator('.publicar-barra .btn-primario').is_disabled() and x.locator('.nodo-chip[data-ocupado="true"]').count() == 1,
+       'al poner un nodo que ya está en una falla activa, el formulario no deja publicar y dice cuál es y quién la publicó', ch.inner_text() if ch.count() else '')
+    x.locator('.form-falla .paso').first.screenshot(path=OUT + 'e13_falla_duplicada.png')
+    ch.locator('button:has-text("Quitar ese nodo de aquí")').click(); x.wait_for_timeout(200)
+    ok(x.locator('.choque-nodos').count() == 0 and x.locator('.nodo-chip').count() == 1 and x.locator('.publicar-barra .btn-primario').is_enabled(), 'quitando ese nodo, se puede publicar el resto')
+    x.evaluate(otra_persona, n2)
+    try: x.click('.publicar-barra .btn-primario', timeout=4000)
+    except Exception: pass   # si la página ya lo cargó sola, el botón ya está apagado
+    x.wait_for_selector('.choque-nodos', timeout=20000)
+    ok(x.locator('.modal').count() == 0 and n2 + ' ya está en otra falla activa' in x.locator('.choque-nodos').inner_text(),
+       'si otra persona publicó ese nodo hace un momento, al dar Publicar se revisa lo último y no deja duplicarla', x.locator('.choque-nodos').inner_text())
+    x.locator('.choque-nodos button:has-text("Quitar ese nodo de aquí")').click(); x.wait_for_timeout(200)
+    x.locator('.entrada-nodos textarea').fill(n3); x.click('button.agregar'); x.wait_for_timeout(300)
+    x.click('.publicar-barra .btn-primario'); x.wait_for_selector('.modal .btn-primario', timeout=20000)
+    x.evaluate(otra_persona, n3)
+    x.click('.modal .btn-primario'); x.wait_for_selector('.choque-nodos', timeout=20000)
+    hay = x.evaluate(en_servidor, [n1, n2, n3])
+    ok(x.locator('.modal').count() == 0 and n3 + ' ya está en otra falla activa' in x.locator('.choque-nodos').inner_text() and len(hay) == 3,
+       'y si la publican entre Confirmar y Publicar, el servidor la rechaza: queda una sola falla activa por nodo', [x.locator('.choque-nodos').inner_text(), len(hay)])
+    x.locator('.choque-nodos li button').first.click(); x.wait_for_timeout(400)
+    ok(x.locator('.pestanas button[aria-selected=true]').inner_text().startswith('Editar') and x.locator('.nodo-chip').count() == 1 and n3 in x.locator('.lista-nodos').inner_text(),
+       'Abrir lleva a editar la falla que ya existe', x.locator('.pestanas button[aria-selected=true]').inner_text())
+    x.evaluate("async (ids) => { for (const id of ids) await A.cerrarFalla(id, Date.now(), 'Prueba'); }", [f['id'] for f in hay])
+
     ok(not [e for e in errores if 'ERR_' not in e and 'status of 503' not in e], 'sin errores de JavaScript en las páginas', errores[:5])   # los 503 son los que simula la prueba
     b.close()
 print('\n' + ('TODO BIEN' if not fallos else f'{len(fallos)} FALLAS: ' + '; '.join(fallos)))
