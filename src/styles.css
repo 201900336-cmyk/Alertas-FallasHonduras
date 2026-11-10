@@ -275,6 +275,19 @@ button { cursor: pointer; }
 .hist-etiquetas .llamo { font-weight: 650; color: var(--ink); }
 .hist-vacio { padding: 18px 16px; }
 .hist-pie { margin: 0; padding: 10px 20px 16px; border-top: 1px solid var(--line); }
+/* En Reportes: el periodo, Copiar para Ajustes y el CSV, y la duración exacta de cada falla */
+.historial-cliente .panel-cab .der { min-width: 0; max-width: 100%; }
+.historial-cliente .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.historial-cliente .seg::-webkit-scrollbar { display: none; }
+.historial-cliente .seg button { flex: none; white-space: nowrap; }
+.hist-barra { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 0 20px 14px; margin-top: -2px; }
+.hist-barra .der { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.hist-periodo { font-size: 13.5px; color: var(--ink-2); }
+.hist-rango { display: flex; gap: 8px 14px; flex-wrap: wrap; align-items: center; }
+.hist-rango label { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.hist-rango .input { height: 34px; width: auto; padding: 0 10px; font-variant-numeric: tabular-nums; }
+.hist-dur small { display: block; margin-top: 1px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.hist-kpis small.hist-pendiente { color: var(--resuelta-text); font-weight: 600; }
 
 /* Veredicto: lo más fuerte de la pantalla */
 .veredicto {
@@ -1225,6 +1238,8 @@ table.conex-tabla { min-width: 680px; }
   .hist-dur { grid-column: 3; grid-row: 1; }
   .hist-etiquetas { grid-column: 2 / -1; justify-content: flex-start; }
   .hist-etiquetas:empty { display: none; }
+  .hist-barra { padding: 0 16px 12px; }
+  .hist-barra .der { margin-left: 0; }
 }
 @media (max-width: 480px) {
   .acceso-titulo { flex-wrap: wrap; }

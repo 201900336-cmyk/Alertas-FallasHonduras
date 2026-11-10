@@ -161,7 +161,13 @@ function Resultado({ res, sel, setSel, now, reporte }) {
 
 /* ---------- Historial de fallas del cliente ---------- */
 const PERIODOS_HIST = [[90, '90 días', 'en 90 días'], [180, '6 meses', 'en 6 meses'], [365, '1 año', 'en 1 año']];
+// En Reportes también por mes y por fechas: Ajustes da notas de crédito por el tiempo que el cliente estuvo sin servicio
+const PERIODOS_AJUSTES = [['mes', 'Este mes'], ['anterior', 'Mes pasado'], ['90', '90 días'], ['180', '6 meses'], ['365', '1 año'], ['fechas', 'Fechas']];
+const CLAVE_PER_CLIENTE = 'alertas-reporte-cliente-per';
 const fechaHist = (t, now) => (U.esHoy(t, now) ? 'Hoy, ' + U.hora(t) : U.dia(t) + ', ' + U.hora(t));
+// Con el año, para Ajustes: "5 oct 2026, 10:00 a. m. → 12:00 p. m." (si termina el mismo día, solo la hora)
+const fechasAjustes = (f) => U.diaAnio(f.inicio) + ', ' + U.hora(f.inicio) + ' → '
+  + (!f.fin ? 'sigue activa' : U.inicioDia(f.fin) === U.inicioDia(f.inicio) ? U.hora(f.fin) : U.diaAnio(f.fin) + ', ' + U.hora(f.fin));
 const cacheContactos = new Map();
 
 /* Las consultas anteriores del contrato se piden aparte, después del veredicto, para no hacer más lenta la búsqueda */
@@ -178,10 +184,20 @@ function useContactos(contrato) {
   return c;
 }
 
+function leerPeriodoCliente() {
+  try { const v = localStorage.getItem(CLAVE_PER_CLIENTE); if (PERIODOS_AJUSTES.some((p) => p[0] === v)) return v; } catch (e) { /* sin almacenamiento */ }
+  return '365';
+}
+
 function HistorialCliente({ rec, lista, now, rein, reporte }) {
-  const [dias, setDias] = useState(reporte ? 365 : 90);
-  const per = PERIODOS_HIST.find((p) => p[0] === dias);
-  const h = Model.historialCliente(lista, rec, now, dias);
+  const [dias, setDias] = useState(90);
+  const [per, setPerEstado] = useState(() => (reporte ? leerPeriodoCliente() : ''));
+  const [fechas, setFechas] = useState(() => ({ desde: Model.isoDia(new Date(now).setDate(1)), hasta: Model.isoDia(now) }));
+  const [copiado, setCopiado] = useState(false);
+  const setPer = (p) => { setPerEstado(p); try { localStorage.setItem(CLAVE_PER_CLIENTE, p); } catch (e) { /* sin almacenamiento */ } };
+  const rango = reporte ? Model.periodoAfectacion(per, now, fechas) : null;
+  const h = Model.historialCliente(lista, rec, now, dias, rango);
+  const enPer = reporte ? rango.en : PERIODOS_HIST.find((p) => p[0] === dias)[2];
   const c = useContactos(rec.contrato);
   // Cuántas veces llamó durante cada falla (Concentrix y Tiendas). En la falla activa no cuenta la llamada de
   // ahora (las consultas de los últimos 10 minutos): lo útil es saber si ya había llamado por esta falla.
@@ -189,17 +205,44 @@ function HistorialCliente({ rec, lista, now, rein, reporte }) {
   // En Reportes: sus llamadas al Call Center y visitas a Tiendas en 30 días (las búsquedas de Workforce no cuentan)
   const llamadas30 = c && c.veces ? Model.llamadasEn(c.veces, now - 30 * U.DIA, now) : 0;
   const ultimaLlamada = c && c.veces && c.veces.length ? Math.max(...c.veces) : null;
+  const hoyIso = Model.isoDia(now), minIso = Model.isoDia(new Date(now).setDate(new Date(now).getDate() - Model.DIAS_HISTORIAL));
+  const cambiarFecha = (k) => (e) => { const v = e.target.value; if (v) setFechas((x) => Object.assign({}, x, { [k]: v })); };
+  async function copiarAjustes() {
+    const r = Model.resumenAfectacion(h, rec, now);
+    if (!(await U.copiarHtml(r.html, r.texto))) { tostada('No se pudo copiar. Descarga el CSV o selecciona el texto y usa Ctrl+C.'); return; }
+    setCopiado(true); setTimeout(() => setCopiado(false), 2500);
+    tostada('Resumen copiado: pégalo en el caso o en el correo con Ctrl+V');
+  }
+  function descargar() { const r = Model.resumenAfectacion(h, rec, now); U.descargarCsv(r.archivo, r.filas); }
+  const pend = h.pendientes.length;
   return html`<section class="panel historial-cliente" aria-label="Historial de fallas del cliente">
     <div class="panel-cab">
       <h3>Historial de fallas de este cliente</h3>
       ${rein && html`<span class="marca-estado" data-s="FALLA" title=${CONFIG.reincidente.fallas + ' o más fallas en ' + CONFIG.reincidente.dias + ' días'}>Cliente reincidente</span>`}
       <div class="der"><div class="seg" role="group" aria-label="Periodo">
-        ${PERIODOS_HIST.map(([d, t]) => html`<button type="button" aria-pressed=${dias === d} onClick=${() => setDias(d)} key=${d}>${t}</button>`)}
+        ${reporte ? PERIODOS_AJUSTES.map(([k, t]) => html`<button type="button" aria-pressed=${per === k} onClick=${() => setPer(k)} key=${k}>${t}</button>`)
+          : PERIODOS_HIST.map(([d, t]) => html`<button type="button" aria-pressed=${dias === d} onClick=${() => setDias(d)} key=${d}>${t}</button>`)}
       </div></div>
     </div>
+    ${reporte && html`<div class="hist-barra">
+      ${per === 'fechas' && html`<div class="hist-rango">
+        <label>Desde <input class="input" type="date" value=${fechas.desde} min=${minIso} max=${hoyIso} onChange=${cambiarFecha('desde')} aria-label="Desde" /></label>
+        <label>Hasta <input class="input" type="date" value=${fechas.hasta} min=${minIso} max=${hoyIso} onChange=${cambiarFecha('hasta')} aria-label="Hasta" /></label>
+      </div>`}
+      <span class="hist-periodo">${U.conMayuscula(Model.textoPeriodo(h.desde, h.hasta, now))}${h.desdeAlta ? ' (es cliente desde esa fecha)' : ''}</span>
+      <div class="der">
+        <button class="btn btn-borde btn-chico" type="button" onClick=${copiarAjustes} title="El cliente, el periodo, cada falla con su inicio, fin y duración, y el tiempo total. Se pega en el caso o en Outlook (con tabla)">
+          <${Ico} n=${copiado ? 'check' : 'copiar'} s=${15} />${copiado ? 'Copiado' : 'Copiar para Ajustes'}</button>
+        <button class="btn btn-borde btn-chico" type="button" onClick=${descargar}><${Ico} n="descargar" s=${15} />Descargar CSV</button>
+      </div>
+    </div>`}
     <div class="hist-kpis">
-      <div><b class="num">${U.n(h.total)}</b><span>${U.plural(h.total, 'falla', 'fallas')} ${per[2]}</span></div>
-      <div><b class="num">${h.total ? U.dur(h.ms) : '0 h'}</b><span>sin servicio en total</span></div>
+      <div><b class="num">${U.n(h.total)}</b><span>${U.plural(h.total, 'falla', 'fallas')} ${enPer}</span></div>
+      ${reporte ? html`<div class="hist-total"><b class="num">${U.durHM(h.msConfirmado)}</b><span>tiempo total de afectación</span>
+          <small>${U.n2(h.msConfirmado / U.HORA)} horas · ${U.n2(h.msConfirmado / U.DIA)} días</small>
+          ${h.solape > 0 && html`<small>${U.durHM(h.solape)} en que coincidieron dos fallas cuenta una sola vez</small>`}
+          ${pend > 0 && html`<small class="hist-pendiente">No suma ${pend === 1 ? 'la posible falla' : 'las ' + pend + ' posibles fallas'} en validación</small>`}</div>`
+        : html`<div><b class="num">${h.total ? U.dur(h.ms) : '0 h'}</b><span>sin servicio en total</span></div>`}
       ${reporte ? html`<div><b class="num">${!c ? '…' : c.error ? '—' : U.n(llamadas30)}</b>
           <span>${U.plural(c && !c.error ? llamadas30 : 2, 'llamada', 'llamadas')} en 30 días</span>
           ${c && !c.error && html`<small>${ultimaLlamada ? 'La última: ' + fechaHist(ultimaLlamada, now) : 'No llamó en los últimos 30 días'}</small>`}</div>`
@@ -210,13 +253,15 @@ function HistorialCliente({ rec, lista, now, rein, reporte }) {
     ${h.total ? html`<ol class="hist-lista">${h.fallas.map((f) => { const llamo = llamadas(f); return html`<li key=${f.id}>
         <span class="hist-punto" data-s=${f.fin ? 'RESUELTA' : 'FALLA'}></span>
         <div class="hist-motivo"><b>${nombreMotivo(f)}</b><span class="sub">Nodo ${rec.nodo}</span></div>
-        <div class="num hist-fechas">${fechaHist(f.inicio, now)} → ${f.fin ? fechaHist(f.fin, now) : 'sigue activa'}</div>
-        <div class="num hist-dur">${U.dur((f.fin || now) - f.inicio)}</div>
+        <div class="num hist-fechas">${reporte ? fechasAjustes(f) : html`${fechaHist(f.inicio, now)} → ${f.fin ? fechaHist(f.fin, now) : 'sigue activa'}`}</div>
+        <div class="num hist-dur">${reporte ? U.durHM(f.duracion) : U.dur((f.fin || now) - f.inicio)}${reporte && (Model.esPosible(f) ? html`<small>no se suma</small>`
+          : f.recortada ? html`<small>${U.durHM(f.dentro)} en el periodo</small>` : !f.fin ? html`<small>hasta ahora</small>` : '')}</div>
         <div class="hist-etiquetas">${!f.fin && html`<span class="marca-estado" data-s="FALLA">${Model.esPosible(f) ? 'En validación' : 'Activa'}</span>`}${llamo > 0 && html`<span class="chip llamo" title=${f.fin ? 'Llamadas de este cliente durante la falla (varias búsquedas en la misma llamada cuentan una vez)' : 'Llamadas anteriores de este cliente durante esta falla, sin contar la de ahora'}>
           <${Ico} n="telefono" s=${13} />${f.fin ? U.plural(llamo, 'Llamó 1 vez', 'Llamó ' + llamo + ' veces') : U.plural(llamo, 'Ya había llamado 1 vez', 'Ya había llamado ' + llamo + ' veces')}</span>`}${f.numero && html`<span class="chip codigo">${U.numeroFalla(f)}</span>`}</div>
       </li>`; })}</ol>`
-      : html`<div class="vacio hist-vacio"><b>Sin fallas ${per[2]}</b>Workforce HN no ha registrado fallas en su nodo en este periodo.</div>`}
-    <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}. "Llamó" cuenta sus llamadas al Call Center y visitas a Tiendas durante cada falla, en los últimos 30 días.</p>
+      : html`<div class="vacio hist-vacio"><b>Sin fallas ${enPer}</b>Workforce HN no ha registrado fallas en su nodo en este periodo.</div>`}
+    <p class="sub hist-pie">Fallas registradas en Alertas para el nodo actual del cliente (${rec.nodo})${rec.fecha ? ', desde que es cliente' : ''}.${reporte
+      ? ' El tiempo de afectación va del inicio al cierre de cada falla, en minutos; si dos fallas coinciden, ese tiempo cuenta una vez, y las posibles fallas en validación no se suman.' : ''} "Llamó" cuenta sus llamadas al Call Center y visitas a Tiendas durante cada falla, en los últimos 30 días.</p>
   </section>`;
 }
 

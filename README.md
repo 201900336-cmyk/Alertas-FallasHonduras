@@ -9,7 +9,7 @@
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
 - **Todos** tienen que permitir los avisos en el escritorio al entrar: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
-- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados), **Nodo o cliente** (cuántos clientes de un nodo consultaron, por qué canal y cuándo; o todas las fallas de un cliente y cuántas veces llamó) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
+- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados), **Nodo o cliente** (cuántos clientes de un nodo consultaron, por qué canal y cuándo; o todas las fallas de un cliente, cuántas veces llamó y el tiempo total que estuvo afectado, para las notas de crédito de Ajustes) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
 
 ---
 
@@ -205,7 +205,16 @@ Para darle seguimiento a quien no está usando Alertas:
 
 Un solo buscador: un nodo (lleva letras, por ejemplo GRA01) o un contrato o DNI (solo números).
 
-**Con un contrato o DNI** sale el cliente igual que en Consulta, sin el guion para el cliente: su estado de ahora, sus datos y **todas las fallas de su nodo** (activas y resueltas) en 90 días, 6 meses o 1 año (abre en 1 año), con cuánto tiempo estuvo sin servicio, cuántas veces llamó en 30 días y en qué fallas llamó. Las búsquedas de Workforce no cuentan como llamadas. El contrato buscado no se guarda en la PC.
+**Con un contrato o DNI** sale el cliente igual que en Consulta, sin el guion para el cliente: su estado de ahora, sus datos y **todas las fallas de su nodo** (activas y resueltas), cuántas veces llamó en 30 días y en qué fallas llamó. Las búsquedas de Workforce no cuentan como llamadas. El contrato buscado no se guarda en la PC (sí el último periodo elegido).
+
+**Tiempo de afectación (para Ajustes y las notas de crédito).** Cuánto tiempo estuvo afectado el cliente, desde el inicio hasta el cierre de cada falla:
+
+- Por periodo: **Este mes**, **Mes pasado**, 90 días, 6 meses, 1 año o **Fechas** (desde y hasta, dentro del último año). Los periodos empiezan a las 00:00 del primer día; el mes pasado termina a las 00:00 del día 1.
+- Cada falla con fecha y hora de inicio y de fin (o "sigue activa") y su duración exacta en horas y minutos. Si una falla empezó antes del periodo o terminó después, dice cuánto de ella cae en el periodo, y solo eso se suma.
+- **Tiempo total de afectación** en horas y minutos, en horas con decimales y en días. Si dos fallas coinciden (por ejemplo, energía y fibra a la vez), ese tiempo se cuenta una sola vez.
+- Las **posibles fallas en validación** salen en la lista pero no se suman hasta que Workforce las confirme. Una falla activa cuenta hasta la hora de la consulta. Si el cliente es nuevo, se cuenta desde su fecha de alta.
+- **Copiar para Ajustes** copia el resumen (cliente, contrato, nodo y colonia, periodo, cada falla y el total): se pega como texto en el caso o con tabla en Outlook. **Descargar CSV** baja una fila por falla (inicio y fin con fecha y hora que Excel entiende, minutos y minutos en el periodo) y el total.
+- Son las fallas registradas en Alertas para el **nodo actual** del cliente: si se cambió de nodo, las del nodo anterior no salen.
 
 **Con un nodo** dice, para hoy, 7 o 30 días (el detalle de cada consulta se guarda 30 días):
 

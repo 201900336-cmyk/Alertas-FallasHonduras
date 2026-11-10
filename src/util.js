@@ -5,6 +5,7 @@
 const U = (() => {
   const nf = new Intl.NumberFormat('es-HN');
   const nf1 = new Intl.NumberFormat('es-HN', { maximumFractionDigits: 1 });
+  const nf2 = new Intl.NumberFormat('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fHora = new Intl.DateTimeFormat('es-HN', { hour: 'numeric', minute: '2-digit' });
   const fDia = new Intl.DateTimeFormat('es-HN', { day: 'numeric', month: 'short' });
   const fDiaAnio = new Intl.DateTimeFormat('es-HN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -13,6 +14,7 @@ const U = (() => {
 
   const n = (v) => nf.format(Math.round(v || 0));
   const n1 = (v) => nf1.format(v || 0);
+  const n2 = (v) => nf2.format(v || 0);
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
   const compact = (v) => {
     v = v || 0;
@@ -62,6 +64,14 @@ const U = (() => {
     if (!h) return m + ' min';
     return m ? h + ' h ' + m + ' min' : h + ' h';
   };
+  /* Exacta, en horas y minutos sin pasar a días (para Ajustes): "27 h 15 min", "75 h", "45 min" */
+  const durHM = (ms) => {
+    const t = Math.floor(Math.max(0, ms || 0) / MIN);
+    if (!t) return ms > 0 ? 'menos de 1 min' : '0 min';
+    const h = Math.floor(t / 60), m = t % 60;
+    if (!h) return m + ' min';
+    return m ? n(h) + ' h ' + m + ' min' : n(h) + ' h';
+  };
   const hace = (ts, now) => 'hace ' + dur((now || Date.now()) - ts);
   const durCorto = (ms) => {
     ms = Math.max(0, ms || 0);
@@ -109,6 +119,7 @@ const U = (() => {
 
   /* Agrega punto final solo si hace falta (las horas ya terminan en "p. m.") */
   const conPunto = (s) => (/[.!?]$/.test(String(s).trim()) ? String(s) : s + '.');
+  const conMayuscula = (s) => { s = String(s == null ? '' : s); return s.charAt(0).toUpperCase() + s.slice(1); };
   const horas = (ms) => ms / HORA;
 
   /* Texto */
@@ -252,7 +263,7 @@ const U = (() => {
     return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
   };
 
-  return { MIN, HORA, DIA, n, n1, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
-    dur, durCorto, conPunto, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, colonia, claveColonia, coloniaNoUsar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
+  return { MIN, HORA, DIA, n, n1, n2, pct, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
+    dur, durCorto, durHM, conPunto, conMayuscula, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, colonia, claveColonia, coloniaNoUsar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();

@@ -1489,6 +1489,73 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(r.ok && mon.datos.nodos.find((x) => x.n === principal).falla === false, 'al cerrarla vuelve a En línea', mon.datos.nodos.find((x) => x.n === principal));
   ok(!/clientes|total|hfc|gpon/i.test(JSON.stringify(mon.datos)), 'no manda cantidades de clientes ni tecnologías');
 
+  /* ---------- Tiempo de afectación del cliente (para Ajustes y las notas de crédito) ---------- */
+  console.log('\n15. Tiempo de afectación del cliente (para Ajustes)');
+  {
+    const L = (y, mo, d, h = 0, mi = 0, s = 0) => new Date(y, mo - 1, d, h, mi, s).getTime();
+    const ahora = L(2026, 11, 9, 15, 20, 30);
+    const lista = [
+      { id: 'F2610040', motivo: 'POSTES', inicio: L(2026, 10, 4, 20, 0), fin: L(2026, 10, 5, 1, 0) },
+      { id: 'F2610050', motivo: 'ENERGIA', inicio: L(2026, 10, 5, 10, 0, 40), fin: L(2026, 10, 5, 12, 0, 10), numero: 'F1250001' },
+      { id: 'F2610051', motivo: 'FIBRA', inicio: L(2026, 10, 5, 11, 0), fin: L(2026, 10, 5, 14, 30) },
+      { id: 'F2610310', motivo: 'MANTENIMIENTO', inicio: L(2026, 10, 31, 22, 0), fin: L(2026, 11, 1, 2, 0) },
+      { id: 'F2609300', motivo: 'OTRO', motivoTexto: 'Robo de cable', inicio: L(2026, 9, 29, 20, 0), fin: L(2026, 10, 1, 0, 0) },
+      { id: 'F2611090', motivo: 'VALIDACION', inicio: L(2026, 11, 9, 8, 0), fin: null },
+      { id: 'F2611100', motivo: 'MANTENIMIENTO', inicio: L(2026, 11, 10, 1, 0), fin: L(2026, 11, 10, 3, 0) }
+    ];
+    const recA = { contrato: 9999901, nombre: 'JUAN CARLOS PEREZ', nodo: 'TGU01', tecnologia: 'HFC', colonia: 'COL. EL CASTA¿O SUR', municipio: 'DISTRITO CENTRAL', departamento: 'FRANCISCO MORAZAN', fecha: 0 };
+    const oct = Model.periodoAfectacion('anterior', ahora);
+    ok(oct.desde === L(2026, 10, 1) && oct.hasta === L(2026, 11, 1) && oct.en === 'en octubre', '"Mes pasado" va del 1 de octubre a las 00:00 al 1 de noviembre a las 00:00', oct);
+    const hO = Model.historialCliente(lista, recA, ahora, 365, oct);
+    ok(hO.fallas.map((f) => f.id).join() === 'F2610310,F2610051,F2610050,F2610040',
+      'en octubre entran las fallas que lo tocan; la que terminó justo a las 00:00 del 1 de octubre y la de noviembre no', hO.fallas.map((f) => f.id));
+    ok(hO.msConfirmado === 690 * U.MIN && hO.solape === 60 * U.MIN && U.durHM(hO.msConfirmado) === '11 h 30 min',
+      'el total une los tramos: la hora en que la de energía y la de fibra coincidieron cuenta una vez (11 h 30 min, no 12 h 30 min)', [hO.msConfirmado / U.MIN, hO.solape / U.MIN]);
+    const mant = hO.fallas.find((f) => f.id === 'F2610310'), ener = hO.fallas.find((f) => f.id === 'F2610050');
+    ok(mant.duracion === 240 * U.MIN && mant.dentro === 120 * U.MIN && mant.recortada && ener.duracion === 120 * U.MIN,
+      'la que cruza al 1 de noviembre dura 4 h pero solo 2 h son de octubre; los segundos no cuentan (10:00:40 a 12:00:10 son 2 h)', [mant.dentro / U.MIN, ener.duracion / U.MIN]);
+    const nov = Model.periodoAfectacion('mes', ahora);
+    const hN = Model.historialCliente(lista, recA, ahora, 365, nov);
+    ok(hN.fallas.map((f) => f.id).join() === 'F2611090,F2610310' && hN.msConfirmado === 120 * U.MIN && hN.ms === (120 + 440) * U.MIN && hN.pendientes.length === 1,
+      '"Este mes": la posible falla en validación sale en la lista pero no se suma al tiempo para Ajustes (2 h y no 9 h 20 min)', [hN.fallas.map((f) => f.id), hN.msConfirmado / U.MIN, hN.ms / U.MIN]);
+    const recB = Object.assign({}, recA, { fecha: Date.UTC(2026, 9, 5) / U.DIA });
+    const hB = Model.historialCliente(lista, recB, ahora, 365, oct);
+    ok(hB.desdeAlta && hB.desde === L(2026, 10, 5) && hB.msConfirmado === (60 + 270 + 120) * U.MIN,
+      'si es cliente desde el 5 de octubre, cuenta desde las 00:00 de ese día (de la caída de postes solo 1 h)', [hB.desde, hB.msConfirmado / U.MIN]);
+    ok(Model.reincidente(lista, recA, ahora) && Model.historialCliente(lista, recA, ahora, 90).total === 6, 'en Consulta sigue igual: 6 fallas en 90 días y cliente reincidente');
+    const r15 = Model.resumenAfectacion(hO, recA, ahora);
+    const lineas = r15.texto.split('\r\n');
+    ok(lineas[0] === 'Tiempo de afectación del servicio' && lineas.includes('Contrato: 9999901 · Cliente: Juan Carlos Perez')
+      && lineas.includes('Nodo: TGU01 (HFC) · Col. El Castaño Sur, Distrito Central, Francisco Morazán') && lineas.includes('Periodo: del 1 oct 2026 al 31 oct 2026'),
+      'Copiar para Ajustes: el contrato, el cliente, su nodo y colonia (limpia) y el periodo', lineas.slice(0, 5));
+    ok(lineas.includes('1. F2610040 · Caída de postes · 4 oct 2026, 8:00 p. m. a 5 oct 2026, 1:00 a. m. · 5 h')
+      && lineas.includes('2. F1250001 · Falla de energía comercial · 5 oct 2026, 10:00 a. m. a 12:00 p. m. · 2 h')
+      && lineas.includes('4. F2610310 · Mantenimiento preventivo · 31 oct 2026, 10:00 p. m. a 1 nov 2026, 2:00 a. m. · 4 h (2 h dentro del periodo)'),
+      'cada falla con su número, motivo, inicio, fin y duración, de la más vieja a la más nueva', lineas.slice(5, 11));
+    ok(lineas.includes('Tiempo total de afectación: 11 h 30 min (11.50 horas · 0.48 días)') && lineas.includes('Hay 1 h en que dos fallas coinciden: ese tiempo se cuenta una sola vez.')
+      && /^Fuente: Alertas, fallas registradas para el nodo TGU01\. Consultado el 9 nov 2026 a las 3:20 p\. m\.$/.test(lineas[lineas.length - 1]),
+      'el total en horas y minutos, en horas y en días, y de dónde sale', lineas.slice(-4));
+    ok(/<table[^>]*>.*<th[^>]*>Duración<\/th>.*Tiempo total de afectación.*11 h 30 min/.test(r15.html) && !/undefined|null/.test(r15.html + r15.texto),
+      'para Outlook va con tabla (cada falla y el total)');
+    const csv15 = r15.filas;
+    ok(csv15[0].join() === 'Contrato,Cliente,Nodo,Falla,Motivo,Estado,Inicio,Fin,Duración,Minutos,Minutos en el periodo'
+      && csv15[4].join() === '9999901,Juan Carlos Perez,TGU01,F2610310,Mantenimiento preventivo,Resuelta,2026-10-31 22:00,2026-11-01 02:00,4 h,240,120'
+      && csv15[5][3] === 'Total' && csv15[5][10] === 690 && r15.archivo === 'afectacion-9999901-2026-10-01-a-2026-10-31.csv',
+      'el CSV: una fila por falla (con fecha y hora que Excel entiende, minutos y minutos en el periodo) y el total', [csv15[4], csv15[5], r15.archivo]);
+    const tN = Model.resumenAfectacion(hN, recA, ahora).texto;
+    ok(tN.includes('Periodo: del 1 nov 2026 a hoy, 9 nov 2026 a las 3:20 p. m.') && tN.includes('9 nov 2026, 8:00 a. m., sigue activa · 7 h 20 min (posible falla en validación: no se suma)')
+      && tN.includes('Tiempo total de afectación: 2 h (2.00 horas · 0.08 días)') && tN.includes('No se suma la posible falla que Workforce HN sigue validando.'),
+      'con una posible falla en validación lo dice y no la suma', tN);
+    const f3 = Model.periodoAfectacion('fechas', ahora, { desde: '2026-11-05', hasta: '2026-11-01' });
+    ok(f3.desde === L(2026, 11, 1) && f3.hasta === L(2026, 11, 6) && Model.textoPeriodo(f3.desde, f3.hasta, ahora) === 'del 1 nov 2026 al 5 nov 2026',
+      '"Fechas": del primer día a las 00:00 al último día completo (si se ponen al revés, se ordenan)', f3);
+    const f4 = Model.periodoAfectacion('fechas', ahora, { desde: '2024-01-01', hasta: '2027-01-01' });
+    ok(f4.desde === L(2025, 11, 9) && f4.hasta === ahora, 'y no pasan de un año atrás ni de ahora', f4);
+    const d90 = Model.periodoAfectacion('90', ahora);
+    ok(d90.desde === L(2026, 8, 12) && d90.en === 'en 90 días' && U.durHM(0) === '0 min' && U.durHM(30000) === 'menos de 1 min' && U.durHM(75 * U.HORA + 5 * U.MIN) === '75 h 5 min',
+      '"90 días" va de las 00:00 de hace 89 días a ahora; las duraciones no pasan a días (75 h 5 min)', d90);
+  }
+
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);
   process.exit(fallos ? 1 : 0);

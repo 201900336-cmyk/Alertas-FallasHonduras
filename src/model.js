@@ -437,13 +437,138 @@ const Model = (() => {
   }
   const PRIORIDAD = { FALLA: 0, RESUELTA: 1, SIN_FALLA: 2, SIN_NODO: 3 };
 
-  /* Historial de un cliente: las fallas de su nodo en los últimos `dias` días, sin contar las de antes de que
-     fuera cliente. lista: [{ id, motivo, motivoTexto, inicio, fin (null si sigue activa), numero? }] */
-  function historialCliente(lista, rec, now, dias) {
-    const desde = Math.max(now - dias * U.DIA, rec.fecha ? rec.fecha * U.DIA : 0);
-    const fallas = (lista || []).filter((f) => (f.fin || now) >= desde && f.inicio <= now).sort((a, b) => b.inicio - a.inicio);
-    const ms = fallas.reduce((a, f) => a + Math.max(0, (f.fin || now) - f.inicio), 0);
-    return { fallas, total: fallas.length, ms };
+  /* La fecha de alta del cliente (días desde 1970, sin hora) como la medianoche de ese día en Honduras */
+  const altaLocal = (d) => { const x = new Date(d * U.DIA); return new Date(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()).getTime(); };
+  const aMinuto = (t) => Math.floor(t / U.MIN) * U.MIN;
+
+  /* Historial de un cliente: las fallas de su nodo en un periodo, sin contar lo de antes de que fuera cliente.
+     lista: [{ id, motivo, motivoTexto, inicio, fin (null si sigue activa), numero? }]
+     Sin rango son los últimos `dias` días; con rango { desde, hasta }, ese periodo (como mucho, hasta ahora).
+     El tiempo va en minutos enteros, como se leen las horas, para que lo que se suma cuadre con lo que se ve.
+     De cada falla: duracion (toda) y dentro (la parte que cae en el periodo). ms une los tramos, así el tiempo
+     en que dos fallas coinciden cuenta una sola vez. Para Ajustes (notas de crédito), msConfirmado deja fuera
+     las posibles fallas que siguen en validación (van en pendientes) y solape es lo que se dejó de contar doble. */
+  function historialCliente(lista, rec, now, dias, rango) {
+    const ahora = aMinuto(now);
+    const alta = rec && rec.fecha ? altaLocal(rec.fecha) : 0;
+    const pedido = aMinuto(rango && rango.desde != null ? rango.desde : now - dias * U.DIA);
+    const desde = Math.max(pedido, alta);
+    const hasta = Math.min(rango && rango.hasta != null ? aMinuto(rango.hasta) : ahora, ahora);
+    const fallas = [];
+    (lista || []).forEach((f) => {
+      const a = aMinuto(f.inicio), b = f.fin ? aMinuto(f.fin) : ahora;
+      if (a > hasta || b < desde) return;
+      const x = Math.max(a, desde), y = Math.min(b, hasta);
+      // Una que solo toca el borde del periodo (terminó justo cuando empieza) no es de este periodo
+      if (y <= x && a !== b) return;
+      fallas.push(Object.assign({}, f, { duracion: Math.max(0, b - a), dentro: Math.max(0, y - x), recortada: a < desde || b > hasta, tramo: [x, y] }));
+    });
+    fallas.sort((p, q) => q.inicio - p.inicio);
+    const unir = (xs) => {
+      let total = 0, a = 0, b = 0, hay = false;
+      xs.map((f) => f.tramo).filter((t) => t[1] > t[0]).sort((p, q) => p[0] - q[0]).forEach(([x, y]) => {
+        if (!hay || x > b) { if (hay) total += b - a; a = x; b = y; hay = true; } else if (y > b) b = y;
+      });
+      return hay ? total + b - a : total;
+    };
+    const confirmadas = fallas.filter((f) => !esPosible(f));
+    const msConfirmado = unir(confirmadas);
+    return { fallas, total: fallas.length, ms: unir(fallas), msConfirmado, solape: confirmadas.reduce((s, f) => s + f.dentro, 0) - msConfirmado,
+      pendientes: fallas.filter(esPosible), desde, hasta, alta, desdeAlta: alta > pedido };
+  }
+
+  /* Periodos del historial en Reportes. Ajustes calcula las notas de crédito por mes o por las fechas que pida
+     el cliente; los de días van desde las 00:00 del primer día hasta ahora. en: para "3 fallas en octubre". */
+  const fMes = new Intl.DateTimeFormat('es-HN', { month: 'long' });
+  const isoDia = (t) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const deIsoDia = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : null; };
+  const DIAS_HISTORIAL = 365;
+  function periodoAfectacion(clave, now, fechas) {
+    const d = new Date(now), y = d.getFullYear(), m = d.getMonth();
+    if (clave === 'mes' || clave === 'anterior') {
+      const desde = new Date(y, m - (clave === 'anterior' ? 1 : 0), 1).getTime();
+      return { desde, hasta: clave === 'anterior' ? new Date(y, m, 1).getTime() : now, en: 'en ' + fMes.format(new Date(desde)) };
+    }
+    if (clave === 'fechas') {
+      const hoy = U.inicioDia(now), min = new Date(y, m, d.getDate() - DIAS_HISTORIAL).getTime();
+      let a = deIsoDia(fechas && fechas.desde), b = deIsoDia(fechas && fechas.hasta);
+      if (a == null) a = new Date(y, m, 1).getTime();
+      if (b == null) b = hoy;
+      if (a > b) [a, b] = [b, a];
+      a = Math.min(Math.max(a, min), hoy); b = Math.min(Math.max(b, a), hoy);
+      const fin = new Date(b); fin.setDate(fin.getDate() + 1);
+      return { desde: a, hasta: Math.min(fin.getTime(), now), en: 'en el periodo' };
+    }
+    const dias = Number(clave) || DIAS_HISTORIAL;
+    return { desde: new Date(y, m, d.getDate() - (dias - 1)).getTime(), hasta: now, en: 'en ' + (dias === 365 ? '1 año' : dias === 180 ? '6 meses' : dias + ' días') };
+  }
+  /* "del 1 oct 2026 al 31 oct 2026", "el 3 nov 2026" o "del 1 nov 2026 a hoy, 9 nov 2026 a las 3:20 p. m." */
+  function textoPeriodo(desde, hasta, now) {
+    const las = (t) => U.las(t).replace(/ /g, ' ');
+    if (hasta >= aMinuto(now)) {
+      return U.inicioDia(desde) === U.inicioDia(now) ? 'hoy, ' + U.diaAnio(now) + ', hasta ' + las(now) : 'del ' + U.diaAnio(desde) + ' a hoy, ' + U.diaAnio(now) + ' a ' + las(now);
+    }
+    const ultimo = Math.max(desde, hasta - 1);
+    return U.inicioDia(desde) === U.inicioDia(ultimo) ? 'el ' + U.diaAnio(desde) : 'del ' + U.diaAnio(desde) + ' al ' + U.diaAnio(ultimo);
+  }
+
+  /* Resumen para Ajustes (notas de crédito por el tiempo sin servicio): el cliente, el periodo, las fallas de su
+     nodo con inicio, fin y duración, y el tiempo total de afectación. En texto (para pegar en cualquier sistema),
+     en HTML (para Outlook, con tabla) y en filas para el CSV. Las fallas van de la más vieja a la más nueva. */
+  function resumenAfectacion(h, rec, now) {
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+    const hora = (t) => U.hora(t).replace(/ /g, ' ');
+    const fecha = (t) => U.diaAnio(t) + ', ' + hora(t);
+    const finTxt = (f) => (!f.fin ? 'sigue activa' : U.inicioDia(f.fin) === U.inicioDia(f.inicio) ? hora(f.fin) : fecha(f.fin));
+    const iso = (t) => { const d = new Date(t); return isoDia(t) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+    const motivo = (f) => (f.motivo !== 'OTRO' && MOTIVO[f.motivo] ? MOTIVO[f.motivo].nombre : f.motivoTexto || 'Otro motivo');
+    const nombre = U.esEmpresa(rec.nombre, rec.categoria) ? rec.nombre : U.titulo(rec.nombre);
+    const lugar = [U.colonia(rec.colonia), U.lugar(rec.municipio || ''), U.lugar(rec.departamento || '')].filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
+    const nodo = rec.nodo + (rec.tecnologia ? ' (' + rec.tecnologia + ')' : '');
+    const periodo = textoPeriodo(h.desde, h.hasta, now);
+    const orden = h.fallas.slice().sort((a, b) => a.inicio - b.inicio);
+    const ms = h.msConfirmado;
+    const total = U.durHM(ms), cifras = U.n2(ms / U.HORA) + ' horas · ' + U.n2(ms / U.DIA) + ' días';
+    const nota = (f) => (esPosible(f) ? 'posible falla en validación: no se suma' : f.recortada ? U.durHM(f.dentro) + ' dentro del periodo' : !f.fin ? 'hasta ahora' : '');
+    const cuando = (f) => fecha(f.inicio) + (f.fin ? ' a ' + finTxt(f) : ', sigue activa');
+    const activas = orden.filter((f) => !f.fin && !esPosible(f)).length;
+    const notas = [
+      h.solape > 0 ? 'Hay ' + U.durHM(h.solape) + ' en que dos fallas coinciden: ese tiempo se cuenta una sola vez.' : '',
+      activas ? (activas === 1 ? 'Una falla sigue activa: su tiempo' : activas + ' fallas siguen activas: su tiempo') + ' cuenta hasta la hora de esta consulta.' : '',
+      h.pendientes.length ? 'No se suma' + (h.pendientes.length === 1 ? ' la posible falla' : 'n las ' + h.pendientes.length + ' posibles fallas') + ' que ' + CONFIG.equipo + ' sigue validando.' : '',
+      h.desdeAlta ? 'Es cliente desde el ' + U.diaAnio(h.alta) + ': se cuenta desde esa fecha.' : ''
+    ].filter(Boolean);
+    const fuente = 'Fuente: Alertas, fallas registradas para el nodo ' + rec.nodo + '. ' + U.conPunto('Consultado el ' + U.diaAnio(now) + ' a ' + U.las(now).replace(/ /g, ' '));
+    const cab = ['Contrato: ' + rec.contrato + ' · Cliente: ' + (nombre || 'Sin nombre en la base'), 'Nodo: ' + nodo + (lugar ? ' · ' + lugar : ''), 'Periodo: ' + periodo];
+
+    const texto = ['Tiempo de afectación del servicio', ...cab, '',
+      orden.length ? 'Fallas en su nodo: ' + orden.length : 'Fallas en su nodo: ninguna en este periodo.',
+      ...orden.map((f, i) => (i + 1) + '. ' + U.numeroFalla(f) + ' · ' + motivo(f) + ' · ' + cuando(f) + ' · ' + U.durHM(f.duracion) + (nota(f) ? ' (' + nota(f) + ')' : '')),
+      '', 'Tiempo total de afectación: ' + total + ' (' + cifras + ')', ...notas, '', fuente].join('\r\n');
+
+    const borde = 'border:1px solid #aab2bd;padding:4px 8px;text-align:left;vertical-align:top;';
+    const th = (t) => '<th nowrap style="' + borde + 'background:#e8ebef;font-weight:bold;white-space:nowrap">' + esc(t) + '</th>';
+    const td = (t, fijo) => '<td' + (fijo ? ' nowrap' : '') + ' style="' + borde + (fijo ? 'white-space:nowrap;' : '') + '">' + t + '</td>';
+    const parrafo = (t) => '<p style="margin:0 0 6px">' + t + '</p>';
+    const tabla = !orden.length ? '' : '<table cellspacing="0" cellpadding="0" border="1" style="border-collapse:collapse;border:1px solid #aab2bd;font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000000;margin:4px 0 10px">'
+      + '<tr>' + ['N.º', 'Falla', 'Motivo', 'Inicio', 'Fin', 'Duración'].map(th).join('') + '</tr>'
+      + orden.map((f, i) => '<tr>' + td(i + 1, true) + td(esc(U.numeroFalla(f)), true) + td(esc(motivo(f))) + td(esc(fecha(f.inicio)), true)
+        + td(esc(f.fin ? fecha(f.fin) : 'Sigue activa'), true) + td('<b>' + esc(U.durHM(f.duracion)) + '</b>' + (nota(f) ? '<br>' + esc(nota(f)) : '')) + '</tr>').join('')
+      + '<tr><td colspan="5" style="' + borde + 'background:#f4f6f8"><b>Tiempo total de afectación</b></td>' + td('<b>' + esc(total) + '</b>', true) + '</tr></table>';
+    const html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000000">'
+      + parrafo('<b>Tiempo de afectación del servicio</b>') + cab.map((l) => parrafo(esc(l))).join('')
+      + (orden.length ? tabla : parrafo('No hubo fallas en su nodo en este periodo.'))
+      + parrafo('<b>Tiempo total de afectación: ' + esc(total) + '</b> (' + esc(cifras) + ')') + notas.map((l) => parrafo(esc(l))).join('')
+      + '<p style="margin:10px 0 0;color:#555555">' + esc(fuente) + '</p></div>';
+
+    const estado = (f) => (esPosible(f) ? 'Posible falla en validación (no se suma)' : f.fin ? 'Resuelta' : 'Activa');
+    const filas = [['Contrato', 'Cliente', 'Nodo', 'Falla', 'Motivo', 'Estado', 'Inicio', 'Fin', 'Duración', 'Minutos', 'Minutos en el periodo']]
+      .concat(orden.map((f) => [rec.contrato, nombre, rec.nodo, U.numeroFalla(f), motivo(f), estado(f), iso(f.inicio), f.fin ? iso(f.fin) : '',
+        U.durHM(f.duracion), Math.round(f.duracion / U.MIN), Math.round(f.dentro / U.MIN)]))
+      .concat([[rec.contrato, nombre, rec.nodo, 'Total', 'Tiempo total de afectación ' + periodo + (h.solape > 0 ? ' (el tiempo en que coinciden dos fallas cuenta una vez)' : '')
+        + (h.pendientes.length ? ' (sin las posibles fallas en validación)' : ''), '', iso(h.desde), iso(h.hasta), total, '', Math.round(ms / U.MIN)]]);
+    const archivo = 'afectacion-' + rec.contrato + '-' + isoDia(h.desde) + '-a-' + isoDia(Math.max(h.desde, h.hasta - 1)) + '.csv';
+    return { texto, html, filas, archivo, total, cifras, periodo };
   }
   function reincidente(lista, rec, now) {
     return historialCliente(lista, rec, now, CONFIG.reincidente.dias).total >= CONFIG.reincidente.fallas;
@@ -745,6 +870,6 @@ const Model = (() => {
   }
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
-    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos,
+    veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
     dniNormal, diasAIso, isoADias };
 })();

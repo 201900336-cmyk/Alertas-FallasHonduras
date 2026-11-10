@@ -509,6 +509,37 @@ with sync_playwright() as p:
     x.fill('.nodo-buscar input', c_falla); x.click('.nodo-barra button[type=submit]')
     x.wait_for_selector('.reporte-cliente .hist-lista li', timeout=30000)
     ok('F1254585' in x.locator('.reporte-cliente .hist-lista').inner_text(), 'un cliente del nodo de F1254585 la tiene en su historial', x.locator('.reporte-cliente .hist-kpis').inner_text())
+    # Para Ajustes: el tiempo total que estuvo afectado, por periodo, para copiarlo o bajarlo en CSV
+    tot = x.locator('.reporte-cliente .hist-total')
+    t_tot = tot.locator('b').inner_text().strip() if tot.count() else ''
+    ok(re.fullmatch(r'(\d[\d,]* h( \d+ min)?|\d+ min|menos de 1 min|0 min)', t_tot) is not None and 'tiempo total de afectación' in tot.inner_text()
+       and re.search(r'\d+\.\d\d horas · \d+\.\d\d días', tot.inner_text()), 'el reporte del cliente trae el tiempo total de afectación (' + t_tot + '), en horas y en días', tot.inner_text() if tot.count() else '')
+    mes = x.evaluate("() => new Intl.DateTimeFormat('es-HN', { month: 'long' }).format(new Date())")
+    x.click('.reporte-cliente .historial-cliente .seg button:has-text("Este mes")'); x.wait_for_timeout(300)
+    ok(re.search(r'fallas? en ' + mes, x.locator('.reporte-cliente .hist-kpis').inner_text()) is not None and x.locator('.hist-barra .hist-periodo').inner_text().startswith('Del 1 ')
+       and 'F1254585' in x.locator('.reporte-cliente .hist-lista').inner_text(), '"Este mes" cuenta desde el día 1 (' + x.locator('.hist-barra .hist-periodo').inner_text() + ')')
+    t_mes = x.locator('.reporte-cliente .hist-total b').inner_text().strip()
+    x.click('.hist-barra button:has-text("Copiar para Ajustes")'); x.wait_for_timeout(400)
+    copia = x.evaluate('() => navigator.clipboard.readText()')
+    ok(copia.startswith('Tiempo de afectación del servicio') and 'Contrato: ' + str(c_falla) + ' · Cliente: ' in copia and re.search(r'\n\d+\. F1254585 · Falla de energía comercial · ', copia)
+       and 'Tiempo total de afectación: ' + t_mes + ' (' in copia and 'Fuente: Alertas' in copia and not re.search(r'504\d{8}', copia),
+       'Copiar para Ajustes deja el cliente, el periodo, cada falla y el total (' + t_mes + '), sin teléfonos', copia[:400])
+    with x.expect_download() as dl: x.click('.hist-barra button:has-text("Descargar CSV")')
+    crudo = [l for l in open(dl.value.path(), 'rb').read().decode('utf-8-sig').split('\r\n') if l]
+    ok(crudo[0] == 'Contrato,Cliente,Nodo,Falla,Motivo,Estado,Inicio,Fin,Duración,Minutos,Minutos en el periodo' and any(',F1254585,Falla de energía comercial,Resuelta,' in l for l in crudo)
+       and ',Total,' in crudo[-1] and dl.value.suggested_filename.startswith('afectacion-' + str(c_falla) + '-') and not any(re.search(r'504\d{8}', l) for l in crudo),
+       'Descargar CSV: ' + dl.value.suggested_filename + ', una fila por falla y el total', crudo[:2] + crudo[-1:])
+    hoy = x.evaluate("() => Model.isoDia(Date.now())"); ayer = x.evaluate("() => Model.isoDia(Date.now() - 86400000)")
+    x.click('.reporte-cliente .historial-cliente .seg button:has-text("Fechas")'); x.wait_for_timeout(200)
+    x.fill('.hist-rango input >> nth=0', hoy); x.fill('.hist-rango input >> nth=1', hoy); x.wait_for_timeout(300)
+    en_hoy = 'F1254585' in x.locator('.reporte-cliente .historial-cliente').inner_text()
+    x.fill('.hist-rango input >> nth=0', ayer); x.fill('.hist-rango input >> nth=1', ayer); x.wait_for_timeout(300)
+    ok(en_hoy and 'F1254585' not in x.locator('.reporte-cliente .historial-cliente').inner_text() and x.locator('.hist-barra .hist-periodo').inner_text().startswith('El '),
+       '"Fechas": la falla de hoy sale con la fecha de hoy y no con la de ayer', x.locator('.hist-barra').inner_text())
+    x.locator('.reporte-cliente .historial-cliente').screenshot(path=OUT + 'e07b_ajustes.png')
+    x.click('.reporte-cliente .historial-cliente .seg button:has-text("1 año")'); x.wait_for_timeout(200)
+    ok(x.evaluate("() => localStorage.getItem('alertas-reporte-cliente-per')") == '365' and x.evaluate("() => localStorage.getItem('alertas-reporte-nodo')") in (None, '', '""'),
+       'se recuerda el periodo elegido, nunca el contrato')
     x.screenshot(path=OUT + 'e07b_reporte_cliente.png', full_page=True)
     # Reporte de SMS: el envío de F1254600 (caída de postes) que mandó Mario Rivera en 7b
     x.click('.pestanas button:has-text("SMS de Notifícame")'); x.wait_for_selector('.sms-tabla tbody tr', timeout=30000); x.wait_for_timeout(300)
