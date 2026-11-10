@@ -120,7 +120,8 @@ function SinBase() {
 }
 
 /* ---------- Resultado de la búsqueda ---------- */
-function Resultado({ res, sel, setSel, now }) {
+/* reporte: desde Reportes (Nodo o cliente), sin el guion para el cliente y con su historial de un año */
+function Resultado({ res, sel, setSel, now, reporte }) {
   const s = G.s;
   if (res.estado === 'incompleto') {
     return html`<div class="resultado"><div class="panel no-encontrado">
@@ -150,11 +151,11 @@ function Resultado({ res, sel, setSel, now }) {
       </button>`)}
     </div>`}
     <${Veredicto} v=${actual.v} rec=${actual.rec} now=${now} />
-    <div class="cliente-guion">
+    <div class=${'cliente-guion' + (reporte ? ' solo' : '')}>
       <${TarjetaCliente} rec=${actual.rec} v=${actual.v} now=${now} />
-      <${Guion} rec=${actual.rec} v=${actual.v} now=${now} rein=${rein} key=${actual.rec.i + actual.v.tipo} />
+      ${!reporte && html`<${Guion} rec=${actual.rec} v=${actual.v} now=${now} rein=${rein} key=${actual.rec.i + actual.v.tipo} />`}
     </div>
-    ${lista && html`<${HistorialCliente} rec=${actual.rec} lista=${lista} now=${now} rein=${rein} key=${actual.rec.i} />`}
+    ${lista && html`<${HistorialCliente} rec=${actual.rec} lista=${lista} now=${now} rein=${rein} reporte=${reporte} key=${actual.rec.i} />`}
   </div>`;
 }
 
@@ -177,14 +178,17 @@ function useContactos(contrato) {
   return c;
 }
 
-function HistorialCliente({ rec, lista, now, rein }) {
-  const [dias, setDias] = useState(90);
+function HistorialCliente({ rec, lista, now, rein, reporte }) {
+  const [dias, setDias] = useState(reporte ? 365 : 90);
   const per = PERIODOS_HIST.find((p) => p[0] === dias);
   const h = Model.historialCliente(lista, rec, now, dias);
   const c = useContactos(rec.contrato);
   // Cuántas veces llamó durante cada falla (Concentrix y Tiendas). En la falla activa no cuenta la llamada de
   // ahora (las consultas de los últimos 10 minutos): lo útil es saber si ya había llamado por esta falla.
   const llamadas = (f) => (!c || !c.veces ? 0 : Model.llamadasEn(c.veces, f.inicio, f.fin || now - 10 * U.MIN));
+  // En Reportes: sus llamadas al Call Center y visitas a Tiendas en 30 días (las búsquedas de Workforce no cuentan)
+  const llamadas30 = c && c.veces ? Model.llamadasEn(c.veces, now - 30 * U.DIA, now) : 0;
+  const ultimaLlamada = c && c.veces && c.veces.length ? Math.max(...c.veces) : null;
   return html`<section class="panel historial-cliente" aria-label="Historial de fallas del cliente">
     <div class="panel-cab">
       <h3>Historial de fallas de este cliente</h3>
@@ -196,9 +200,12 @@ function HistorialCliente({ rec, lista, now, rein }) {
     <div class="hist-kpis">
       <div><b class="num">${U.n(h.total)}</b><span>${U.plural(h.total, 'falla', 'fallas')} ${per[2]}</span></div>
       <div><b class="num">${h.total ? U.dur(h.ms) : '0 h'}</b><span>sin servicio en total</span></div>
-      <div><b class="num">${!c ? '…' : c.error ? '—' : U.n(c.n7)}</b>
-        <span>${U.plural(c && !c.error ? c.n7 : 2, 'consulta anterior', 'consultas anteriores')} en 7 días</span>
-        ${c && !c.error && html`<small>${c.anterior ? 'La anterior: ' + fechaHist(c.anterior, now) : 'Sin consultas en los últimos 30 días'}</small>`}</div>
+      ${reporte ? html`<div><b class="num">${!c ? '…' : c.error ? '—' : U.n(llamadas30)}</b>
+          <span>${U.plural(c && !c.error ? llamadas30 : 2, 'llamada', 'llamadas')} en 30 días</span>
+          ${c && !c.error && html`<small>${ultimaLlamada ? 'La última: ' + fechaHist(ultimaLlamada, now) : 'No llamó en los últimos 30 días'}</small>`}</div>`
+        : html`<div><b class="num">${!c ? '…' : c.error ? '—' : U.n(c.n7)}</b>
+          <span>${U.plural(c && !c.error ? c.n7 : 2, 'consulta anterior', 'consultas anteriores')} en 7 días</span>
+          ${c && !c.error && html`<small>${c.anterior ? 'La anterior: ' + fechaHist(c.anterior, now) : 'Sin consultas en los últimos 30 días'}</small>`}</div>`}
     </div>
     ${h.total ? html`<ol class="hist-lista">${h.fallas.map((f) => { const llamo = llamadas(f); return html`<li key=${f.id}>
         <span class="hist-punto" data-s=${f.fin ? 'RESUELTA' : 'FALLA'}></span>

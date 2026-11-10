@@ -412,9 +412,9 @@ const ACCESOS_CONEX = [['todos', 'Todos'], ['Concentrix', 'Concentrix'], ['Tiend
 const FILTROS_CONEX = [['todos', 'Todos'], ['entraron', 'Entraron'], ['no', 'No entraron'], ['avisos', 'Sin avisos activados']];
 const AVISO_CONEX = { Activados: 'ok', Bloqueados: 'mal', 'Sin responder': 'pend', 'No disponibles': 'nd' };
 
-/* ---------- Reportes (Workforce y Jefatura): Conexiones, Consultas por nodo y SMS de Notifícame ---------- */
+/* ---------- Reportes (Workforce y Jefatura): Conexiones, Nodo o cliente y SMS de Notifícame ---------- */
 const PESTANAS_REPORTE = { conexiones: 'Quién entra a Alertas, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados.',
-  nodo: 'Cuántos clientes de un nodo consultaron a los asesores, por qué canal, de qué tiendas y cuándo.',
+  nodo: 'Un nodo: cuántos de sus clientes consultaron a los asesores, por qué canal y cuándo. Un contrato o DNI: todas las fallas que ha tenido ese cliente y cuántas veces llamó.',
   sms: 'Los SMS que se mandaron por Notifícame: cuándo, de qué falla, qué mensaje, quién lo mandó y a cuántos clientes.' };
 function VistaReportes() {
   const [tab, setTab] = useState(() => { const t = leerLS('alertas-reporte', 'conexiones'); return PESTANAS_REPORTE[t] ? t : 'conexiones'; });
@@ -423,46 +423,104 @@ function VistaReportes() {
     <div class="titulo-vista"><div><h1>Reportes</h1><p>${PESTANAS_REPORTE[tab]}</p></div></div>
     <div class="pestanas" role="tablist">
       <button role="tab" aria-selected=${tab === 'conexiones'} onClick=${() => elegir('conexiones')}>Conexiones</button>
-      <button role="tab" aria-selected=${tab === 'nodo'} onClick=${() => elegir('nodo')}>Consultas por nodo</button>
+      <button role="tab" aria-selected=${tab === 'nodo'} onClick=${() => elegir('nodo')}>Nodo o cliente</button>
       <button role="tab" aria-selected=${tab === 'sms'} onClick=${() => elegir('sms')}>SMS de Notifícame</button>
     </div>
-    ${tab === 'sms' ? html`<${ReporteSms} />` : tab === 'nodo' ? html`<${ReporteNodo} />` : html`<${ReporteConexiones} />`}
+    ${tab === 'sms' ? html`<${ReporteSms} />` : tab === 'nodo' ? html`<${ReporteBuscar} />` : html`<${ReporteConexiones} />`}
   </div>`;
 }
 
-/* ---------- Consultas por nodo ----------
-   Se escribe un nodo y dice cuántos de sus clientes consultaron en el periodo (de los que tiene en la base), por qué
-   canal, de qué tiendas, a qué hora o qué día, qué fallas tuvo el nodo y quiénes son esos clientes. Sale de las
-   consultas de los asesores (call center, redes sociales y tiendas); las búsquedas de Workforce, Jefatura y los
-   supervisores van aparte. El detalle de cada consulta se guarda 30 días. */
+/* ---------- Nodo o cliente ----------
+   Un solo buscador: un nodo (lleva letras, como GRA01) o un contrato o DNI (solo números).
+   - Nodo: cuántos de sus clientes consultaron en el periodo (de los que tiene en la base), por qué canal, de qué
+     tiendas, a qué hora o qué día, qué fallas tuvo el nodo y quiénes son esos clientes. Sale de las consultas de los
+     asesores (call center, redes sociales y tiendas); las búsquedas de Workforce, Jefatura y los supervisores van
+     aparte. El detalle de cada consulta se guarda 30 días.
+   - Contrato o DNI: el cliente como en Consulta (sin el guion para el cliente), con todas las fallas que ha tenido
+     su nodo, activas y resueltas, y cuántas veces llamó durante cada una.
+   Solo se recuerda el último nodo buscado (un contrato no se guarda en la PC). */
 const PERIODOS_NODO = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']];
 const CLIENTES_A_LA_VISTA = 15;
-function ReporteNodo() {
+const esCodigoNodo = (q) => /[A-Z]/i.test(q);
+function ReporteBuscar() {
   const s = useG();
-  const [per, setPer] = useState(() => leerLS('alertas-reporte-nodo-per', '7'));
   const [texto, setTexto] = useState(() => leerLS('alertas-reporte-nodo', ''));
-  const [nodo, setNodo] = useState(() => leerLS('alertas-reporte-nodo', ''));
+  const [q, setQ] = useState(() => leerLS('alertas-reporte-nodo', ''));
+  const [per, setPer] = useState(() => leerLS('alertas-reporte-nodo-per', '7'));
+  const [intento, setIntento] = useState(0);
+  const codigos = useMemo(() => (s.cat ? [...s.cat.nodos.keys()].sort() : []), [s.cat]);
+  const nodo = !!q && esCodigoNodo(q);
+  const buscar = (e) => {
+    if (e) e.preventDefault();
+    const t = texto.trim();
+    if (!t) return;
+    const n = esCodigoNodo(t) ? t.toUpperCase() : t;
+    setTexto(n); setQ(n); guardarLS('alertas-reporte-nodo', esCodigoNodo(n) ? n : '');
+    if (n === q) setIntento(intento + 1);
+  };
+  const elegirPer = (v) => { setPer(v); guardarLS('alertas-reporte-nodo-per', v); };
+  return html`<div>
+    <form class="reporte-barra nodo-barra" onSubmit=${buscar}>
+      <label class="conex-buscar nodo-buscar"><span class="sr">Nodo, contrato o DNI</span><${Ico} n="lupa" s=${16} />
+        <input class="input" list="nodos-reporte" value=${texto} onInput=${(e) => setTexto(e.currentTarget.value.toUpperCase())}
+          placeholder="Nodo (GRA01), contrato o DNI" autocomplete="off" spellcheck="false" aria-label="Nodo, contrato o DNI" /></label>
+      <datalist id="nodos-reporte">${codigos.map((c) => html`<option value=${c} key=${c} />`)}</datalist>
+      <button class="btn btn-primario btn-chico" type="submit" disabled=${!texto.trim()}>Buscar</button>
+      ${(!q || nodo) && html`<div class="seg" role="group" aria-label="Periodo">${PERIODOS_NODO.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => elegirPer(v)} key=${v}>${t}</button>`)}</div>`}
+    </form>
+    ${!q ? html`<div class="panel vacio"><b>Busca un nodo o un cliente</b>Un nodo, para ver cuántos de sus clientes consultaron a los asesores, por qué canal y cuándo. Un contrato o DNI, para ver todas las fallas que ha tenido ese cliente y cuántas veces llamó.</div>`
+      : nodo ? html`<${ReporteNodo} nodo=${q} per=${per} intento=${intento} key=${'n' + q} />`
+      : html`<${ReporteCliente} q=${q} intento=${intento} key=${'c' + q} />`}
+  </div>`;
+}
+
+/* Un contrato o DNI: el mismo resultado de Consulta, sin el guion para el cliente */
+function ReporteCliente({ q, intento }) {
+  const s = useG();
+  const [res, setRes] = useState(null);
+  const [sel, setSel] = useState(0);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    setRes(null); setError(null);
+    const d = Model.tipoConsulta(q);
+    if (!d.tipo) { setRes({ estado: 'no', tipo: 'contrato', q, filas: [] }); return undefined; }
+    if (d.tipo === 'incompleto') { setRes({ estado: 'incompleto', q: d.d }); return undefined; }
+    A.buscar(q).then((r) => {
+      if (!vivo) return;
+      if (r.estado === 'ok') {
+        // Como en Consulta: de sus servicios, primero el que está peor
+        const mfr = Model.mapaFallas(r.fallas || [], Date.now());
+        const items = r.filas.map((rec) => ({ rec, v: Model.veredictoNodo(mfr, rec.nodo) }));
+        const peor = items.slice().sort((a, b) => Model.PRIORIDAD[a.v.tipo] - Model.PRIORIDAD[b.v.tipo])[0];
+        setSel(items.indexOf(peor));
+      }
+      setRes(r);
+    }).catch((e) => { if (vivo) setError(e); });
+    return () => { vivo = false; };
+  }, [q, intento]);
+  if (error) {
+    return html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div>
+      <h3>${error.codigo === 'LIMITE' ? 'Llegaste al límite de consultas' : 'No se pudo consultar'}</h3><p>${error.message}</p></div></div>`;
+  }
+  if (!res) return html`<div class="panel vacio"><b>Buscando…</b>Buscando ${q} en la base de clientes.</div>`;
+  return html`<div class="reporte-cliente"><${Resultado} res=${res} sel=${sel} setSel=${setSel} now=${s.now} reporte /></div>`;
+}
+
+/* Un nodo: cuántos de sus clientes consultaron, por qué canal y cuándo */
+function ReporteNodo({ nodo, per, intento }) {
+  const s = useG();
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
-  const [intento, setIntento] = useState(0);
+  const [reintento, setReintento] = useState(0);
   const [todos, setTodos] = useState(false);
   const desde = per === 'hoy' ? U.inicioDia(s.now) : U.inicioDia(s.now - (Number(per) - 1) * U.DIA);
   useEffect(() => {
-    if (!nodo) { setDatos(null); return undefined; }
     let vivo = true;
     setError(null); setDatos(null);
     Backend.consultasNodo({ nodo, desde }).then((r) => { if (vivo) setDatos(r); }).catch((e) => { if (vivo) setError(e); });
     return () => { vivo = false; };
-  }, [nodo, desde, intento]);
-  const codigos = useMemo(() => (s.cat ? [...s.cat.nodos.keys()].sort() : []), [s.cat]);
-  const buscar = (e) => {
-    if (e) e.preventDefault();
-    const n = texto.trim().toUpperCase();
-    if (!n) return;
-    setTexto(n); setNodo(n); setTodos(false); guardarLS('alertas-reporte-nodo', n);
-    if (n === nodo) setIntento(intento + 1);
-  };
-  const elegirPer = (v) => { setPer(v); guardarLS('alertas-reporte-nodo-per', v); };
+  }, [nodo, desde, intento, reintento]);
 
   const info = nodo && s.cat ? s.cat.nodos.get(nodo) : null;
   const zona = useMemo(() => (info ? Model.zonaFalla(s.cat, { nodos: [nodo] }) : null), [s.cat, nodo, info]);
@@ -502,18 +560,9 @@ function ReporteNodo() {
   const lista = R ? (todos ? R.lista : R.lista.slice(0, CLIENTES_A_LA_VISTA)) : [];
   const pct = R && info && info.total ? Math.round((R.clientes / info.total) * 100) : null;
   return html`<div>
-    <form class="reporte-barra nodo-barra" onSubmit=${buscar}>
-      <label class="conex-buscar nodo-buscar"><span class="sr">Nodo</span><${Ico} n="lupa" s=${16} />
-        <input class="input" list="nodos-reporte" value=${texto} onInput=${(e) => setTexto(e.currentTarget.value.toUpperCase())}
-          placeholder="Escribe un nodo, por ejemplo GRA01" autocomplete="off" spellcheck="false" aria-label="Nodo" /></label>
-      <datalist id="nodos-reporte">${codigos.map((c) => html`<option value=${c} key=${c} />`)}</datalist>
-      <button class="btn btn-primario btn-chico" type="submit" disabled=${!texto.trim()}>Buscar</button>
-      <div class="seg" role="group" aria-label="Periodo">${PERIODOS_NODO.map(([v, t]) => html`<button type="button" aria-pressed=${per === v} onClick=${() => elegirPer(v)} key=${v}>${t}</button>`)}</div>
-    </form>
-    ${!nodo ? html`<div class="panel vacio"><b>Busca un nodo</b>Escribe su código para ver cuántos de sus clientes consultaron a los asesores, por qué canal y cuándo.</div>`
-      : error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
+    ${error ? html`<div class="panel no-encontrado"><div class="ico"><${Ico} n="alerta" s=${24} /></div><div><h3>No se pudo cargar el reporte</h3>
         <p>${/desconocida/i.test(error.message) ? 'El servidor todavía no tiene esta función. Pega el Code.gs nuevo en Apps Script y publica una versión nueva.' : error.message}</p>
-        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setIntento(intento + 1)}>Intentar de nuevo</button></div></div>`
+        <button class="btn btn-borde btn-chico" style="margin-top:12px" onClick=${() => setReintento(reintento + 1)}>Intentar de nuevo</button></div></div>`
       : !R ? html`<div class="panel vacio"><b>Cargando…</b>Buscando las consultas de ${nodo}.</div>` : html`
       <section class="panel nodo-cab">
         <div class="nodo-titulo"><h2 class="codigo">${nodo}</h2>

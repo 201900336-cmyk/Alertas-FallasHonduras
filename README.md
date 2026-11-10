@@ -9,7 +9,7 @@
 - **Workforce HN** publica, edita y cierra fallas por nodo, sube la base semanal y recibe el aviso de **posibles fallas** (5 clientes del mismo nodo en una hora) con el correo listo para reportarlas.
 - **Jefatura** ve todo lo anterior más las estadísticas para decidir.
 - **Todos** tienen que permitir los avisos en el escritorio al entrar: cuando Workforce publica una falla y cuando se resuelve, les llega al instante aunque Alertas esté minimizado.
-- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados), **Consultas por nodo** (cuántos clientes de un nodo consultaron, por qué canal y cuándo) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
+- **Reportes** (Workforce y Jefatura): **Conexiones** (quién entra, cuándo fue su última entrada, cuántas consultas hizo y si tiene los avisos activados), **Nodo o cliente** (cuántos clientes de un nodo consultaron, por qué canal y cuándo; o todas las fallas de un cliente y cuántas veces llamó) y **SMS de Notifícame** (cada envío con su falla, mensaje, quién lo mandó y a cuántos clientes).
 
 ---
 
@@ -201,9 +201,13 @@ Para darle seguimiento a quien no está usando Alertas:
 - **Descargar CSV** baja lo que se ve en la tabla, para mandárselo a los supervisores.
 - Alertas solo conoce a quien ya entró alguna vez: quien nunca ha entrado no aparece.
 
-### Consultas por nodo
+### Nodo o cliente
 
-Se escribe un nodo (por ejemplo GRA01) y dice, para hoy, 7 o 30 días (el detalle de cada consulta se guarda 30 días):
+Un solo buscador: un nodo (lleva letras, por ejemplo GRA01) o un contrato o DNI (solo números).
+
+**Con un contrato o DNI** sale el cliente igual que en Consulta, sin el guion para el cliente: su estado de ahora, sus datos y **todas las fallas de su nodo** (activas y resueltas) en 90 días, 6 meses o 1 año (abre en 1 año), con cuánto tiempo estuvo sin servicio, cuántas veces llamó en 30 días y en qué fallas llamó. Las búsquedas de Workforce no cuentan como llamadas. El contrato buscado no se guarda en la PC.
+
+**Con un nodo** dice, para hoy, 7 o 30 días (el detalle de cada consulta se guarda 30 días):
 
 - **Clientes que consultaron** de los que tiene el nodo en la base (por ejemplo, 100 de 365, el 27 %), cuántas consultas hubo (y cuántas con la falla general ya publicada) y cuántos reportes de posible falla mandaron los asesores.
 - **De dónde vienen**: call center y redes sociales (Concentrix) o tiendas, con sus clientes, y de qué tiendas.

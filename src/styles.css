@@ -309,6 +309,8 @@ button { cursor: pointer; }
 .p-FALLA { color: var(--falla); } .p-RESUELTA { color: var(--resuelta); } .p-SIN_FALLA { color: var(--ok); } .p-SIN_NODO { color: var(--nodo-x); }
 
 .cliente-guion { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr); gap: 16px; align-items: start; }
+.cliente-guion.solo { grid-template-columns: minmax(0, 1fr); }
+.reporte-cliente .resultado { margin-top: 0; }
 
 .cliente { padding: 22px 24px 24px; }
 .cliente-nombre { margin: 0; font-size: clamp(25px, 2.25vw, 33px); font-weight: 750; font-stretch: 110%; letter-spacing: -0.015em; line-height: 1.12; overflow-wrap: anywhere; }

@@ -482,8 +482,8 @@ with sync_playwright() as p:
     ok(crudo[0].startswith('Nombre,Acceso,Tienda,Usuario,Primera entrada,Última entrada,Entradas,Consultas (hoy)') and any(l.startswith('Daniela Ramirez,Tiendas,CAC Metromall,,') and l.endswith(',Bloqueados') for l in crudo),
        'Descargar CSV: ' + dl.value.suggested_filename + ', con Daniela Ramirez y sus avisos bloqueados', crudo[:3])
     x.fill('.conex-buscar input', '')
-    # Consultas por nodo: el nodo de la posible falla, que consultó Karla Zelaya (Concentrix) en el paso 5
-    x.click('.pestanas button:has-text("Consultas por nodo")'); x.wait_for_selector('.nodo-buscar input', timeout=10000)
+    # Nodo o cliente, con un nodo: el de la posible falla, que consultó Karla Zelaya (Concentrix) en el paso 5
+    x.click('.pestanas button:has-text("Nodo o cliente")'); x.wait_for_selector('.nodo-buscar input', timeout=10000)
     x.fill('.nodo-buscar input', nodoPF.lower()); x.click('.nodo-barra button[type=submit]')
     x.wait_for_selector('.nodo-kpis', timeout=30000); x.wait_for_timeout(300)
     total = x.evaluate("(n) => G.s.cat.nodos.get(n).total", nodoPF)
@@ -497,6 +497,19 @@ with sync_playwright() as p:
     ok(crudo[0].startswith('Contrato,Cliente,Colonia,Municipio,NAP,Consultas') and any(l.startswith(contratosPF[0] + ',') for l in crudo)
        and not any(re.search(r'504\d{8}', l) for l in crudo), 'Descargar CSV: ' + dl.value.suggested_filename + ', sin teléfonos', crudo[:2])
     x.screenshot(path=OUT + 'e07a_consultas_nodo.png', full_page=True)
+    # El mismo buscador con un contrato: el cliente sin el guion, con todas las fallas de su nodo (un año) y sus llamadas
+    x.fill('.nodo-buscar input', contratosPF[0]); x.click('.nodo-barra button[type=submit]')
+    x.wait_for_selector('.reporte-cliente .historial-cliente', timeout=30000); x.wait_for_timeout(800)
+    hist = x.locator('.reporte-cliente .historial-cliente').inner_text()
+    ok(contratosPF[0] in x.locator('.reporte-cliente').inner_text() and x.locator('.reporte-cliente .guion').count() == 0
+       and 'fallas en 1 año' in hist and 'llamada en 30 días' in hist and x.locator('.nodo-barra .seg').count() == 0,
+       'con un contrato sale el cliente, sin el guion, con las fallas de su nodo en un año y sus llamadas en 30 días (la posible falla descartada no cuenta)', hist[:240])
+    ok(x.evaluate("() => localStorage.getItem('alertas-reporte-nodo')") in (None, '', '""'), 'el contrato buscado no se guarda en la PC')
+    # Un cliente del nodo de F1254585: su falla sale en el historial
+    x.fill('.nodo-buscar input', c_falla); x.click('.nodo-barra button[type=submit]')
+    x.wait_for_selector('.reporte-cliente .hist-lista li', timeout=30000)
+    ok('F1254585' in x.locator('.reporte-cliente .hist-lista').inner_text(), 'un cliente del nodo de F1254585 la tiene en su historial', x.locator('.reporte-cliente .hist-kpis').inner_text())
+    x.screenshot(path=OUT + 'e07b_reporte_cliente.png', full_page=True)
     # Reporte de SMS: el envío de F1254600 (caída de postes) que mandó Mario Rivera en 7b
     x.click('.pestanas button:has-text("SMS de Notifícame")'); x.wait_for_selector('.sms-tabla tbody tr', timeout=30000); x.wait_for_timeout(300)
     env = x.locator('.sms-tabla tbody tr', has_text='F1254600')
