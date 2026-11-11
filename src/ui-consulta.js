@@ -14,6 +14,9 @@ function VistaConsulta() {
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
   const ultima = useRef({ q: '', t: 0, res: null });
+  // Aquí las fallas se cargan solas: un cambio que quedó pendiente estando en otra vista se trae al entrar
+  const pendiente = s.remoto && A.cargaSola(s.remoto) ? s.remoto.version : 0;
+  useEffect(() => { if (pendiente) A.recargar().catch(() => {}); }, [pendiente]);
 
   useEffect(() => {
     const k = (e) => {
@@ -464,19 +467,121 @@ function InicioAsesor({ mf, onAbrir }) {
   </div>`;
 }
 
-/* ---------- Mapa de Honduras con las fallas activas ---------- */
+/* ---------- Mapa en vivo: las fallas activas del país ----------
+   Un panel oscuro, como una pantalla de monitoreo: un círculo que late por cada departamento afectado (del
+   tamaño de sus clientes), los totales, lo de la última hora y los últimos movimientos. Se dibuja en un lienzo
+   de tamaño fijo (Model.VIVO) que se escala al ancho del panel: así las etiquetas se colocan una sola vez, sin
+   encimarse, y nada se descuadra en una pantalla más chica o más grande. En un panel angosto (un teléfono) el
+   lienzo queda solo con el mapa y sus círculos, y los letreros bajan uno tras otro. */
+const VIVO_ANGOSTO = 780, VIVO_MOVIMIENTOS = 4;
+const VIVO_TIERRA = [29, 36, 45], VIVO_ROJO = [226, 68, 79];
+const tinteVivo = (t) => 'rgb(' + VIVO_TIERRA.map((c, i) => Math.round(c + (VIVO_ROJO[i] - c) * t)).join(',') + ')';
+
 function MapaVivo({ mf }) {
-  const valores = {}, fallasDep = {};
-  for (const f of mf.activas) for (const [dep, n] of ((f.impacto && f.impacto.deps) || [])) {
-    const k = U.sinAcentos(dep).toUpperCase();
-    valores[k] = (valores[k] || 0) + n;
-    fallasDep[k] = (fallasDep[k] || 0) + 1;
-  }
-  const deps = Object.keys(valores).length;
-  return html`<section class="panel" aria-label="Mapa de fallas activas">
-    <div class="panel-cab"><div><h3>Fallas activas por departamento</h3>
-      <div class="sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados en ' + U.plural(deps, '1 departamento', deps + ' departamentos') : 'No hay fallas activas en este momento'}</div></div></div>
-    <div class="panel-cuerpo"><${MapaHonduras} valores=${valores} fallas=${fallasDep} vacio="Sin fallas activas en el país." apilado=${true} nombres=${true} /></div>
+  const s = useG();
+  const V = Model.VIVO;
+  const ref = useRef(null);
+  const ancho = useAncho(ref, V.w);
+  const tt = useTooltip();
+  const [tabla, setTabla] = useState(false);
+  const v = useMemo(() => Model.mapaVivo(s.cat, mf, s.now, s.avisos), [s.cat, mf, s.now, s.avisos]);
+  const movs = v.movimientos.slice(0, VIVO_MOVIMIENTOS);
+  const hayHora = v.fallas > 0 || v.nuevas > 0 || v.resueltas > 0;
+  const haySueltos = v.deps.some((d) => !d.principal);
+  const angosto = ancho < VIVO_ANGOSTO;
+  const esc = useMemo(() => Model.escenaVivo(v, HN_NOMBRES, angosto ? [] : Model.fijosVivo({ hora: hayHora, leyenda: v.departamentos > 0, movimientos: movs.length })),
+    [v, angosto, hayHora, movs.length]);
+  const k = Math.min(1.25, ancho / V.w);
+  const porDep = new Map(v.deps.map((d) => [d.k, d]));
+  const max = Math.max(1, ...v.deps.filter((d) => d.principal).map((d) => d.clientes));
+  const nombreDep = (clave, crudo) => (HN_MAPA.deps[clave] ? HN_MAPA.deps[clave].name : U.lugar(crudo || clave));
+  const clientesTxt = (n) => U.n(n) + (n === 1 ? ' cliente' : ' clientes');
+  const fallasTxt = (n) => U.plural(n, '1 falla', n + ' fallas');
+  const detalleDep = (d) => (d.principal ? fallasTxt(d.fallas) + ' · desde ' + U.hace(d.desde, s.now) : 'de una falla de otro departamento');
+  const aviso = (clave) => {
+    const d = porDep.get(clave);
+    return d ? html`<div class="tl">${nombreDep(clave)}</div><div class="tv">${clientesTxt(d.clientes)}</div><div class="tl">${detalleDep(d)}</div>`
+      : html`<div class="tl">${nombreDep(clave)}</div><div class="tv">Sin fallas activas</div>`;
+  };
+  const alCentro = (e, clave) => { const b = e.currentTarget.getBoundingClientRect(); tt.mostrar({ clientX: b.left + b.width / 2, clientY: b.top + b.height / 2 }, aviso(clave)); };
+  // En la leyenda, los círculos van al mismo tamaño que en el mapa (en un panel angosto el mapa va reducido)
+  const disco = (n) => { const d = Math.max(6, Math.round(2 * Model.radioVivo(n) * (angosto ? k : 1))); return 'width:' + d + 'px;height:' + d + 'px'; };
+  const zonaMov = (m) => (m.zona.length ? ' en ' + U.listaNatural(m.zona.map((z) => nombreDep(Model.claveDep(z), z)), 2) : '');
+  const haceMov = (t) => (s.now - t < U.MIN ? 'ahora' : U.hace(t, s.now));
+  const cada = CONFIG.segundosRevision === 60 ? 'cada minuto' : 'cada ' + CONFIG.segundosRevision + ' s';
+
+  const total = html`<div class="vivo-total">
+    ${v.fallas
+      ? html`<div class="l">Clientes afectados</div><div class="v num">${U.n(v.clientes)}</div>
+          <div class="d"><b>${fallasTxt(v.fallas)} · ${U.plural(v.nodos, '1 nodo', U.n(v.nodos) + ' nodos')}</b></div>
+          <div class="d">${U.plural(v.departamentos, '1 departamento', v.departamentos + ' departamentos')}</div>`
+      : html`<div class="v sin">Sin fallas activas</div><div class="d">${CONFIG.equipo} no ha publicado fallas en este momento.</div>`}
+  </div>`;
+  const hora = hayHora && html`<div class="vivo-hora">
+    <div><b>${v.nuevas || v.resueltas
+      ? html`<span class="n-falla num">${v.nuevas}</span> ${U.plural(v.nuevas, 'nueva', 'nuevas')} · <span class="n-res num">${v.resueltas}</span> ${U.plural(v.resueltas, 'resuelta', 'resueltas')}`
+      : 'Sin cambios'}</b><span>en la última hora</span></div>
+    ${v.antigua && html`<div><b class="num">${U.dur(s.now - v.antigua.inicio)}</b><span>lleva la más antigua</span></div>`}
+  </div>`;
+  const leyenda = v.departamentos > 0 && html`<div class="vivo-leyenda">
+    <div><span class="ico"><i class="vivo-disco" style=${disco(1000)}></i></span>1,000 clientes</div>
+    <div><span class="ico"><i class="vivo-disco" style=${disco(100)}></i></span>200 o menos</div>
+    ${haySueltos && html`<div><span class="ico"><i class="vivo-pto"></i></span>Pocos clientes de una falla vecina</div>`}
+    <div><span class="ico"><i class="vivo-cuenta">2</i></span>Fallas en el departamento</div>
+  </div>`;
+  const movimientos = movs.length > 0 && html`<div class="vivo-movs">
+    <h4>Últimos movimientos</h4>
+    <ul>${movs.map((m) => { const titulo = cortoMotivo(m.falla) + zonaMov(m); return html`<li key=${m.id} data-t=${m.tipo}><i></i><div><b title=${titulo}>${titulo}</b>
+      <span>${m.tipo === 'RESUELTA' ? 'Resuelta ' + haceMov(m.t) + ' · duró ' + U.dur(m.duracion)
+        : (m.tipo === 'REABIERTA' ? 'Reabierta ' : 'Publicada ') + haceMov(m.t) + (m.clientes ? ' · ' + clientesTxt(m.clientes) : '')}</span></div></li>`; })}</ul>
+  </div>`;
+  // En un panel angosto no hay nombres ni etiquetas en el mapa: los departamentos que solo tienen un punto lo conservan
+  const puntos = angosto ? esc.nombres.filter((n) => n.d).concat(esc.puntos) : esc.puntos;
+
+  return html`<section class="panel vivo-panel" ref=${ref} aria-label="Fallas activas en Honduras, en vivo">
+    <div class="vivo-cab">
+      <span class="vivo-estado" data-e=${s.sinConexion ? 'sin' : 'vivo'}><span class=${'punto' + (s.sinConexion ? '' : ' vivo')}></span>${s.sinConexion ? 'Sin conexión' : 'En vivo'}</span>
+      <h3>Fallas activas en Honduras</h3>
+      <div class="der">
+        <span class="vivo-revisado"><b class="num">${U.hora(s.revisado || s.now)}</b> · ${s.sinConexion ? 'lo último que llegó' : 'se actualiza solo ' + cada}</span>
+        <button type="button" class="vivo-ver-tabla" aria-expanded=${tabla} onClick=${() => setTabla(!tabla)}>${tabla ? 'Ocultar tabla' : 'Ver como tabla'}</button>
+      </div>
+    </div>
+    <div class="vivo-lienzo" style=${'height:' + Math.round(V.h * k) + 'px'}>
+      <div class="vivo-escena" style=${'transform:scale(' + k + ')'}>
+        <svg class="vivo-tierra" viewBox=${'0 0 ' + HN_MAPA.w + ' ' + HN_MAPA.h} aria-hidden="true"
+          style=${'left:' + V.x + 'px;top:' + V.y + 'px;width:' + HN_MAPA.w * V.s + 'px;height:' + HN_MAPA.h * V.s + 'px'}>
+          ${Object.entries(HN_MAPA.deps).map(([clave, dep]) => { const d = porDep.get(clave); return html`<path key=${clave} d=${dep.d}
+            style=${d && d.principal ? 'fill:' + tinteVivo(0.07 + 0.11 * Math.sqrt(d.clientes / max)) : ''}
+            onPointerMove=${(e) => tt.mostrar(e, aviso(clave))} onPointerLeave=${tt.ocultar} />`; })}
+        </svg>
+        ${!angosto && esc.nombres.map((n) => html`<div class="vivo-nombre" key=${'n-' + n.id} style=${'left:' + n.x + 'px;top:' + n.y + 'px'} aria-hidden="true">
+          ${n.lineas.map((l, i) => html`${i ? html`<br />` : null}${l}`)}${n.d && html`<i class="vivo-pto"></i>`}</div>`)}
+        ${puntos.map((n) => html`<i class="vivo-pto suelto" key=${'p-' + n.id} style=${'left:' + n.x + 'px;top:' + n.y + 'px'} aria-hidden="true"></i>`)}
+        ${esc.marcas.map((m, i) => html`<div class="vivo-marca" key=${'m-' + m.id} data-dep=${m.id} tabindex="0" role="img"
+          aria-label=${m.nombre + ': ' + clientesTxt(m.d.clientes) + ', ' + detalleDep(m.d)}
+          style=${'left:' + m.x + 'px;top:' + m.y + 'px;width:' + 2 * m.r + 'px;height:' + 2 * m.r + 'px'}
+          onPointerMove=${(e) => tt.mostrar(e, aviso(m.id))} onPointerLeave=${tt.ocultar} onFocus=${(e) => alCentro(e, m.id)} onBlur=${tt.ocultar}>
+          <span class="vivo-onda" style=${'animation-delay:' + (i % 4) * 0.8 + 's'}></span>${m.r >= 9 && html`<i></i>`}</div>`)}
+        ${!angosto && esc.marcas.filter((m) => m.etiqueta).map((m) => html`<div class="vivo-etq" key=${'e-' + m.id} data-dep=${m.id} data-lado=${m.etiqueta.lado} aria-hidden="true"
+          style=${'left:' + m.etiqueta.x + 'px;top:' + m.etiqueta.y + 'px;width:' + m.etiqueta.w + 'px'}>
+          <b>${m.nombre}<i class="vivo-cuenta">${m.d.fallas}</i></b><span><strong class="num">${U.n(m.d.clientes)}</strong>${m.d.clientes === 1 ? ' cliente' : ' clientes'}</span></div>`)}
+        ${!angosto && html`${total}${hora}${leyenda}${movimientos}`}
+      </div>
+    </div>
+    ${angosto && html`<div class="vivo-abajo">
+      ${total}${hora}
+      ${esc.marcas.length > 0 && html`<ul class="vivo-lista">${esc.marcas.map((m) => html`<li key=${m.id}><b>${m.nombre}<i class="vivo-cuenta">${m.d.fallas}</i></b><span class="num">${clientesTxt(m.d.clientes)}</span></li>`)}</ul>`}
+      ${movimientos}${leyenda}
+    </div>`}
+    ${tabla && html`<div class="vivo-tabla"><table class="tabla">
+      <thead><tr><th>Departamento</th><th class="der">Clientes afectados</th><th class="der">Fallas</th><th class="der">Desde</th></tr></thead>
+      <tbody>${v.deps.length
+        ? v.deps.map((d) => html`<tr key=${d.k}><td>${nombreDep(d.k, d.nombre)}</td><td class="der">${U.n(d.clientes)}</td>
+            <td class="der">${d.principal ? d.fallas : html`<span class="sub">de otro departamento</span>`}</td><td class="der">${U.hace(d.desde, s.now)}</td></tr>`)
+        : html`<tr><td colspan="4" class="sub">Sin fallas activas en el país.</td></tr>`}</tbody>
+    </table></div>`}
+    ${tt.nodo}
   </section>`;
 }
 

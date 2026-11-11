@@ -1639,6 +1639,97 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     op('cerrar', fA.id); op('cerrar', fC.datos.falla.id);
   }
 
+  console.log('\n17. Mapa en vivo: datos por departamento, movimientos y etiquetas');
+  {
+    const H = U.HORA, MIN = U.MIN, now = new Date(2026, 10, 11, 13, 54, 0).getTime();
+    const imp = (deps) => ({ total: deps.reduce((a, x) => a + x[1], 0), hfc: 0, gpon: 0, corp: 0, deps, munis: [] });
+    const falla = (id, o) => Object.assign({ id, numero: 'F77700' + id, estado: 'ACTIVA', motivo: 'FIBRA', motivoTexto: '', nodos: ['N' + id], inicio: now - H, publicadaEn: now - H,
+      cerradaEn: null, impacto: imp([]) }, o);
+    const fallas = [
+      falla('a1', { nodos: ['PRUEBA-A1', 'PRUEBA-A2'], inicio: now - 200 * MIN, publicadaEn: now - 195 * MIN, impacto: imp([['OLANCHO', 2500]]) }),
+      falla('a2', { nodos: ['PRUEBA-A3'], inicio: now - 99 * MIN, publicadaEn: now - 90 * MIN, motivo: 'ENERGIA', impacto: imp([['OLANCHO', 1100]]) }),
+      falla('a3', { nodos: ['PRUEBA-A4'], inicio: now - 22 * MIN, publicadaEn: now - 22 * MIN, motivo: 'VALIDACION', impacto: imp([['OLANCHO', 480], ['ATLANTIDA', 1]]) }),
+      falla('b1', { nodos: ['PRUEBA-B1'], inicio: now - 172 * MIN, publicadaEn: now - 170 * MIN, impacto: imp([['INTIBUCÁ', 1900]]) }),
+      falla('c1', { nodos: ['PRUEBA-C1'], inicio: now - 48 * MIN, publicadaEn: now - 48 * MIN, motivo: 'ENERGIA', impacto: imp([['COMAYAGUA', 1300], ['CORTES', 1]]) }),
+      falla('d1', { nodos: ['PRUEBA-D1', 'PRUEBA-D2'], inicio: now - 54 * MIN, publicadaEn: now - 50 * MIN, motivo: 'POSTES', impacto: imp([['FRANCISCO MORAZAN', 1150]]) }),
+      falla('r1', { estado: 'CERRADA', nodos: ['PRUEBA-R1'], inicio: now - 171 * MIN, publicadaEn: now - 170 * MIN, cerradaEn: now - 41 * MIN, impacto: imp([['YORO', 1200]]) }),
+      // Una posible falla que se cerró sin motivo real queda descartada: no la ven los asesores ni el mapa
+      falla('x1', { estado: 'CERRADA', motivo: 'VALIDACION', nodos: ['PRUEBA-X1'], inicio: now - 30 * MIN, publicadaEn: now - 30 * MIN, cerradaEn: now - 10 * MIN, impacto: imp([['YORO', 50]]) })
+    ];
+    const mf = Model.mapaFallas(fallas, now);
+    const v = Model.mapaVivo(null, mf, now, []);
+    ok(v.clientes === 8432 && v.fallas === 6 && v.nodos === 8 && v.departamentos === 4, 'totales: clientes, fallas activas, nodos y departamentos afectados', [v.clientes, v.fallas, v.nodos, v.departamentos]);
+    ok(v.deps.map((d) => d.k + ':' + d.clientes + ':' + d.fallas).join(' ') === 'OLANCHO:4080:3 INTIBUCA:1900:1 COMAYAGUA:1300:1 FRANCISCO MORAZAN:1150:1 ATLANTIDA:1:0 CORTES:1:0',
+      'por departamento, de más a menos: sus clientes y las fallas que lo tienen como zona afectada (el nombre se compara sin tildes)', v.deps.map((d) => d.k + ':' + d.clientes + ':' + d.fallas));
+    const deK = (k) => v.deps.find((d) => d.k === k);
+    ok(deK('ATLANTIDA').principal === false && deK('ATLANTIDA').vecinas === 1 && deK('CORTES').principal === false && deK('OLANCHO').principal === true,
+      'un departamento con solo 1 cliente de una falla de otra zona no cuenta como afectado: en el mapa es un punto', [deK('ATLANTIDA'), deK('CORTES')]);
+    ok(deK('OLANCHO').desde === now - 200 * MIN && deK('ATLANTIDA').desde === now - 22 * MIN && v.antigua.id === 'a1', 'cada departamento dice desde cuándo, y se sabe cuál es la falla activa más antigua');
+    ok(v.nuevas === 3 && v.resueltas === 1, 'en la última hora: 3 fallas nuevas y 1 resuelta (la descartada no cuenta)', [v.nuevas, v.resueltas]);
+    ok(v.movimientos.map((m) => m.id + ':' + m.tipo).join(' ') === 'a3:PUBLICADA r1:RESUELTA c1:PUBLICADA d1:PUBLICADA a2:PUBLICADA b1:PUBLICADA a1:PUBLICADA',
+      'los últimos movimientos van del más nuevo al más viejo, sin la falla descartada', v.movimientos.map((m) => m.id + ':' + m.tipo));
+    const r1 = v.movimientos[1];
+    ok(r1.duracion === 130 * MIN && r1.zona.join() === 'YORO' && U.dur(r1.duracion) === '2 h 10 min' && v.movimientos[0].zona.join() === 'OLANCHO' && v.movimientos[0].clientes === 481,
+      'cada movimiento trae su zona (sin el departamento de 1 cliente), sus clientes y, si se resolvió, cuánto duró', [r1.duracion, r1.zona, v.movimientos[0].zona]);
+    const vr = Model.mapaVivo(null, mf, now, [{ id: 'b1', tipo: 'REABIERTA', en: now - 3 * MIN, v: 9 }, null, { id: 'a1', tipo: 'PUBLICADA', en: now - 195 * MIN, v: 2 }]);
+    ok(vr.movimientos[0].id === 'b1' && vr.movimientos[0].tipo === 'REABIERTA' && vr.movimientos[0].t === now - 3 * MIN && vr.nuevas === 4,
+      'una falla que se reabrió hace 3 minutos sube al primer lugar como Reabierta y cuenta entre las nuevas', [vr.movimientos[0].id, vr.movimientos[0].tipo, vr.nuevas]);
+    const chica = Model.mapaVivo(null, Model.mapaFallas([falla('v1', { nodos: ['PRUEBA-V1'], impacto: imp([['VALLE', 8]]) })], now), now, []);
+    ok(chica.deps.length === 1 && chica.deps[0].principal && chica.departamentos === 1, 'una falla pequeña (8 clientes) sí marca su departamento: es su zona, no un cliente suelto', chica.deps);
+    const vacio = Model.mapaVivo(null, Model.mapaFallas([], now), now, null);
+    ok(vacio.clientes === 0 && vacio.fallas === 0 && !vacio.deps.length && vacio.antigua === null && !vacio.movimientos.length, 'sin fallas, el mapa queda en ceros', vacio);
+    // Con el catálogo de la base actual, los clientes por departamento salen de sus nodos (no de lo guardado al publicar)
+    const cat17 = Model.cargarCatalogo(catJson);
+    const nodoCat = [...cat17.nodos.values()].find((n) => n.total >= 40 && n.deps.length);
+    const vc = Model.mapaVivo(cat17, Model.mapaFallas([falla('k1', { nodos: [nodoCat.code], impacto: imp([['DEPARTAMENTO VIEJO', 5]]) })], now), now, []);
+    ok(cat17.conColonias ? vc.deps[0].k === Model.claveDep(nodoCat.deps[0][0]) && vc.deps.reduce((a, d) => a + d.clientes, 0) === nodoCat.deps.reduce((a, x) => a + x[1], 0)
+      : vc.deps[0].k === 'DEPARTAMENTO VIEJO', 'con la base actual, los clientes por departamento salen de los nodos de la falla', vc.deps);
+
+    // La escena: círculos, etiquetas y nombres en el lienzo de diseño, sin encimarse
+    const fuenteMapa = fs.readFileSync(path.join(RAIZ, 'src', 'ui-stats.js'), 'utf8');
+    const anclas = vm.runInNewContext('(' + fuenteMapa.match(/const HN_NOMBRES = (\{[\s\S]*?\n\});/)[1] + ')');
+    ok(Object.keys(anclas).length === 18, 'el mapa conoce dónde va cada uno de los 18 departamentos', Object.keys(anclas).length);
+    const choca = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    const cajaDe = (m) => ({ x: m.x - m.r, y: m.y - m.r, w: 2 * m.r, h: 2 * m.r });
+    const fijos = Model.fijosVivo({ hora: true, leyenda: true, movimientos: 4 });
+    const e = Model.escenaVivo(v, anclas, fijos);
+    ok(e.marcas.map((m) => m.id + ':' + (m.etiqueta ? m.etiqueta.lado : '-')).join(' ') === 'OLANCHO:abajo INTIBUCA:abajo COMAYAGUA:arriba FRANCISCO MORAZAN:abajo',
+      'con Olancho, Intibucá, Comayagua y Francisco Morazán, la etiqueta de Comayagua sube para no pegarse al círculo de Intibucá', e.marcas.map((m) => m.id + ':' + (m.etiqueta ? m.etiqueta.lado : '-')));
+    ok(Math.round(e.marcas[0].r) === 31 && e.marcas[0].r > e.marcas[1].r && e.marcas[1].r > e.marcas[3].r && Model.radioVivo(8) === 7 && Model.radioVivo(90000) === 40,
+      'el círculo crece con los clientes (con un mínimo y un máximo)', e.marcas.map((m) => m.r));
+    ok(e.nombres.some((n) => n.id === 'CORTES' && n.d) && e.nombres.some((n) => n.id === 'ATLANTIDA' && n.d) && e.nombres.some((n) => n.id === 'YORO' && !n.d) && !e.puntos.length,
+      'Cortés y Atlántida salen con su nombre y un punto; los demás, con su nombre', e.nombres.map((n) => n.id));
+    const revisarEscena = (esc, zonas) => {
+      const et = esc.marcas.filter((m) => m.etiqueta).map((m) => Object.assign({ id: m.id }, m.etiqueta));
+      const malas = [];
+      et.forEach((a, i) => {
+        if (a.x < 0 || a.y < 0 || a.x + a.w > Model.VIVO.w || a.y + a.h > Model.VIVO.h) malas.push(a.id + ' se sale');
+        et.slice(i + 1).forEach((b) => { if (choca(a, b)) malas.push(a.id + ' con ' + b.id); });
+        esc.marcas.forEach((m) => { if (m.id !== a.id && choca(a, cajaDe(m))) malas.push(a.id + ' sobre el círculo de ' + m.id); });
+        zonas.forEach((z) => { if (choca(a, z)) malas.push(a.id + ' sobre ' + z.id); });
+      });
+      esc.nombres.forEach((n) => {
+        const c = { x: n.x - n.w / 2, y: n.y - n.h / 2, w: n.w, h: n.h };
+        et.forEach((a) => { if (choca(c, a)) malas.push('nombre ' + n.id + ' con ' + a.id); });
+        esc.marcas.forEach((m) => { if (choca(c, cajaDe(m))) malas.push('nombre ' + n.id + ' sobre ' + m.id); });
+        zonas.forEach((z) => { if (choca(c, z)) malas.push('nombre ' + n.id + ' sobre ' + z.id); });
+      });
+      return malas;
+    };
+    ok(!revisarEscena(e, fijos).length, 'ninguna etiqueta ni nombre tapa otra etiqueta, un círculo ni los letreros fijos', revisarEscena(e, fijos));
+    // El peor caso: los 18 departamentos con falla a la vez, con todos los tamaños
+    const todos = Object.keys(anclas).map((k, i) => falla('t' + i, { nodos: ['T' + i], impacto: imp([[k, [12000, 5200, 2400, 900, 310, 45][i % 6]]]) }));
+    const v18 = Model.mapaVivo(null, Model.mapaFallas(todos, now), now, []);
+    const e18 = Model.escenaVivo(v18, anclas, fijos);
+    const con18 = e18.marcas.filter((m) => m.etiqueta).length;
+    ok(e18.marcas.length === 18 && !e18.nombres.length && !revisarEscena(e18, fijos).length && con18 >= 12,
+      'con los 18 departamentos en falla a la vez: 18 círculos y ' + con18 + ' etiquetas, ninguna encimada (las que no caben se quedan sin etiqueta)', [con18, revisarEscena(e18, fijos)]);
+    const e0 = Model.escenaVivo(vacio, anclas, Model.fijosVivo({ hora: false, leyenda: false, movimientos: 0 }));
+    ok(!e0.marcas.length && e0.nombres.length === 18, 'sin fallas, el mapa muestra los 18 nombres y ningún círculo', e0.nombres.length);
+    ok(U.anchoTexto('Francisco Morazán', 13, 650) >= 115.9 && U.anchoTexto('Francisco Morazán', 13, 650) < 130 && U.anchoTexto('1,897 clientes', 12, 400) >= 73.7 && U.anchoTexto('Olancho', 13, 650) >= 51.6,
+      'el ancho calculado de un texto nunca queda por debajo de lo que mide en pantalla (medido con la letra del sistema)', [U.anchoTexto('Francisco Morazán', 13, 650), U.anchoTexto('1,897 clientes', 12, 400)]);
+  }
+
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);
   process.exit(fallos ? 1 : 0);

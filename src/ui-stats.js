@@ -5,7 +5,7 @@
 function useAncho(ref, base) {
   const [w, setW] = useState(base || 600);
   useEffect(() => {
-    if (!ref.current) return;
+    if (!ref.current || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((ent) => { const x = Math.floor(ent[0].contentRect.width); if (x > 0) setW(x); });
     ro.observe(ref.current); return () => ro.disconnect();
   }, []);

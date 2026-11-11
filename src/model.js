@@ -214,11 +214,12 @@ const Model = (() => {
      de la falla (por ejemplo, unos cuantos con la dirección de otro lugar) no se toma como zona afectada: no sale
      en el resumen, pero sí en la lista completa de colonias. Cuenta con 30 clientes o más, o con el 3 % de la
      falla (y al menos 5) si es pequeña. */
+  const minimoZona = (total) => Math.min(30, Math.max(5, 0.03 * total));
+  const principalesZona = (l, total) => l.filter(([, v], i) => i === 0 || v >= minimoZona(total)).map(([k]) => k);
   function zonaFalla(cat, f) {
-    const minimo = (total) => Math.min(30, Math.max(5, 0.03 * total));
+    const minimo = minimoZona, principales = principalesZona;
     const orden = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]);
     const suma = (l) => l.reduce((a, x) => a + x[1], 0);
-    const principales = (l, total) => l.filter(([, v], i) => i === 0 || v >= minimo(total)).map(([k]) => k);
     if (cat && cat.conColonias) {
       const d = new Map(), g = new Map();
       for (const code of new Set(f.nodos || [])) {
@@ -471,6 +472,140 @@ const Model = (() => {
     return { tipo: 'SIN_FALLA', falla: null };
   }
   const PRIORIDAD = { FALLA: 0, RESUELTA: 1, SIN_FALLA: 2, SIN_NODO: 3 };
+
+  /* ---------- Mapa en vivo (inicio de la consulta) ---------- */
+  const claveDep = (d) => U.sinAcentos(d).toUpperCase().replace(/\s+/g, ' ').trim();
+  /* Los clientes de una falla por departamento, de más a menos: del catálogo de la base actual si trae colonias
+     (lo mismo que usa zonaFalla); si no, lo que se guardó al publicarla. */
+  function depsFalla(cat, f) {
+    if (cat && cat.conColonias) {
+      const d = new Map();
+      for (const code of new Set(f.nodos || [])) {
+        const n = cat.nodos.get(code); if (!n) continue;
+        for (const [k, v] of n.deps) d.set(k, (d.get(k) || 0) + v);
+      }
+      if (d.size) return [...d.entries()].sort((a, b) => b[1] - a[1]);
+    }
+    return ((f.impacto && f.impacto.deps) || []).filter((x) => x && x[1] > 0);
+  }
+  /* Lo que muestra el mapa en vivo, a partir de las fallas que ve la persona (mapaFallas):
+     - deps: por departamento, sus clientes afectados, cuántas fallas lo tienen como zona afectada (las mismas
+       zonas que dice el panel de fallas) y desde cuándo. Un departamento que solo tiene unos pocos clientes de
+       una falla de otra zona va con principal: false: en el mapa es un punto, no un círculo.
+     - los totales, la falla activa más antigua y lo publicado y lo resuelto en la última hora
+     - movimientos: lo último que le pasó a cada falla visible (publicada, reabierta o resuelta), lo más nuevo
+       primero. avisos: los de "estado" (el último de cada falla), que dicen cuándo se reabrió una. */
+  function mapaVivo(cat, mf, now, avisos) {
+    const deps = new Map(), zonas = new Map(), nodos = new Set();
+    for (const f of mf.activas) {
+      for (const n of f.nodos || []) nodos.add(n);
+      const l = depsFalla(cat, f);
+      const pr = new Set(principalesZona(l, l.reduce((a, x) => a + x[1], 0)));
+      zonas.set(f.id, [...pr]);
+      for (const [nombre, v] of l) {
+        const k = claveDep(nombre);
+        let d = deps.get(k); if (!d) { d = { k, nombre, clientes: 0, fallas: 0, vecinas: 0, desde: 0, desdeVecina: 0 }; deps.set(k, d); }
+        d.clientes += v;
+        if (pr.has(nombre)) { d.fallas++; d.desde = d.desde ? Math.min(d.desde, f.inicio) : f.inicio; }
+        else { d.vecinas++; d.desdeVecina = d.desdeVecina ? Math.min(d.desdeVecina, f.inicio) : f.inicio; }
+      }
+    }
+    const lista = [...deps.values()].map((d) => ({ k: d.k, nombre: d.nombre, clientes: d.clientes, fallas: d.fallas, vecinas: d.vecinas,
+      desde: d.desde || d.desdeVecina, principal: d.fallas > 0 }))
+      .sort((a, b) => (b.principal ? 1 : 0) - (a.principal ? 1 : 0) || b.clientes - a.clientes || (a.k < b.k ? -1 : 1));
+    const ultimo = new Map((avisos || []).filter(Boolean).map((a) => [a.id, a]));
+    const movimientos = mf.visibles.map((f) => {
+      const activa = f.estado === 'ACTIVA', av = ultimo.get(f.id);
+      const reabierta = activa && !!av && av.tipo === 'REABIERTA' && av.en > f.publicadaEn;
+      let zona = zonas.get(f.id);
+      if (!zona) { const l = depsFalla(cat, f); zona = principalesZona(l, l.reduce((a, x) => a + x[1], 0)); }
+      return { id: f.id, falla: f, tipo: !activa ? 'RESUELTA' : reabierta ? 'REABIERTA' : 'PUBLICADA', t: !activa ? f.cerradaEn : reabierta ? av.en : f.publicadaEn,
+        zona, clientes: (f.impacto && f.impacto.total) || 0, duracion: activa ? 0 : Math.max(0, f.cerradaEn - f.inicio) };
+    }).sort((a, b) => b.t - a.t);
+    const hace1h = now - U.HORA;
+    return {
+      clientes: mf.clientesActivos, fallas: mf.activas.length, nodos: nodos.size, departamentos: lista.filter((d) => d.principal).length, deps: lista,
+      antigua: mf.activas.reduce((a, f) => (!a || f.inicio < a.inicio ? f : a), null),
+      nuevas: movimientos.filter((m) => (m.tipo === 'REABIERTA' ? m.t : m.falla.publicadaEn) >= hace1h).length,
+      resueltas: movimientos.filter((m) => m.tipo === 'RESUELTA' && m.t >= hace1h).length,
+      movimientos
+    };
+  }
+  /* Coloca la etiqueta de cada marca del mapa sin que se encimen. Las marcas vienen de la más a la menos
+     importante: cada una prueba su etiqueta abajo, arriba, a la derecha y a la izquierda, y se queda con el
+     primer lugar donde no tapa otra marca, otra etiqueta ni una zona fija (los totales, la leyenda…) y no se sale
+     del lienzo. Si no cabe en ninguno, la marca queda sin etiqueta: su dato sigue al pasar el cursor y en la
+     tabla. Después, los nombres de los demás departamentos salen solo donde no estorban.
+     marcas: [{ id, x, y, r, w, h }] (centro, radio y tamaño de su etiqueta) · nombres: [{ id, x, y, w, h }]
+     (centrados en x, y) · fijos: [{ x, y, w, h }] · lienzo: { w, h }.
+     Devuelve { etiquetas: { id: { lado, x, y, w, h } }, nombres: { id: true } }. */
+  function colocarEtiquetas({ marcas, nombres, fijos, lienzo, margen }) {
+    const m = margen == null ? 6 : margen, sep = 7, borde = 4;
+    const choca = (a, b, g) => a.x < b.x + b.w + g && a.x + a.w + g > b.x && a.y < b.y + b.h + g && a.y + a.h + g > b.y;
+    const circulos = marcas.map((k) => ({ id: k.id, x: k.x - k.r - 3, y: k.y - k.r - 3, w: 2 * k.r + 6, h: 2 * k.r + 6 }));
+    const zonas = fijos || [], puestas = [], etiquetas = {};
+    for (const k of marcas) {
+      const lados = [['abajo', k.x - k.w / 2, k.y + k.r + sep], ['arriba', k.x - k.w / 2, k.y - k.r - sep - k.h],
+        ['derecha', k.x + k.r + sep + 2, k.y - k.h / 2], ['izquierda', k.x - k.r - sep - 2 - k.w, k.y - k.h / 2]];
+      for (const [lado, x0, y0] of lados) {
+        // Junto a un borde, la etiqueta se corre lo necesario para no salirse (arriba y abajo, de lado; a los lados, de alto)
+        const vertical = lado === 'abajo' || lado === 'arriba';
+        const x = vertical ? Math.max(borde, Math.min(lienzo.w - borde - k.w, x0)) : x0, y = vertical ? y0 : Math.max(borde, Math.min(lienzo.h - borde - k.h, y0));
+        const c = { x, y, w: k.w, h: k.h };
+        if (c.x < borde || c.y < borde || c.x + c.w > lienzo.w - borde || c.y + c.h > lienzo.h - borde) continue;
+        if (circulos.some((o) => o.id !== k.id && choca(c, o, m)) || puestas.some((o) => choca(c, o, m)) || zonas.some((o) => choca(c, o, m))) continue;
+        etiquetas[k.id] = Object.assign({ lado }, c); puestas.push(c);
+        break;
+      }
+    }
+    const visibles = {};
+    for (const n of nombres || []) {
+      const c = { x: n.x - n.w / 2, y: n.y - n.h / 2, w: n.w, h: n.h };
+      if (circulos.some((o) => choca(c, o, 2)) || puestas.some((o) => choca(c, o, 3)) || zonas.some((o) => choca(c, o, 2))) continue;
+      visibles[n.id] = true;
+    }
+    return { etiquetas, nombres: visibles };
+  }
+  /* El lienzo de diseño del mapa en vivo (la página lo escala al ancho que tenga) y dónde va dentro el mapa del
+     país, que mide 1000 x 589 */
+  const VIVO = { w: 976, h: 575, x: 16, y: 10, s: 0.944 };
+  /* El círculo crece con la raíz de los clientes, para que sea su área la que se compare */
+  const radioVivo = (clientes) => Math.max(7, Math.min(40, 0.4874 * Math.sqrt(clientes || 0)));
+  /* Las zonas del lienzo que ocupan los letreros fijos: los totales (arriba a la izquierda), la última hora (arriba
+     a la derecha), la leyenda (abajo a la izquierda) y los últimos movimientos (abajo a la derecha, según cuántos) */
+  function fijosVivo({ hora, leyenda, movimientos }) {
+    const f = [{ id: 'total', x: 24, y: 18, w: 222, h: 112 }];
+    if (hora) f.push({ id: 'hora', x: VIVO.w - 24 - 330, y: 18, w: 330, h: 44 });
+    if (leyenda) f.push({ id: 'leyenda', x: 24, y: VIVO.h - 8 - 100, w: 214, h: 100 });
+    if (movimientos) { const h = 28 + 41 * movimientos; f.push({ id: 'movimientos', x: VIVO.w - 24 - 276, y: VIVO.h - 20 - h, w: 276, h }); }
+    return f;
+  }
+  /* La escena del mapa en vivo en su tamaño de diseño: un círculo por departamento afectado, con su etiqueta ya
+     colocada (o sin ella si no cabe); los nombres de los demás donde no estorban, y de los que solo tienen unos
+     pocos clientes de una falla vecina, su punto (junto al nombre, o solo si el nombre no cabe).
+     anclas: { DEPARTAMENTO: [x, y, ...líneas del nombre] }, en las coordenadas del mapa. */
+  function escenaVivo(v, anclas, fijos) {
+    const en = (k) => ({ x: VIVO.x + anclas[k][0] * VIVO.s, y: VIVO.y + anclas[k][1] * VIVO.s });
+    const marcas = v.deps.filter((d) => d.principal && anclas[d.k]).map((d) => {
+      const nombre = anclas[d.k].slice(2).join(' ');
+      const w = Math.max(U.anchoTexto(nombre, 13, 650) + 22 + (String(d.fallas).length - 1) * 6,
+        U.anchoTexto(U.n(d.clientes), 12, 700) + U.anchoTexto(d.clientes === 1 ? ' cliente' : ' clientes', 12, 400));
+      return Object.assign({ id: d.k, d, nombre, r: radioVivo(d.clientes), w: Math.ceil(w), h: 34 }, en(d.k));
+    });
+    const conMarca = new Set(marcas.map((m) => m.id));
+    const vecinos = new Map(v.deps.filter((d) => !d.principal && anclas[d.k]).map((d) => [d.k, d]));
+    const nombres = Object.keys(anclas).filter((k) => !conMarca.has(k)).map((k) => {
+      const lineas = anclas[k].slice(2);
+      const w = Math.max(...lineas.map((l) => U.anchoTexto(l, 11.5, 550))) + (vecinos.has(k) ? 12 : 0);
+      return Object.assign({ id: k, lineas, d: vecinos.get(k) || null, w: Math.ceil(w), h: 14 * lineas.length }, en(k));
+    });
+    const r = colocarEtiquetas({ marcas, nombres, fijos, lienzo: { w: VIVO.w, h: VIVO.h } });
+    return {
+      marcas: marcas.map((m) => Object.assign(m, { etiqueta: r.etiquetas[m.id] || null })),
+      nombres: nombres.filter((n) => r.nombres[n.id]),
+      puntos: nombres.filter((n) => n.d && !r.nombres[n.id])
+    };
+  }
 
   /* La fecha de alta del cliente (días desde 1970, sin hora) como la medianoche de ese día en Honduras */
   const altaLocal = (d) => { const x = new Date(d * U.DIA); return new Date(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()).getTime(); };
@@ -915,5 +1050,5 @@ const Model = (() => {
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
-    dniNormal, diasAIso, isoADias };
+    mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias };
 })();

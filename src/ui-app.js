@@ -358,8 +358,9 @@ function BarraSuperior({ mf }) {
 function AvisoCambios() {
   const s = useG();
   const r = s.remoto;
-  // En Fallas, Workforce no espera al botón: los cambios de los demás se cargan solos (VistaFallas)
-  if (!r || (s.ruta === 'fallas' && esWorkforce())) return null;
+  // En Fallas, Workforce no espera al botón: los cambios de los demás se cargan solos (VistaFallas). En Consulta
+  // tampoco hace falta: lo que cambia en las fallas se carga solo (el mapa va en vivo)
+  if (!r || (s.ruta === 'fallas' && esWorkforce()) || A.cargaSola(r)) return null;
   const c = r.cambio || {};
   const quien = c.por ? c.por.nombre : 'Alguien';
   return html`<div class="aviso" role="alert">

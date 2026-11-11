@@ -41,6 +41,26 @@ with sync_playwright() as p:
           window.Notification.permission = '%s';""" % (pide, pide, permiso) + ('' if enfocada else ' document.hasFocus = () => false;'))
         return pg
 
+    # En Consulta, lo que Workforce cambia en las fallas se carga solo (ya no sale la barra de "Actualizar"): espera a
+    # que la página tenga la última versión del servidor, sin tocar nada
+    def al_dia(pg, espera=20000):
+        v = pg.evaluate('() => Backend.estado().then((e) => e.version)')
+        pg.wait_for_function('(v) => G.s.meta.version >= v && !G.s.remoto', arg=v, timeout=espera)
+        if pg.locator('.aviso').count(): ok(False, 'en Consulta, un cambio en las fallas no saca la barra de Actualizar', pg.locator('.aviso').inner_text())
+        pg.wait_for_timeout(300)
+    # Las etiquetas del mapa en vivo, en la página real: ninguna tapa otra etiqueta, el círculo de otro departamento ni un letrero
+    ENCIMADAS = """() => {
+      const caja = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height, id: el.dataset.dep || el.className }; };
+      const choca = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+      const et = [...document.querySelectorAll('.vivo-etq')].map(caja), ma = [...document.querySelectorAll('.vivo-marca')].map(caja);
+      const fijos = [...document.querySelectorAll('.vivo-escena > .vivo-total, .vivo-escena > .vivo-hora, .vivo-escena > .vivo-leyenda, .vivo-escena > .vivo-movs')].map(caja);
+      const malas = [];
+      et.forEach((a, i) => { et.slice(i + 1).forEach((b) => { if (choca(a, b)) malas.push(a.id + ' con ' + b.id); });
+        ma.forEach((m) => { if (m.id !== a.id && choca(a, m)) malas.push(a.id + ' sobre el círculo de ' + m.id); });
+        fijos.forEach((z) => { if (choca(a, z)) malas.push(a.id + ' sobre ' + z.id); }); });
+      [...document.querySelectorAll('.vivo-etq')].forEach((el) => { [...el.children].forEach((c) => { if (c.scrollWidth > el.clientWidth + 1) malas.push(el.dataset.dep + ' no cabe en su etiqueta'); }); });
+      return malas; }"""
+
     print('1. Tiendas con usuario genérico')
     t = pagina(); t.goto(APP); t.wait_for_selector('text=Entrar con Genesys')
     # Monitoreo en vivo de la portada: el nodo con más clientes de un departamento, con su estado real
@@ -88,7 +108,9 @@ with sync_playwright() as p:
     t.wait_for_selector('.buscador-caja input', timeout=15000)
     ok(t.locator('.nav').count() == 0, 'Tiendas no ve el menú de Workforce')
     ok('CAC Mall Multiplaza TGU' in t.locator('.usuario-txt').inner_text(), 'la barra muestra la tienda', t.locator('.usuario-txt').inner_text())
-    ok(t.locator('svg.mapa').count() == 1, 'Tiendas ve el mapa de fallas en su pantalla de inicio')
+    ok(t.locator('.vivo-panel').count() == 1 and t.locator('.vivo-estado').inner_text().strip().lower() == 'en vivo' and 'Sin fallas activas' in t.locator('.vivo-total').inner_text()
+       and t.locator('.vivo-marca').count() == 0 and t.locator('.vivo-nombre').count() == 18,
+       'Tiendas ve el mapa en vivo en su pantalla de inicio: sin fallas, con los 18 departamentos', t.locator('.vivo-total').inner_text())
     html = t.content()
     ok('ClaroTiendas2026' not in html and 'ClaroTiendas2026' not in json.dumps(t.evaluate('() => ({...sessionStorage, ...localStorage})')), 'la contraseña no queda en la página ni en el navegador')
     t.screenshot(path=OUT + 'e02_tiendas_inicio.png')
@@ -147,10 +169,9 @@ with sync_playwright() as p:
     w.fill('.buscador-caja input', c_falla); w.keyboard.press('Enter'); w.wait_for_selector('.historial-cliente', timeout=15000)
     ok('F1254585' in w.locator('.historial-cliente').inner_text(), 'en la consulta, Workforce ve el número de falla en el historial del cliente')
 
-    print('3. Tiendas recibe el aviso y ve la falla')
-    t.goto(APP + '#consulta'); t.wait_for_selector('.aviso', timeout=15000)
-    ok('Ana López publicó la falla' in t.locator('.aviso p').inner_text(), 'aviso con quién publicó', t.locator('.aviso p').inner_text())
-    t.click('.aviso .btn'); t.wait_for_selector('.falla-item')
+    print('3. A Tiendas le llega la falla sola (en vivo) y la ve')
+    t.goto(APP + '#consulta'); t.wait_for_selector('.falla-item', timeout=15000)
+    ok(t.locator('.aviso').count() == 0 and t.locator('.vivo-marca').count() >= 1, 'la falla que publicó Workforce aparece sola en el panel y en el mapa, sin la barra de Actualizar')
     ok('F1254585' in t.locator('.falla-item .id').all_inner_texts() and 'NOC #9150' not in json.dumps(t.evaluate('() => G.s.fallas')) and 'NOC #9150' not in t.content(),
        'Tiendas ve la falla con su número de falla (F1254585), sin la referencia', t.locator('.falla-item .id').all_inner_texts())
     # El panel dice el departamento con sus nodos y, debajo, las colonias afectadas
@@ -164,9 +185,15 @@ with sync_playwright() as p:
     ok(tarjeta.locator('.zona-muni').count() >= 1 and tarjeta.locator('.zona-cols .chip').count() >= 1, 'al tocarla salen sus colonias por municipio')
     ok(tarjeta.locator('.det-acc button', has_text='nodos').count() == 0, 'con 3 nodos o menos ya están todos a la vista: no hace falta Ver los nodos')
     t.locator('.riel').screenshot(path=OUT + 'e04b_panel_colonias.png')
-    ok(t.locator('.mapa path[fill*="seq-5"]').count() >= 1, 'el mapa pinta el departamento afectado')
-    cab = t.locator('.mapa-grid.apilado .hbar.cab').inner_text()
-    ok('Departamento' in cab and 'Clientes' in cab, 'en Consulta el mapa va a todo lo ancho, con la lista abajo y los encabezados Departamento y Clientes')
+    mv = t.evaluate("""() => { const v = Model.mapaVivo(G.s.cat, Model.mapaFallas(G.s.fallas, Date.now()), Date.now(), []); const d = v.deps.find((x) => x.principal);
+      return { dep: d.k, nombre: HN_MAPA.deps[d.k].name, clientes: U.n(d.clientes), total: U.n(v.clientes), marcas: v.deps.filter((x) => x.principal).length, fallas: v.fallas }; }""")
+    etq = t.locator(f'.vivo-etq[data-dep="{mv["dep"]}"]')
+    ok(t.locator('.vivo-marca').count() == mv['marcas'] and etq.count() == 1 and mv['nombre'] in etq.inner_text() and mv['clientes'] in etq.inner_text()
+       and etq.locator('.vivo-cuenta').inner_text() == '1' and t.locator('.vivo-total .v').inner_text() == mv['total'],
+       f'el mapa en vivo marca {mv["nombre"]} con un círculo, sus {mv["clientes"]} clientes y 1 falla, y arriba el total ({mv["total"]})', [t.locator('.vivo-total').inner_text(), etq.inner_text() if etq.count() else ''])
+    mov = t.locator('.vivo-movs li').first.inner_text()
+    ok('Energía comercial en ' + mv['nombre'] in mov and 'Publicada ' in mov and mv['total'] in mov, 'y en Últimos movimientos sale la falla recién publicada: ' + mov.replace('\n', ' · '))
+    ok(not t.evaluate(ENCIMADAS), 'las etiquetas del mapa no se enciman', t.evaluate(ENCIMADAS))
     t.screenshot(path=OUT + 'e04_tiendas_mapa.png', full_page=True)
     t.fill('.buscador-caja input', c_falla); t.keyboard.press('Enter'); t.wait_for_selector('.veredicto', timeout=15000)
     ok(t.locator('.veredicto').get_attribute('data-s') == 'FALLA', 'el cliente ' + c_falla + ' del nodo ' + ejemplos[0] + ' sale con Falla general')
@@ -348,7 +375,7 @@ with sync_playwright() as p:
        f'se publica como posible falla y el servidor guarda la detección ({det.get("llamadas")} llamadas de {det.get("clientes")} clientes antes de publicar)', det)
     tarjeta_pf = x.locator('.falla-card', has_text=nodoPF)
     ok('En validación' in tarjeta_pf.inner_text() and tarjeta_pf.locator('button:has-text("Descartar")').count() == 1, 'la tarjeta dice En validación y ofrece Descartar')
-    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+    al_dia(a)
     a.fill('.buscador-caja input', contratosPF[1]); a.keyboard.press('Enter'); a.wait_for_selector(f'.cliente-ids:has-text("{contratosPF[1]}")', timeout=20000)
     ok(a.locator('.veredicto').get_attribute('data-s') == 'FALLA' and 'Posible falla general' in a.locator('.veredicto').inner_text(), 'Concentrix ve "Posible falla general" en ese nodo')
     a.wait_for_selector('.nota-qflow', timeout=5000)
@@ -365,7 +392,7 @@ with sync_playwright() as p:
     av = [v for v in s.evaluate('() => window.__avisos') if v['t'].startswith('Se descartó la posible falla')]
     ok(len(av) == 1 and 'No se confirmó falla en ' + nodoPF in av[0]['b'] and 'sigue el flujo normal' in av[0]['b'] and 'El VOC no encontró' not in av[0]['b'],
        'al descartarla, a la supervisora le llega el aviso de que se descartó: ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
-    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+    al_dia(a)
     a.fill('.buscador-caja input', contratosPF[2]); a.keyboard.press('Enter'); a.wait_for_selector(f'.cliente-ids:has-text("{contratosPF[2]}")', timeout=20000)
     a.wait_for_selector('.historial-cliente', timeout=15000)
     ok(a.locator('.veredicto').get_attribute('data-s') == 'SIN_FALLA' and 'Posible falla' not in a.locator('.historial-cliente').inner_text(),
@@ -380,7 +407,7 @@ with sync_playwright() as p:
     av = [v for v in s.evaluate('() => window.__avisos') if v['t'] == 'Falla resuelta: F1254585']
     ok(len(av) == 1 and av[0]['b'].startswith('Falla de energía comercial en ') and re.search(r'Servicio restablecido hoy a las? \d', av[0]['b']) and 'la cerró Mario Rivera' in av[0]['b'],
        'al cerrar una falla, a la supervisora le llega "Falla resuelta: F1254585": ' + (av[0]['b'] if av else ''), s.evaluate('() => window.__avisos'))
-    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+    al_dia(a)
     a.fill('.buscador-caja input', c_falla); a.keyboard.press('Enter'); a.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)
     a.wait_for_selector('.hist-etiquetas .llamo', timeout=15000)
     ok(a.locator('.hist-etiquetas .llamo').first.inner_text().strip() == 'Llamó 1 vez', 'el historial marca que el cliente llamó durante esa falla (sin contar las búsquedas de Workforce)', a.locator('.hist-etiquetas .llamo').all_inner_texts())
@@ -411,7 +438,7 @@ with sync_playwright() as p:
     ok(not [v for v in x.evaluate('() => window.__avisos') if 'Nueva falla' in v['t']], 'a quien la publicó no le llega su propio aviso')
     s.evaluate('() => Backend.estado().then((e) => A.avisarFallas(e))'); s.wait_for_timeout(300)
     ok(len([v for v in s.evaluate('() => window.__avisos') if 'F1254600' in v['t']]) == 1, 'y el aviso llega una sola vez')
-    a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)   # Concentrix recibe el aviso de la falla nueva
+    al_dia(a)   # a Concentrix la falla nueva le llega sola
     def abrir_sms():
         x.goto(APP + '#fallas'); x.wait_for_selector('.pestanas', timeout=15000)
         x.click('button[role=tab]:has-text("Activas")'); x.wait_for_selector('.falla-card', timeout=10000)
@@ -636,7 +663,7 @@ with sync_playwright() as p:
         esperado = x.evaluate("(n) => Model.impacto(G.s.cat, n).total", nodos3)
         ok(x.locator('.impacto-cifra .grande').inner_text().replace(',', '').strip() == str(esperado), f'impacto real de {", ".join(nodos3)}: {esperado} clientes')
         x.click('button.motivo:has-text("fibra")'); x.click('.publicar-barra .btn-primario'); x.click('.modal .btn-primario'); x.wait_for_timeout(1500)
-        a.wait_for_selector('.aviso', timeout=20000); a.click('.aviso .btn'); a.wait_for_timeout(800)
+        al_dia(a)
         c_n = http('/test/contrato?nodo=' + nodos3[0])['contrato']
         a.fill('.buscador-caja input', c_n); a.keyboard.press('Enter'); a.wait_for_selector('.veredicto[data-s=FALLA]', timeout=15000)
         ok(True, 'un cliente de ' + nodos3[0] + ' sale con Falla general')
@@ -735,6 +762,61 @@ with sync_playwright() as p:
     ok(x.locator('.pestanas button[aria-selected=true]').inner_text().startswith('Editar') and x.locator('.nodo-chip').count() == 1 and n3 in x.locator('.lista-nodos').inner_text(),
        'Abrir lleva a editar la falla que ya existe', x.locator('.pestanas button[aria-selected=true]').inner_text())
     x.evaluate("async (ids) => { for (const id of ids) await A.cerrarFalla(id, Date.now(), 'Prueba'); }", [f['id'] for f in hay])
+
+    print('10. Mapa en vivo: lo que hace Workforce se ve solo en la consulta')
+    a.fill('.buscador-caja input', ''); a.keyboard.press('Escape'); a.wait_for_selector('.vivo-panel', timeout=10000)
+    al_dia(a)
+    libre = x.evaluate("""() => { const act = G.s.fallas.filter((f) => f.estado === 'ACTIVA'); const ocupados = new Set(act.flatMap((f) => f.nodos));
+      const conFalla = new Set(act.flatMap((f) => Model.zonaFalla(G.s.cat, f).deps.map(Model.claveDep)));
+      const n = [...G.s.cat.nodos.values()].filter((n) => !U.esVirtual(n.code) && !ocupados.has(n.code) && n.total >= 20 && n.deps.length === 1 && HN_NOMBRES[Model.claveDep(n.deps[0][0])]
+        && !conFalla.has(Model.claveDep(n.deps[0][0]))).sort((p, q) => q.total - p.total)[0];
+      return n ? { nodo: n.code, dep: Model.claveDep(n.deps[0][0]), nombre: HN_MAPA.deps[Model.claveDep(n.deps[0][0])].name, clientes: U.n(n.total) } : null; }""")
+    ok(libre is not None, 'hay un nodo libre en un departamento sin fallas para la prueba', libre)
+    marcas0 = a.locator('.vivo-marca').count()
+    idv = x.evaluate("async (n) => (await Backend.falla('publicar', { falla: { nodos: [n], motivo: 'FIBRA', inicio: Date.now() - 90 * 60000 } })).falla.id", libre['nodo'])
+    sel = f'[data-dep="{libre["dep"]}"]'
+    a.wait_for_selector('.vivo-marca' + sel, timeout=20000)
+    etq = a.locator('.vivo-etq' + sel)
+    total = a.evaluate("() => U.n(Model.mapaFallas(G.s.fallas, Date.now()).clientesActivos)")
+    ok(a.locator('.aviso').count() == 0 and a.locator('.vivo-marca').count() == marcas0 + 1 and etq.count() == 1 and libre['nombre'] in etq.inner_text() and libre['clientes'] in etq.inner_text()
+       and a.locator('.vivo-total .v').inner_text() == total,
+       f'Workforce publica una falla en {libre["nombre"]} y en la consulta aparece sola: su círculo, {libre["clientes"]} clientes y el total al día ({total})', [etq.inner_text() if etq.count() else '', a.locator('.vivo-total').inner_text()])
+    mov = a.locator('.vivo-movs li').first.inner_text()
+    ok('Corte de fibra en ' + libre['nombre'] in mov and 'Publicada ahora' in mov, 'Últimos movimientos la pone primero: ' + mov.replace('\n', ' · '))
+    hora = a.locator('.vivo-hora').inner_text()
+    ok('nueva' in hora and 'en la última hora' in hora and 'lleva la más antigua' in hora, 'arriba dice lo de la última hora y cuánto lleva la más antigua: ' + ' '.join(hora.split()))
+    ok(not a.evaluate(ENCIMADAS), 'ninguna etiqueta del mapa tapa a otra ni a un círculo', a.evaluate(ENCIMADAS))
+    a.hover('.vivo-marca' + sel); a.wait_for_selector('.tooltip', timeout=5000)
+    tip = a.locator('.tooltip').inner_text()
+    ok(libre['nombre'] in tip and libre['clientes'] + ' clientes' in tip and '1 falla · desde hace 1 h 30 min' in tip, 'al pasar el cursor por el círculo: ' + tip.replace('\n', ' · '))
+    a.mouse.move(5, 5)
+    a.locator('.vivo-panel').screenshot(path=OUT + 'e14_mapa_en_vivo.png')
+    a.click('.vivo-ver-tabla'); a.wait_for_selector('.vivo-tabla table', timeout=5000)
+    fila = a.locator('.vivo-tabla tbody tr', has_text=libre['nombre']).inner_text()
+    ok(libre['clientes'] in fila and 'hace 1 h 30 min' in fila, 'Ver como tabla: cada departamento con sus clientes, sus fallas y desde cuándo (' + ' · '.join(fila.split('\t')) + ')')
+    a.click('.vivo-ver-tabla'); a.wait_for_timeout(200)
+    ok(a.locator('.vivo-tabla').count() == 0, 'y Ocultar tabla la quita')
+    # Sin conexión, el mapa no dice "en vivo"
+    a.evaluate("() => { window.__estado = Backend.estado; Backend.estado = () => Promise.reject(Object.assign(new Error('Sin conexión'), { codigo: 'RED' })); }")
+    a.wait_for_selector('.vivo-estado[data-e="sin"]', timeout=20000)
+    ok(a.locator('.vivo-estado').inner_text().strip().lower() == 'sin conexión' and 'lo último que llegó' in a.locator('.vivo-revisado').inner_text(), 'si se cae la conexión, el mapa lo dice en vez de "En vivo"')
+    a.evaluate("() => { Backend.estado = window.__estado; }")
+    a.wait_for_selector('.vivo-estado[data-e="vivo"]', timeout=20000)
+    ok('se actualiza solo' in a.locator('.vivo-revisado').inner_text(), 'y al volver la conexión, vuelve a En vivo')
+    # En un teléfono: el mapa con sus círculos y, debajo, los letreros y la lista de departamentos
+    a.set_viewport_size({'width': 420, 'height': 900}); a.wait_for_selector('.vivo-abajo', timeout=5000)
+    ok(a.locator('.vivo-etq').count() == 0 and a.locator('.vivo-marca').count() == marcas0 + 1 and libre['nombre'] in a.locator('.vivo-lista').inner_text()
+       and a.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1"),
+       'en un teléfono el mapa queda con sus círculos y los datos bajan en lista, sin desbordar la pantalla')
+    a.locator('.vivo-panel').screenshot(path=OUT + 'e14b_mapa_telefono.png')
+    a.set_viewport_size({'width': 1440, 'height': 900}); a.wait_for_selector('.vivo-etq' + sel, timeout=5000)
+    # Al cerrarla, se va sola del mapa y queda en los movimientos como resuelta
+    x.evaluate("(id) => A.cerrarFalla(id, Date.now(), 'Prueba del mapa')", idv)
+    a.wait_for_selector('.vivo-marca' + sel, state='detached', timeout=20000)
+    mov = a.locator('.vivo-movs li').first
+    ok(a.locator('.aviso').count() == 0 and mov.get_attribute('data-t') == 'RESUELTA' and 'Corte de fibra en ' + libre['nombre'] in mov.inner_text() and 'Resuelta ahora' in mov.inner_text()
+       and 'duró 1 h 30 min' in mov.inner_text() and 'resuelta' in a.locator('.vivo-hora').inner_text(),
+       'Workforce la cierra y en la consulta se quita sola del mapa; en los movimientos queda como resuelta, con lo que duró: ' + mov.inner_text().replace('\n', ' · '))
 
     ok(not [e for e in errores if 'ERR_' not in e and 'status of 503' not in e], 'sin errores de JavaScript en las páginas', errores[:5])   # los 503 son los que simula la prueba
     b.close()

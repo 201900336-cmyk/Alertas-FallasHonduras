@@ -264,8 +264,18 @@ const U = (() => {
     if (arr.length <= max) return arr.length === 1 ? arr[0] : arr.slice(0, -1).join(', ') + ' y ' + arr[arr.length - 1];
     return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
   };
+  /* Cuánto ocupa un texto en la letra del sistema (Archivo, ancho normal), en px, sin dibujarlo: el mapa en vivo
+     lo usa para colocar las etiquetas sin que se encimen. Los anchos por letra (en em) se midieron en la fuente;
+     el resultado va un poco de más, para que una etiqueta nunca salga más ancha de lo calculado. */
+  const ANCHO_LETRA = { ' ': 0.21, ',': 0.31, '.': 0.31, '·': 0.31, i: 0.26, j: 0.26, l: 0.26, 'í': 0.26, f: 0.32, t: 0.33, r: 0.37, m: 0.88, w: 0.78,
+    I: 0.29, M: 0.86, W: 0.96, G: 0.8, O: 0.79, Q: 0.79 };
+  const anchoTexto = (s, px, peso) => {
+    let em = 0;
+    for (const ch of String(s == null ? '' : s)) em += ANCHO_LETRA[ch] !== undefined ? ANCHO_LETRA[ch] : /[0-9]/.test(ch) ? 0.59 : /[A-ZÁÉÍÓÚÑ]/.test(ch) ? 0.73 : 0.6;
+    return em * px * (0.95 + ((peso || 400) - 400) * 0.0002) * 1.02;
+  };
 
-  return { MIN, HORA, DIA, n, n1, n2, pct, pctTxt, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
+  return { MIN, HORA, DIA, n, n1, n2, pct, pctTxt, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto, anchoTexto,
     dur, durCorto, durHM, conPunto, conMayuscula, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, colonia, claveColonia, coloniaNoUsar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();

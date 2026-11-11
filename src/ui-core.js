@@ -11,6 +11,8 @@ const G = {
     meta: { version: 0, baseVersion: -1, demo: false }, resumen: null, cat: null, fallas: [], cargas: [], alertas: [],
     now: Date.now(), remoto: null, ruta: 'consulta', tema: 'auto', tostadas: [], descartadas: {}, misConsultas: [],
     sinConexion: false, cargando: false,
+    // Mapa en vivo: cuándo se revisó por última vez si hubo cambios, y lo último que le pasó a cada falla
+    revisado: 0, avisos: [],
     // Posibles fallas (Workforce): umbral del servidor, la que está abierta, las que llegaron y no se han visto,
     // y si los avisos de escritorio están permitidos y activados
     umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', semillaFalla: null,
@@ -91,7 +93,7 @@ const A = {
   seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
     G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
-      alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null });
+      alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null, avisos: [], revisado: 0 });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
     guardarSS('alertas-avisos-reportado', ''); guardarSS('alertas-sin-avisos', false); G.set({ sinAvisos: false });
@@ -103,7 +105,7 @@ const A = {
     const d = await Backend.cargar(G.s.cat ? G.s.meta.baseVersion : -1);
     const cambios = {
       meta: { version: d.version, baseVersion: d.baseVersion, demo: !!d.demo }, resumen: d.resumen || null, fallas: d.fallas || [],
-      cargas: d.cargas || [], remoto: null, now: Date.now(), sinConexion: false
+      cargas: d.cargas || [], remoto: null, now: Date.now(), sinConexion: false, revisado: Date.now()
     };
     if (d.catalogo !== undefined) cambios.cat = d.catalogo ? Model.cargarCatalogo(d.catalogo) : null;
     if (A.pub.visto == null) A.pub.visto = d.version || 0;   // al entrar: lo que ya estaba publicado no se avisa
@@ -113,6 +115,10 @@ const A = {
   async actualizar() {
     try { await A.recargar(); tostada('Listo, ya tienes la última versión'); } catch (e) { tostada(e.message); }
   },
+  /* En Consulta, lo que cambia en las fallas (publicar, editar, cerrar, reabrir) se carga solo, sin la barra de
+     "Actualizar": el mapa en vivo y el panel de fallas van al día. Una base nueva no: trae el catálogo completo
+     de nodos, y si todas las páginas lo pidieran a la vez sería mucha carga para el servidor. */
+  cargaSola(e) { return !!e && G.s.ruta === 'consulta' && e.baseVersion === G.s.meta.baseVersion; },
 
   /* Revisa cada pocos segundos si Workforce cambió algo */
   vigilar() {
@@ -126,8 +132,15 @@ const A = {
       ocupado = true; ultimo = Date.now();
       try {
         const e = await Backend.estado();
-        G.set({ sinConexion: false });
-        if (e.version > G.s.meta.version && (!G.s.remoto || G.s.remoto.version < e.version)) G.set({ remoto: e });
+        // "revisado" (la hora que muestra el mapa en vivo) solo avanza cuando lo que se ve está al día
+        const alDia = e.version <= G.s.meta.version;
+        G.set(Object.assign({ sinConexion: false, avisos: e.avisos || [] }, alDia ? { revisado: Date.now() } : null));
+        if (!alDia) {
+          // En Consulta las fallas se cargan solas (el mapa va en vivo). Si esa carga falla, se intenta en la
+          // siguiente revisión. En las demás vistas, y con una base nueva, sale la barra con "Actualizar".
+          if (A.cargaSola(e)) { try { await A.recargar(); } catch (err) { /* a la siguiente */ } }
+          else if (!G.s.remoto || G.s.remoto.version < e.version) G.set({ remoto: e });
+        }
         A.avisarFallas(e);
       } catch (err) { if (err.codigo === 'RED') G.set({ sinConexion: true }); }
       ocupado = false;

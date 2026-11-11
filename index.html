@@ -856,6 +856,104 @@ table.conex-tabla { min-width: 680px; }
 .escala .rampa { display: flex; gap: 2px; }
 .escala .rampa i { width: 22px; height: 10px; border-radius: 2px; }
 .ver-tabla { border: 0; background: none; color: var(--ink-2); font-size: 12.5px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; padding: 4px; }
+
+/* ---------- Mapa en vivo (inicio de la consulta) ----------
+   Un panel siempre oscuro, como una pantalla de monitoreo, en el tema claro y en el oscuro. Adentro, los colores
+   de la interfaz toman sus valores oscuros, para que la tabla y el aviso del cursor se vean bien. El rojo es el
+   de las fallas; el ámbar, el de lo resuelto. */
+.vivo-panel {
+  --surface: #161b22; --surface-2: #1c222a; --surface-3: #232a33; --line: #2a313b; --line-2: #3a434f; --ink: #eef1f5; --ink-2: #b5bec9; --ink-3: #8691a0;
+  --focus: #6b97ff; --pop: 0 18px 40px -16px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --v-rojo: #e2444f; --v-rojo-claro: #ff8e95; --v-borde: #ff7a84; --v-ambar: #f7c460;
+  background: #0f141a; border-color: #232a33; color: var(--ink); color-scheme: dark; overflow: hidden;
+}
+.vivo-cab { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 13px 24px; border-bottom: 1px solid #232a33; }
+.vivo-cab h3 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.005em; }
+.vivo-cab .der { margin-left: auto; display: flex; align-items: baseline; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.vivo-revisado b { font-size: 14px; font-weight: 700; color: var(--ink); }
+.vivo-estado {
+  display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 9px; border-radius: 999px; background: #3a1c20; color: var(--v-rojo-claro);
+  font-size: 11.5px; font-weight: 750; letter-spacing: 0.06em; line-height: 1.4; text-transform: uppercase;
+}
+.vivo-estado .punto { color: var(--v-rojo); }
+.vivo-estado[data-e="sin"] { background: var(--surface-3); color: var(--ink-2); }
+.vivo-estado[data-e="sin"] .punto { color: var(--ink-3); }
+.vivo-ver-tabla { border: 0; background: none; padding: 4px 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.vivo-ver-tabla:hover { color: var(--ink); }
+/* El lienzo: se dibuja a 976 x 575 y se escala al ancho del panel (el alto lo pone la página) */
+.vivo-lienzo { position: relative; overflow: hidden; margin-bottom: 14px; }
+.vivo-escena {
+  position: absolute; left: 0; top: 0; width: 976px; height: 575px; transform-origin: 0 0;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.055) 1px, transparent 1.4px); background-size: 22px 22px; background-position: 11px 11px;
+}
+.vivo-tierra { position: absolute; filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.45)); }
+.vivo-tierra path { fill: #1d242d; stroke: #0f141a; stroke-width: 1.4; stroke-linejoin: round; transition: fill 400ms ease; }
+.vivo-tierra path:hover { filter: brightness(1.22); }
+.vivo-nombre { position: absolute; transform: translate(-50%, -50%); font-size: 11.5px; font-weight: 550; line-height: 14px; color: var(--ink-3); text-align: center; white-space: nowrap; pointer-events: none; }
+.vivo-pto { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--v-rojo); }
+.vivo-nombre .vivo-pto { margin-left: 5px; vertical-align: 1px; }
+.vivo-pto.suelto { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+.vivo-marca {
+  position: absolute; transform: translate(-50%, -50%); box-sizing: border-box; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--v-borde);
+  background: radial-gradient(circle, rgba(255, 110, 120, 0.5) 0%, rgba(226, 68, 79, 0.3) 58%, rgba(226, 68, 79, 0.2) 100%);
+  box-shadow: 0 0 0 5px rgba(226, 68, 79, 0.1), 0 0 24px rgba(226, 68, 79, 0.45);
+}
+.vivo-marca > i { width: 6px; height: 6px; border-radius: 50%; background: #ffd5d8; }
+.vivo-marca:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.vivo-onda { position: absolute; inset: -1px; border-radius: 50%; border: 1px solid var(--v-borde); opacity: 0; pointer-events: none; animation: vivo-onda 3.2s var(--ease-out) infinite; }
+@keyframes vivo-onda { 0% { transform: scale(1); opacity: 0.7; } 80%, 100% { transform: scale(1.75); opacity: 0; } }
+.vivo-etq { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 1px; white-space: nowrap; pointer-events: none; }
+.vivo-etq[data-lado="derecha"] { align-items: flex-start; }
+.vivo-etq[data-lado="izquierda"] { align-items: flex-end; }
+.vivo-etq b { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; line-height: 16.9px; color: #ffffff; }
+.vivo-etq span { font-size: 12px; line-height: 15.6px; color: var(--ink-2); }
+.vivo-etq strong { font-weight: 700; color: #ffffff; }
+.vivo-cuenta {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; flex: none;
+  background: #c9303b; color: #ffffff; font-size: 10.5px; font-weight: 800; font-style: normal; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.vivo-total { display: flex; flex-direction: column; }
+.vivo-total .l { font-size: 12px; font-weight: 550; color: var(--ink-2); }
+.vivo-total .v { font-size: 40px; font-weight: 800; font-stretch: 116%; letter-spacing: -0.02em; line-height: 1.1; color: #ffffff; }
+.vivo-total .v.sin { font-size: 24px; font-stretch: 108%; letter-spacing: -0.01em; line-height: 1.2; }
+.vivo-total .v + .d { margin-top: 3px; }
+.vivo-total .d { font-size: 12.5px; color: var(--ink-2); }
+.vivo-total .d b { font-weight: 500; color: var(--ink); }
+.vivo-hora { display: flex; gap: 26px; }
+.vivo-hora > div { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; }
+.vivo-hora b { font-size: 14px; font-weight: 700; color: var(--ink); }
+.vivo-hora b.num, .vivo-hora b > span { font-weight: 800; font-stretch: 112%; color: #ffffff; }
+.vivo-hora b > .n-falla { color: var(--v-rojo-claro); }
+.vivo-hora b > .n-res { color: var(--v-ambar); }
+.vivo-hora > div > span { font-size: 11.5px; color: var(--ink-2); }
+.vivo-leyenda { display: flex; flex-direction: column; gap: 7px; font-size: 11.5px; line-height: 16px; color: var(--ink-2); }
+.vivo-leyenda > div { display: flex; align-items: center; gap: 10px; }
+.vivo-leyenda .ico { display: flex; justify-content: center; width: 31px; flex: none; }
+.vivo-disco { box-sizing: border-box; border-radius: 50%; background: rgba(226, 68, 79, 0.3); border: 1px solid var(--v-borde); }
+.vivo-movs { display: flex; flex-direction: column; }
+.vivo-movs h4 { margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 650; line-height: 18px; color: var(--ink); }
+.vivo-movs ul { list-style: none; margin: 0; padding: 0; }
+.vivo-movs li { display: flex; gap: 10px; padding-top: 9px; }
+.vivo-movs li > i { flex: none; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: var(--v-rojo); }
+.vivo-movs li[data-t="RESUELTA"] > i { background: #f5b324; }
+.vivo-movs li > div { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.vivo-movs b { font-size: 12.5px; font-weight: 650; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vivo-movs span { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* En el lienzo cada letrero va en su esquina: las mismas zonas que Model.fijosVivo reserva al colocar las etiquetas */
+.vivo-escena > .vivo-total { position: absolute; left: 24px; top: 18px; max-width: 222px; }
+.vivo-escena > .vivo-hora { position: absolute; right: 24px; top: 18px; }
+.vivo-escena > .vivo-leyenda { position: absolute; left: 24px; bottom: 8px; }
+.vivo-escena > .vivo-movs { position: absolute; right: 24px; bottom: 20px; width: 276px; }
+/* En un panel angosto los letreros bajan en fila, con la lista de departamentos */
+.vivo-abajo { display: grid; gap: 16px; padding: 2px 16px 16px; }
+.vivo-abajo .vivo-hora { gap: 22px; }
+.vivo-abajo .vivo-hora > div { align-items: flex-start; }
+.vivo-lista { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.vivo-lista li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.vivo-lista b { display: flex; align-items: center; gap: 7px; font-weight: 650; }
+.vivo-lista span { color: var(--ink-2); }
+.vivo-tabla { border-top: 1px solid #232a33; padding: 4px 12px 8px; overflow-x: auto; }
+.vivo-tabla .tabla th { background: transparent; }
 .bitacora { list-style: none; margin: 0; padding: 0; }
 .bitacora li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
 .bitacora li:last-child { border-bottom: 0; }
@@ -2119,8 +2217,18 @@ const U = (() => {
     if (arr.length <= max) return arr.length === 1 ? arr[0] : arr.slice(0, -1).join(', ') + ' y ' + arr[arr.length - 1];
     return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
   };
+  /* Cuánto ocupa un texto en la letra del sistema (Archivo, ancho normal), en px, sin dibujarlo: el mapa en vivo
+     lo usa para colocar las etiquetas sin que se encimen. Los anchos por letra (en em) se midieron en la fuente;
+     el resultado va un poco de más, para que una etiqueta nunca salga más ancha de lo calculado. */
+  const ANCHO_LETRA = { ' ': 0.21, ',': 0.31, '.': 0.31, '·': 0.31, i: 0.26, j: 0.26, l: 0.26, 'í': 0.26, f: 0.32, t: 0.33, r: 0.37, m: 0.88, w: 0.78,
+    I: 0.29, M: 0.86, W: 0.96, G: 0.8, O: 0.79, Q: 0.79 };
+  const anchoTexto = (s, px, peso) => {
+    let em = 0;
+    for (const ch of String(s == null ? '' : s)) em += ANCHO_LETRA[ch] !== undefined ? ANCHO_LETRA[ch] : /[0-9]/.test(ch) ? 0.59 : /[A-ZÁÉÍÓÚÑ]/.test(ch) ? 0.73 : 0.6;
+    return em * px * (0.95 + ((peso || 400) - 400) * 0.0002) * 1.02;
+  };
 
-  return { MIN, HORA, DIA, n, n1, n2, pct, pctTxt, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto,
+  return { MIN, HORA, DIA, n, n1, n2, pct, pctTxt, compact, fechaDias, antiguedad, hora, las, dia, diaAnio, largo, inicioDia, esHoy, diaRel, cuando, cuandoCorto, anchoTexto,
     dur, durCorto, durHM, conPunto, conMayuscula, hace, horas, sinAcentos, digitos, titulo, conEnie, lugar, colonia, claveColonia, coloniaNoUsar, esEmpresa, primerNombre, formatoDni, esVirtual, idFalla, numeroFalla, oltBase, oltNombre,
     oltPuerto, uid, copiar, copiarHtml, descargarCsv, descargarTexto, plural, listaNatural, partesSms, sinTildesSms, hashSms };
 })();
@@ -2502,11 +2610,12 @@ const Model = (() => {
      de la falla (por ejemplo, unos cuantos con la dirección de otro lugar) no se toma como zona afectada: no sale
      en el resumen, pero sí en la lista completa de colonias. Cuenta con 30 clientes o más, o con el 3 % de la
      falla (y al menos 5) si es pequeña. */
+  const minimoZona = (total) => Math.min(30, Math.max(5, 0.03 * total));
+  const principalesZona = (l, total) => l.filter(([, v], i) => i === 0 || v >= minimoZona(total)).map(([k]) => k);
   function zonaFalla(cat, f) {
-    const minimo = (total) => Math.min(30, Math.max(5, 0.03 * total));
+    const minimo = minimoZona, principales = principalesZona;
     const orden = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]);
     const suma = (l) => l.reduce((a, x) => a + x[1], 0);
-    const principales = (l, total) => l.filter(([, v], i) => i === 0 || v >= minimo(total)).map(([k]) => k);
     if (cat && cat.conColonias) {
       const d = new Map(), g = new Map();
       for (const code of new Set(f.nodos || [])) {
@@ -2759,6 +2868,140 @@ const Model = (() => {
     return { tipo: 'SIN_FALLA', falla: null };
   }
   const PRIORIDAD = { FALLA: 0, RESUELTA: 1, SIN_FALLA: 2, SIN_NODO: 3 };
+
+  /* ---------- Mapa en vivo (inicio de la consulta) ---------- */
+  const claveDep = (d) => U.sinAcentos(d).toUpperCase().replace(/\s+/g, ' ').trim();
+  /* Los clientes de una falla por departamento, de más a menos: del catálogo de la base actual si trae colonias
+     (lo mismo que usa zonaFalla); si no, lo que se guardó al publicarla. */
+  function depsFalla(cat, f) {
+    if (cat && cat.conColonias) {
+      const d = new Map();
+      for (const code of new Set(f.nodos || [])) {
+        const n = cat.nodos.get(code); if (!n) continue;
+        for (const [k, v] of n.deps) d.set(k, (d.get(k) || 0) + v);
+      }
+      if (d.size) return [...d.entries()].sort((a, b) => b[1] - a[1]);
+    }
+    return ((f.impacto && f.impacto.deps) || []).filter((x) => x && x[1] > 0);
+  }
+  /* Lo que muestra el mapa en vivo, a partir de las fallas que ve la persona (mapaFallas):
+     - deps: por departamento, sus clientes afectados, cuántas fallas lo tienen como zona afectada (las mismas
+       zonas que dice el panel de fallas) y desde cuándo. Un departamento que solo tiene unos pocos clientes de
+       una falla de otra zona va con principal: false: en el mapa es un punto, no un círculo.
+     - los totales, la falla activa más antigua y lo publicado y lo resuelto en la última hora
+     - movimientos: lo último que le pasó a cada falla visible (publicada, reabierta o resuelta), lo más nuevo
+       primero. avisos: los de "estado" (el último de cada falla), que dicen cuándo se reabrió una. */
+  function mapaVivo(cat, mf, now, avisos) {
+    const deps = new Map(), zonas = new Map(), nodos = new Set();
+    for (const f of mf.activas) {
+      for (const n of f.nodos || []) nodos.add(n);
+      const l = depsFalla(cat, f);
+      const pr = new Set(principalesZona(l, l.reduce((a, x) => a + x[1], 0)));
+      zonas.set(f.id, [...pr]);
+      for (const [nombre, v] of l) {
+        const k = claveDep(nombre);
+        let d = deps.get(k); if (!d) { d = { k, nombre, clientes: 0, fallas: 0, vecinas: 0, desde: 0, desdeVecina: 0 }; deps.set(k, d); }
+        d.clientes += v;
+        if (pr.has(nombre)) { d.fallas++; d.desde = d.desde ? Math.min(d.desde, f.inicio) : f.inicio; }
+        else { d.vecinas++; d.desdeVecina = d.desdeVecina ? Math.min(d.desdeVecina, f.inicio) : f.inicio; }
+      }
+    }
+    const lista = [...deps.values()].map((d) => ({ k: d.k, nombre: d.nombre, clientes: d.clientes, fallas: d.fallas, vecinas: d.vecinas,
+      desde: d.desde || d.desdeVecina, principal: d.fallas > 0 }))
+      .sort((a, b) => (b.principal ? 1 : 0) - (a.principal ? 1 : 0) || b.clientes - a.clientes || (a.k < b.k ? -1 : 1));
+    const ultimo = new Map((avisos || []).filter(Boolean).map((a) => [a.id, a]));
+    const movimientos = mf.visibles.map((f) => {
+      const activa = f.estado === 'ACTIVA', av = ultimo.get(f.id);
+      const reabierta = activa && !!av && av.tipo === 'REABIERTA' && av.en > f.publicadaEn;
+      let zona = zonas.get(f.id);
+      if (!zona) { const l = depsFalla(cat, f); zona = principalesZona(l, l.reduce((a, x) => a + x[1], 0)); }
+      return { id: f.id, falla: f, tipo: !activa ? 'RESUELTA' : reabierta ? 'REABIERTA' : 'PUBLICADA', t: !activa ? f.cerradaEn : reabierta ? av.en : f.publicadaEn,
+        zona, clientes: (f.impacto && f.impacto.total) || 0, duracion: activa ? 0 : Math.max(0, f.cerradaEn - f.inicio) };
+    }).sort((a, b) => b.t - a.t);
+    const hace1h = now - U.HORA;
+    return {
+      clientes: mf.clientesActivos, fallas: mf.activas.length, nodos: nodos.size, departamentos: lista.filter((d) => d.principal).length, deps: lista,
+      antigua: mf.activas.reduce((a, f) => (!a || f.inicio < a.inicio ? f : a), null),
+      nuevas: movimientos.filter((m) => (m.tipo === 'REABIERTA' ? m.t : m.falla.publicadaEn) >= hace1h).length,
+      resueltas: movimientos.filter((m) => m.tipo === 'RESUELTA' && m.t >= hace1h).length,
+      movimientos
+    };
+  }
+  /* Coloca la etiqueta de cada marca del mapa sin que se encimen. Las marcas vienen de la más a la menos
+     importante: cada una prueba su etiqueta abajo, arriba, a la derecha y a la izquierda, y se queda con el
+     primer lugar donde no tapa otra marca, otra etiqueta ni una zona fija (los totales, la leyenda…) y no se sale
+     del lienzo. Si no cabe en ninguno, la marca queda sin etiqueta: su dato sigue al pasar el cursor y en la
+     tabla. Después, los nombres de los demás departamentos salen solo donde no estorban.
+     marcas: [{ id, x, y, r, w, h }] (centro, radio y tamaño de su etiqueta) · nombres: [{ id, x, y, w, h }]
+     (centrados en x, y) · fijos: [{ x, y, w, h }] · lienzo: { w, h }.
+     Devuelve { etiquetas: { id: { lado, x, y, w, h } }, nombres: { id: true } }. */
+  function colocarEtiquetas({ marcas, nombres, fijos, lienzo, margen }) {
+    const m = margen == null ? 6 : margen, sep = 7, borde = 4;
+    const choca = (a, b, g) => a.x < b.x + b.w + g && a.x + a.w + g > b.x && a.y < b.y + b.h + g && a.y + a.h + g > b.y;
+    const circulos = marcas.map((k) => ({ id: k.id, x: k.x - k.r - 3, y: k.y - k.r - 3, w: 2 * k.r + 6, h: 2 * k.r + 6 }));
+    const zonas = fijos || [], puestas = [], etiquetas = {};
+    for (const k of marcas) {
+      const lados = [['abajo', k.x - k.w / 2, k.y + k.r + sep], ['arriba', k.x - k.w / 2, k.y - k.r - sep - k.h],
+        ['derecha', k.x + k.r + sep + 2, k.y - k.h / 2], ['izquierda', k.x - k.r - sep - 2 - k.w, k.y - k.h / 2]];
+      for (const [lado, x0, y0] of lados) {
+        // Junto a un borde, la etiqueta se corre lo necesario para no salirse (arriba y abajo, de lado; a los lados, de alto)
+        const vertical = lado === 'abajo' || lado === 'arriba';
+        const x = vertical ? Math.max(borde, Math.min(lienzo.w - borde - k.w, x0)) : x0, y = vertical ? y0 : Math.max(borde, Math.min(lienzo.h - borde - k.h, y0));
+        const c = { x, y, w: k.w, h: k.h };
+        if (c.x < borde || c.y < borde || c.x + c.w > lienzo.w - borde || c.y + c.h > lienzo.h - borde) continue;
+        if (circulos.some((o) => o.id !== k.id && choca(c, o, m)) || puestas.some((o) => choca(c, o, m)) || zonas.some((o) => choca(c, o, m))) continue;
+        etiquetas[k.id] = Object.assign({ lado }, c); puestas.push(c);
+        break;
+      }
+    }
+    const visibles = {};
+    for (const n of nombres || []) {
+      const c = { x: n.x - n.w / 2, y: n.y - n.h / 2, w: n.w, h: n.h };
+      if (circulos.some((o) => choca(c, o, 2)) || puestas.some((o) => choca(c, o, 3)) || zonas.some((o) => choca(c, o, 2))) continue;
+      visibles[n.id] = true;
+    }
+    return { etiquetas, nombres: visibles };
+  }
+  /* El lienzo de diseño del mapa en vivo (la página lo escala al ancho que tenga) y dónde va dentro el mapa del
+     país, que mide 1000 x 589 */
+  const VIVO = { w: 976, h: 575, x: 16, y: 10, s: 0.944 };
+  /* El círculo crece con la raíz de los clientes, para que sea su área la que se compare */
+  const radioVivo = (clientes) => Math.max(7, Math.min(40, 0.4874 * Math.sqrt(clientes || 0)));
+  /* Las zonas del lienzo que ocupan los letreros fijos: los totales (arriba a la izquierda), la última hora (arriba
+     a la derecha), la leyenda (abajo a la izquierda) y los últimos movimientos (abajo a la derecha, según cuántos) */
+  function fijosVivo({ hora, leyenda, movimientos }) {
+    const f = [{ id: 'total', x: 24, y: 18, w: 222, h: 112 }];
+    if (hora) f.push({ id: 'hora', x: VIVO.w - 24 - 330, y: 18, w: 330, h: 44 });
+    if (leyenda) f.push({ id: 'leyenda', x: 24, y: VIVO.h - 8 - 100, w: 214, h: 100 });
+    if (movimientos) { const h = 28 + 41 * movimientos; f.push({ id: 'movimientos', x: VIVO.w - 24 - 276, y: VIVO.h - 20 - h, w: 276, h }); }
+    return f;
+  }
+  /* La escena del mapa en vivo en su tamaño de diseño: un círculo por departamento afectado, con su etiqueta ya
+     colocada (o sin ella si no cabe); los nombres de los demás donde no estorban, y de los que solo tienen unos
+     pocos clientes de una falla vecina, su punto (junto al nombre, o solo si el nombre no cabe).
+     anclas: { DEPARTAMENTO: [x, y, ...líneas del nombre] }, en las coordenadas del mapa. */
+  function escenaVivo(v, anclas, fijos) {
+    const en = (k) => ({ x: VIVO.x + anclas[k][0] * VIVO.s, y: VIVO.y + anclas[k][1] * VIVO.s });
+    const marcas = v.deps.filter((d) => d.principal && anclas[d.k]).map((d) => {
+      const nombre = anclas[d.k].slice(2).join(' ');
+      const w = Math.max(U.anchoTexto(nombre, 13, 650) + 22 + (String(d.fallas).length - 1) * 6,
+        U.anchoTexto(U.n(d.clientes), 12, 700) + U.anchoTexto(d.clientes === 1 ? ' cliente' : ' clientes', 12, 400));
+      return Object.assign({ id: d.k, d, nombre, r: radioVivo(d.clientes), w: Math.ceil(w), h: 34 }, en(d.k));
+    });
+    const conMarca = new Set(marcas.map((m) => m.id));
+    const vecinos = new Map(v.deps.filter((d) => !d.principal && anclas[d.k]).map((d) => [d.k, d]));
+    const nombres = Object.keys(anclas).filter((k) => !conMarca.has(k)).map((k) => {
+      const lineas = anclas[k].slice(2);
+      const w = Math.max(...lineas.map((l) => U.anchoTexto(l, 11.5, 550))) + (vecinos.has(k) ? 12 : 0);
+      return Object.assign({ id: k, lineas, d: vecinos.get(k) || null, w: Math.ceil(w), h: 14 * lineas.length }, en(k));
+    });
+    const r = colocarEtiquetas({ marcas, nombres, fijos, lienzo: { w: VIVO.w, h: VIVO.h } });
+    return {
+      marcas: marcas.map((m) => Object.assign(m, { etiqueta: r.etiquetas[m.id] || null })),
+      nombres: nombres.filter((n) => r.nombres[n.id]),
+      puntos: nombres.filter((n) => n.d && !r.nombres[n.id])
+    };
+  }
 
   /* La fecha de alta del cliente (días desde 1970, sin hora) como la medianoche de ese día en Honduras */
   const altaLocal = (d) => { const x = new Date(d * U.DIA); return new Date(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()).getTime(); };
@@ -3203,7 +3446,7 @@ const Model = (() => {
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
-    dniNormal, diasAIso, isoADias };
+    mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias };
 })();
 
 
@@ -4198,6 +4441,8 @@ const G = {
     meta: { version: 0, baseVersion: -1, demo: false }, resumen: null, cat: null, fallas: [], cargas: [], alertas: [],
     now: Date.now(), remoto: null, ruta: 'consulta', tema: 'auto', tostadas: [], descartadas: {}, misConsultas: [],
     sinConexion: false, cargando: false,
+    // Mapa en vivo: cuándo se revisó por última vez si hubo cambios, y lo último que le pasó a cada falla
+    revisado: 0, avisos: [],
     // Posibles fallas (Workforce): umbral del servidor, la que está abierta, las que llegaron y no se han visto,
     // y si los avisos de escritorio están permitidos y activados
     umbral: null, alertaAbierta: null, alertasNuevas: [], permisoAvisos: 'no', semillaFalla: null,
@@ -4278,7 +4523,7 @@ const A = {
   seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
     G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
-      alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null });
+      alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null, avisos: [], revisado: 0 });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
     guardarSS('alertas-avisos-reportado', ''); guardarSS('alertas-sin-avisos', false); G.set({ sinAvisos: false });
@@ -4290,7 +4535,7 @@ const A = {
     const d = await Backend.cargar(G.s.cat ? G.s.meta.baseVersion : -1);
     const cambios = {
       meta: { version: d.version, baseVersion: d.baseVersion, demo: !!d.demo }, resumen: d.resumen || null, fallas: d.fallas || [],
-      cargas: d.cargas || [], remoto: null, now: Date.now(), sinConexion: false
+      cargas: d.cargas || [], remoto: null, now: Date.now(), sinConexion: false, revisado: Date.now()
     };
     if (d.catalogo !== undefined) cambios.cat = d.catalogo ? Model.cargarCatalogo(d.catalogo) : null;
     if (A.pub.visto == null) A.pub.visto = d.version || 0;   // al entrar: lo que ya estaba publicado no se avisa
@@ -4300,6 +4545,10 @@ const A = {
   async actualizar() {
     try { await A.recargar(); tostada('Listo, ya tienes la última versión'); } catch (e) { tostada(e.message); }
   },
+  /* En Consulta, lo que cambia en las fallas (publicar, editar, cerrar, reabrir) se carga solo, sin la barra de
+     "Actualizar": el mapa en vivo y el panel de fallas van al día. Una base nueva no: trae el catálogo completo
+     de nodos, y si todas las páginas lo pidieran a la vez sería mucha carga para el servidor. */
+  cargaSola(e) { return !!e && G.s.ruta === 'consulta' && e.baseVersion === G.s.meta.baseVersion; },
 
   /* Revisa cada pocos segundos si Workforce cambió algo */
   vigilar() {
@@ -4313,8 +4562,15 @@ const A = {
       ocupado = true; ultimo = Date.now();
       try {
         const e = await Backend.estado();
-        G.set({ sinConexion: false });
-        if (e.version > G.s.meta.version && (!G.s.remoto || G.s.remoto.version < e.version)) G.set({ remoto: e });
+        // "revisado" (la hora que muestra el mapa en vivo) solo avanza cuando lo que se ve está al día
+        const alDia = e.version <= G.s.meta.version;
+        G.set(Object.assign({ sinConexion: false, avisos: e.avisos || [] }, alDia ? { revisado: Date.now() } : null));
+        if (!alDia) {
+          // En Consulta las fallas se cargan solas (el mapa va en vivo). Si esa carga falla, se intenta en la
+          // siguiente revisión. En las demás vistas, y con una base nueva, sale la barra con "Actualizar".
+          if (A.cargaSola(e)) { try { await A.recargar(); } catch (err) { /* a la siguiente */ } }
+          else if (!G.s.remoto || G.s.remoto.version < e.version) G.set({ remoto: e });
+        }
         A.avisarFallas(e);
       } catch (err) { if (err.codigo === 'RED') G.set({ sinConexion: true }); }
       ocupado = false;
@@ -4766,6 +5022,9 @@ function VistaConsulta() {
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
   const ultima = useRef({ q: '', t: 0, res: null });
+  // Aquí las fallas se cargan solas: un cambio que quedó pendiente estando en otra vista se trae al entrar
+  const pendiente = s.remoto && A.cargaSola(s.remoto) ? s.remoto.version : 0;
+  useEffect(() => { if (pendiente) A.recargar().catch(() => {}); }, [pendiente]);
 
   useEffect(() => {
     const k = (e) => {
@@ -5216,19 +5475,121 @@ function InicioAsesor({ mf, onAbrir }) {
   </div>`;
 }
 
-/* ---------- Mapa de Honduras con las fallas activas ---------- */
+/* ---------- Mapa en vivo: las fallas activas del país ----------
+   Un panel oscuro, como una pantalla de monitoreo: un círculo que late por cada departamento afectado (del
+   tamaño de sus clientes), los totales, lo de la última hora y los últimos movimientos. Se dibuja en un lienzo
+   de tamaño fijo (Model.VIVO) que se escala al ancho del panel: así las etiquetas se colocan una sola vez, sin
+   encimarse, y nada se descuadra en una pantalla más chica o más grande. En un panel angosto (un teléfono) el
+   lienzo queda solo con el mapa y sus círculos, y los letreros bajan uno tras otro. */
+const VIVO_ANGOSTO = 780, VIVO_MOVIMIENTOS = 4;
+const VIVO_TIERRA = [29, 36, 45], VIVO_ROJO = [226, 68, 79];
+const tinteVivo = (t) => 'rgb(' + VIVO_TIERRA.map((c, i) => Math.round(c + (VIVO_ROJO[i] - c) * t)).join(',') + ')';
+
 function MapaVivo({ mf }) {
-  const valores = {}, fallasDep = {};
-  for (const f of mf.activas) for (const [dep, n] of ((f.impacto && f.impacto.deps) || [])) {
-    const k = U.sinAcentos(dep).toUpperCase();
-    valores[k] = (valores[k] || 0) + n;
-    fallasDep[k] = (fallasDep[k] || 0) + 1;
-  }
-  const deps = Object.keys(valores).length;
-  return html`<section class="panel" aria-label="Mapa de fallas activas">
-    <div class="panel-cab"><div><h3>Fallas activas por departamento</h3>
-      <div class="sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados en ' + U.plural(deps, '1 departamento', deps + ' departamentos') : 'No hay fallas activas en este momento'}</div></div></div>
-    <div class="panel-cuerpo"><${MapaHonduras} valores=${valores} fallas=${fallasDep} vacio="Sin fallas activas en el país." apilado=${true} nombres=${true} /></div>
+  const s = useG();
+  const V = Model.VIVO;
+  const ref = useRef(null);
+  const ancho = useAncho(ref, V.w);
+  const tt = useTooltip();
+  const [tabla, setTabla] = useState(false);
+  const v = useMemo(() => Model.mapaVivo(s.cat, mf, s.now, s.avisos), [s.cat, mf, s.now, s.avisos]);
+  const movs = v.movimientos.slice(0, VIVO_MOVIMIENTOS);
+  const hayHora = v.fallas > 0 || v.nuevas > 0 || v.resueltas > 0;
+  const haySueltos = v.deps.some((d) => !d.principal);
+  const angosto = ancho < VIVO_ANGOSTO;
+  const esc = useMemo(() => Model.escenaVivo(v, HN_NOMBRES, angosto ? [] : Model.fijosVivo({ hora: hayHora, leyenda: v.departamentos > 0, movimientos: movs.length })),
+    [v, angosto, hayHora, movs.length]);
+  const k = Math.min(1.25, ancho / V.w);
+  const porDep = new Map(v.deps.map((d) => [d.k, d]));
+  const max = Math.max(1, ...v.deps.filter((d) => d.principal).map((d) => d.clientes));
+  const nombreDep = (clave, crudo) => (HN_MAPA.deps[clave] ? HN_MAPA.deps[clave].name : U.lugar(crudo || clave));
+  const clientesTxt = (n) => U.n(n) + (n === 1 ? ' cliente' : ' clientes');
+  const fallasTxt = (n) => U.plural(n, '1 falla', n + ' fallas');
+  const detalleDep = (d) => (d.principal ? fallasTxt(d.fallas) + ' · desde ' + U.hace(d.desde, s.now) : 'de una falla de otro departamento');
+  const aviso = (clave) => {
+    const d = porDep.get(clave);
+    return d ? html`<div class="tl">${nombreDep(clave)}</div><div class="tv">${clientesTxt(d.clientes)}</div><div class="tl">${detalleDep(d)}</div>`
+      : html`<div class="tl">${nombreDep(clave)}</div><div class="tv">Sin fallas activas</div>`;
+  };
+  const alCentro = (e, clave) => { const b = e.currentTarget.getBoundingClientRect(); tt.mostrar({ clientX: b.left + b.width / 2, clientY: b.top + b.height / 2 }, aviso(clave)); };
+  // En la leyenda, los círculos van al mismo tamaño que en el mapa (en un panel angosto el mapa va reducido)
+  const disco = (n) => { const d = Math.max(6, Math.round(2 * Model.radioVivo(n) * (angosto ? k : 1))); return 'width:' + d + 'px;height:' + d + 'px'; };
+  const zonaMov = (m) => (m.zona.length ? ' en ' + U.listaNatural(m.zona.map((z) => nombreDep(Model.claveDep(z), z)), 2) : '');
+  const haceMov = (t) => (s.now - t < U.MIN ? 'ahora' : U.hace(t, s.now));
+  const cada = CONFIG.segundosRevision === 60 ? 'cada minuto' : 'cada ' + CONFIG.segundosRevision + ' s';
+
+  const total = html`<div class="vivo-total">
+    ${v.fallas
+      ? html`<div class="l">Clientes afectados</div><div class="v num">${U.n(v.clientes)}</div>
+          <div class="d"><b>${fallasTxt(v.fallas)} · ${U.plural(v.nodos, '1 nodo', U.n(v.nodos) + ' nodos')}</b></div>
+          <div class="d">${U.plural(v.departamentos, '1 departamento', v.departamentos + ' departamentos')}</div>`
+      : html`<div class="v sin">Sin fallas activas</div><div class="d">${CONFIG.equipo} no ha publicado fallas en este momento.</div>`}
+  </div>`;
+  const hora = hayHora && html`<div class="vivo-hora">
+    <div><b>${v.nuevas || v.resueltas
+      ? html`<span class="n-falla num">${v.nuevas}</span> ${U.plural(v.nuevas, 'nueva', 'nuevas')} · <span class="n-res num">${v.resueltas}</span> ${U.plural(v.resueltas, 'resuelta', 'resueltas')}`
+      : 'Sin cambios'}</b><span>en la última hora</span></div>
+    ${v.antigua && html`<div><b class="num">${U.dur(s.now - v.antigua.inicio)}</b><span>lleva la más antigua</span></div>`}
+  </div>`;
+  const leyenda = v.departamentos > 0 && html`<div class="vivo-leyenda">
+    <div><span class="ico"><i class="vivo-disco" style=${disco(1000)}></i></span>1,000 clientes</div>
+    <div><span class="ico"><i class="vivo-disco" style=${disco(100)}></i></span>200 o menos</div>
+    ${haySueltos && html`<div><span class="ico"><i class="vivo-pto"></i></span>Pocos clientes de una falla vecina</div>`}
+    <div><span class="ico"><i class="vivo-cuenta">2</i></span>Fallas en el departamento</div>
+  </div>`;
+  const movimientos = movs.length > 0 && html`<div class="vivo-movs">
+    <h4>Últimos movimientos</h4>
+    <ul>${movs.map((m) => { const titulo = cortoMotivo(m.falla) + zonaMov(m); return html`<li key=${m.id} data-t=${m.tipo}><i></i><div><b title=${titulo}>${titulo}</b>
+      <span>${m.tipo === 'RESUELTA' ? 'Resuelta ' + haceMov(m.t) + ' · duró ' + U.dur(m.duracion)
+        : (m.tipo === 'REABIERTA' ? 'Reabierta ' : 'Publicada ') + haceMov(m.t) + (m.clientes ? ' · ' + clientesTxt(m.clientes) : '')}</span></div></li>`; })}</ul>
+  </div>`;
+  // En un panel angosto no hay nombres ni etiquetas en el mapa: los departamentos que solo tienen un punto lo conservan
+  const puntos = angosto ? esc.nombres.filter((n) => n.d).concat(esc.puntos) : esc.puntos;
+
+  return html`<section class="panel vivo-panel" ref=${ref} aria-label="Fallas activas en Honduras, en vivo">
+    <div class="vivo-cab">
+      <span class="vivo-estado" data-e=${s.sinConexion ? 'sin' : 'vivo'}><span class=${'punto' + (s.sinConexion ? '' : ' vivo')}></span>${s.sinConexion ? 'Sin conexión' : 'En vivo'}</span>
+      <h3>Fallas activas en Honduras</h3>
+      <div class="der">
+        <span class="vivo-revisado"><b class="num">${U.hora(s.revisado || s.now)}</b> · ${s.sinConexion ? 'lo último que llegó' : 'se actualiza solo ' + cada}</span>
+        <button type="button" class="vivo-ver-tabla" aria-expanded=${tabla} onClick=${() => setTabla(!tabla)}>${tabla ? 'Ocultar tabla' : 'Ver como tabla'}</button>
+      </div>
+    </div>
+    <div class="vivo-lienzo" style=${'height:' + Math.round(V.h * k) + 'px'}>
+      <div class="vivo-escena" style=${'transform:scale(' + k + ')'}>
+        <svg class="vivo-tierra" viewBox=${'0 0 ' + HN_MAPA.w + ' ' + HN_MAPA.h} aria-hidden="true"
+          style=${'left:' + V.x + 'px;top:' + V.y + 'px;width:' + HN_MAPA.w * V.s + 'px;height:' + HN_MAPA.h * V.s + 'px'}>
+          ${Object.entries(HN_MAPA.deps).map(([clave, dep]) => { const d = porDep.get(clave); return html`<path key=${clave} d=${dep.d}
+            style=${d && d.principal ? 'fill:' + tinteVivo(0.07 + 0.11 * Math.sqrt(d.clientes / max)) : ''}
+            onPointerMove=${(e) => tt.mostrar(e, aviso(clave))} onPointerLeave=${tt.ocultar} />`; })}
+        </svg>
+        ${!angosto && esc.nombres.map((n) => html`<div class="vivo-nombre" key=${'n-' + n.id} style=${'left:' + n.x + 'px;top:' + n.y + 'px'} aria-hidden="true">
+          ${n.lineas.map((l, i) => html`${i ? html`<br />` : null}${l}`)}${n.d && html`<i class="vivo-pto"></i>`}</div>`)}
+        ${puntos.map((n) => html`<i class="vivo-pto suelto" key=${'p-' + n.id} style=${'left:' + n.x + 'px;top:' + n.y + 'px'} aria-hidden="true"></i>`)}
+        ${esc.marcas.map((m, i) => html`<div class="vivo-marca" key=${'m-' + m.id} data-dep=${m.id} tabindex="0" role="img"
+          aria-label=${m.nombre + ': ' + clientesTxt(m.d.clientes) + ', ' + detalleDep(m.d)}
+          style=${'left:' + m.x + 'px;top:' + m.y + 'px;width:' + 2 * m.r + 'px;height:' + 2 * m.r + 'px'}
+          onPointerMove=${(e) => tt.mostrar(e, aviso(m.id))} onPointerLeave=${tt.ocultar} onFocus=${(e) => alCentro(e, m.id)} onBlur=${tt.ocultar}>
+          <span class="vivo-onda" style=${'animation-delay:' + (i % 4) * 0.8 + 's'}></span>${m.r >= 9 && html`<i></i>`}</div>`)}
+        ${!angosto && esc.marcas.filter((m) => m.etiqueta).map((m) => html`<div class="vivo-etq" key=${'e-' + m.id} data-dep=${m.id} data-lado=${m.etiqueta.lado} aria-hidden="true"
+          style=${'left:' + m.etiqueta.x + 'px;top:' + m.etiqueta.y + 'px;width:' + m.etiqueta.w + 'px'}>
+          <b>${m.nombre}<i class="vivo-cuenta">${m.d.fallas}</i></b><span><strong class="num">${U.n(m.d.clientes)}</strong>${m.d.clientes === 1 ? ' cliente' : ' clientes'}</span></div>`)}
+        ${!angosto && html`${total}${hora}${leyenda}${movimientos}`}
+      </div>
+    </div>
+    ${angosto && html`<div class="vivo-abajo">
+      ${total}${hora}
+      ${esc.marcas.length > 0 && html`<ul class="vivo-lista">${esc.marcas.map((m) => html`<li key=${m.id}><b>${m.nombre}<i class="vivo-cuenta">${m.d.fallas}</i></b><span class="num">${clientesTxt(m.d.clientes)}</span></li>`)}</ul>`}
+      ${movimientos}${leyenda}
+    </div>`}
+    ${tabla && html`<div class="vivo-tabla"><table class="tabla">
+      <thead><tr><th>Departamento</th><th class="der">Clientes afectados</th><th class="der">Fallas</th><th class="der">Desde</th></tr></thead>
+      <tbody>${v.deps.length
+        ? v.deps.map((d) => html`<tr key=${d.k}><td>${nombreDep(d.k, d.nombre)}</td><td class="der">${U.n(d.clientes)}</td>
+            <td class="der">${d.principal ? d.fallas : html`<span class="sub">de otro departamento</span>`}</td><td class="der">${U.hace(d.desde, s.now)}</td></tr>`)
+        : html`<tr><td colspan="4" class="sub">Sin fallas activas en el país.</td></tr>`}</tbody>
+    </table></div>`}
+    ${tt.nodo}
   </section>`;
 }
 
@@ -6347,7 +6708,7 @@ function VistaBase() {
 function useAncho(ref, base) {
   const [w, setW] = useState(base || 600);
   useEffect(() => {
-    if (!ref.current) return;
+    if (!ref.current || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((ent) => { const x = Math.floor(ent[0].contentRect.width); if (x > 0) setW(x); });
     ro.observe(ref.current); return () => ro.disconnect();
   }, []);
@@ -7962,8 +8323,9 @@ function BarraSuperior({ mf }) {
 function AvisoCambios() {
   const s = useG();
   const r = s.remoto;
-  // En Fallas, Workforce no espera al botón: los cambios de los demás se cargan solos (VistaFallas)
-  if (!r || (s.ruta === 'fallas' && esWorkforce())) return null;
+  // En Fallas, Workforce no espera al botón: los cambios de los demás se cargan solos (VistaFallas). En Consulta
+  // tampoco hace falta: lo que cambia en las fallas se carga solo (el mapa va en vivo)
+  if (!r || (s.ruta === 'fallas' && esWorkforce()) || A.cargaSola(r)) return null;
   const c = r.cambio || {};
   const quien = c.por ? c.por.nombre : 'Alguien';
   return html`<div class="aviso" role="alert">
