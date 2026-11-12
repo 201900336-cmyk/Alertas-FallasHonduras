@@ -290,7 +290,21 @@ const Demo = (() => {
       filas: ix.n - (3 - k) * ent(40, 90), hfc: ix.resumen.hfc, gpon: ix.resumen.gpon - (3 - k) * ent(30, 60), nodos: ix.resumen.nodos,
       nuevos: k ? ent(60, 140) : null, bajas: k ? ent(10, 40) : null, cambiosNodo: k ? ent(2, 15) : null
     }));
-    return { fallas, logs, baseHist, f1, f2 };
+    // Comunicados (avisos informativos que no son una falla de nodo): uno retirado ayer y uno vigente, de ejemplo
+    const rPub = now - 27 * H, rFin = now - 23.5 * H, cPub = now - 25 * M;
+    const comunicados = [{
+      id: Model.nuevoIdComunicado([], rPub), estado: 'RETIRADO', titulo: 'Falla general de DTH',
+      contexto: 'Clientes de TV satelital (DTH) de todo el país pueden estar sin señal. El área técnica ya trabaja en la solución. Infórmale al cliente que es una falla general.',
+      publicadoEn: rPub, publicadoPor: W[0], editadoEn: null, editadoPor: null, retiradoEn: rFin, retiradoPor: W[1],
+      historial: [hist('PUBLICADO', rPub, W[0]), hist('RETIRADO', rFin, W[1])]
+    }];
+    comunicados.push({
+      id: Model.nuevoIdComunicado(comunicados, cPub), estado: 'VIGENTE', titulo: 'Falla general de canales',
+      contexto: 'Algunos canales de TV se ven en negro o sin audio en todo el país, tanto en HFC como en GPON. No es una falla del nodo ni del equipo del cliente. El área técnica ya trabaja en la solución y todavía no hay hora estimada. Avisaremos por aquí cuando quede resuelto.',
+      publicadoEn: cPub, publicadoPor: W[2], editadoEn: null, editadoPor: null, retiradoEn: null, retiradoPor: null,
+      historial: [hist('PUBLICADO', cPub, W[2])]
+    });
+    return { fallas, logs, baseHist, comunicados, f1, f2 };
   }
 
   return { generar, escenario, WORKFORCE, ASESORES };

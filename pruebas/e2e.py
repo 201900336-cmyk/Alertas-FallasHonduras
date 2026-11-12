@@ -281,12 +281,12 @@ with sync_playwright() as p:
        'la supervisora entra con Genesys (rol de la hoja Usuarios), sin el menú de Workforce', s.locator('.usuario-txt').inner_text())
     # Avisos obligatorios: hasta que los permita, no ve la consulta
     s.wait_for_selector('.puerta-avisos', timeout=10000)
-    ok('Es obligatorio' in s.locator('.puerta-avisos').inner_text() and 'publique una falla y cuando se resuelva, y cuando haya una posible falla' in s.locator('.puerta-avisos').inner_text()
+    ok('Es obligatorio' in s.locator('.puerta-avisos').inner_text() and 'publique una falla o un comunicado y cuando la falla se resuelva, y cuando haya una posible falla' in s.locator('.puerta-avisos').inner_text()
        and s.locator('.buscador-caja').count() == 0, 'al entrar, los avisos de escritorio son obligatorios: no ve la consulta hasta activarlos')
     s.screenshot(path=OUT + 'e06s_avisos_obligatorios.png')
     s.click('.puerta-avisos button:has-text("Activar avisos")'); s.wait_for_selector('.buscador-caja input', timeout=10000)
     av = s.evaluate('() => window.__avisos')
-    ok(s.locator('.puerta-avisos').count() == 0 and any(x['t'] == 'Avisos de Alertas activados' and 'publique una falla y cuando se resuelva' in x['b'] for x in av),
+    ok(s.locator('.puerta-avisos').count() == 0 and any(x['t'] == 'Avisos de Alertas activados' and 'publique una falla o un comunicado y cuando la falla se resuelva' in x['b'] for x in av),
        'al permitirlos sigue a la consulta (el panel de los asesores) y llega el aviso de prueba', av)
     s.screenshot(path=OUT + 'e06s_supervisor_inicio.png')
     s.wait_for_selector(f'.posibles .pf-tarjeta:has-text("{nodoPF}")', timeout=20000)
@@ -817,6 +817,138 @@ with sync_playwright() as p:
     ok(a.locator('.aviso').count() == 0 and mov.get_attribute('data-t') == 'RESUELTA' and 'Corte de fibra en ' + libre['nombre'] in mov.inner_text() and 'Resuelta ahora' in mov.inner_text()
        and 'duró 1 h 30 min' in mov.inner_text() and 'resuelta' in a.locator('.vivo-hora').inner_text(),
        'Workforce la cierra y en la consulta se quita sola del mapa; en los movimientos queda como resuelta, con lo que duró: ' + mov.inner_text().replace('\n', ' · '))
+
+    print('11. Comunicados: avisos informativos que no son una falla de nodo')
+    T1, T2 = 'Falla general de DTH', 'Falla general de canales'
+    C1 = 'Clientes de TV satelital (DTH) de todo el país pueden estar sin señal.\nInfórmale al cliente que es una falla general.'
+    C2 = ('Algunos canales de TV se ven en negro o sin audio en todo el país, tanto en HFC como en GPON. No es una falla del nodo ni del equipo del cliente. '
+          'El área técnica ya trabaja en la solución y todavía no hay hora estimada. Avisaremos por aquí cuando quede resuelto.')
+    de_com = "() => window.__avisos.filter((v) => v.t.startsWith('Comunicado'))"
+    hay_com = lambda n: "() => window.__avisos.filter((v) => v.t.startsWith('Comunicado')).length >= " + str(n)
+    # La pestaña elegida de Fallas ([nombre, cuenta]) y los títulos de las secciones del panel de la consulta
+    pestana = lambda pg: pg.evaluate("() => { const b = document.querySelector('.pestanas button[aria-selected=true]'); return [b.firstChild.textContent.trim(), (b.querySelector('.n') || {}).textContent || '']; }")
+    secciones = lambda pg: pg.evaluate("() => [...document.querySelectorAll('.riel .riel-seccion h4')].map((h) => [...h.children].map((c) => c.textContent.trim()).join(' '))")
+    en_panel = lambda pg: pg.locator('.riel .com-item')
+    ok(en_panel(a).count() == 0 and a.locator('.riel-seccion h4', has_text='Comunicados').count() == 0, 'sin comunicados, el panel de la consulta sigue como siempre')
+    s.evaluate('() => { window.__avisos = []; }')
+    # Tiendas vuelve a entrar (su sesión quedó vencida en una prueba anterior; la entrada recuerda la tienda y el nombre)
+    t.fill('input[type=password]', 'ClaroTiendas2026'); t.click('form button[type=submit]'); t.wait_for_selector('.buscador-caja input', timeout=15000)
+    # Workforce: la pestaña Comunicados
+    x.locator('.pestanas button', has_text='Comunicados').click(); x.wait_for_selector('.com-form')
+    ok(pestana(x) == ['Comunicados', '0'] and x.locator('.com-publicar').is_disabled()
+       and 'Sin comunicados vigentes' in x.locator('.comunicados').inner_text() and 'Escribe el título y el contexto' in x.locator('.com-previa').inner_text(),
+       'Workforce tiene la pestaña Comunicados: el formulario pide solo título y contexto, y sin ellos no deja publicar')
+    x.fill('.com-titulo-in', '  Falla   general de DTH '); x.fill('.com-contexto-in', C1); x.wait_for_timeout(250)
+    previa = x.locator('.com-previa .com-item').inner_text()
+    ok(x.locator('.campo-cab .cuenta').all_inner_texts() == ['20 de 80', f'{len(C1)} de 600'] and T1 in previa and 'Informativo' in previa and 'Nuevo' in previa
+       and 'Publicado a ' in previa and x.locator('.com-publicar').is_enabled(), 'al escribir cuenta los caracteres y muestra cómo lo verá el asesor', [x.locator('.campo-cab .cuenta').all_inner_texts(), previa])
+    x.screenshot(path=OUT + 'e15_comunicado_nuevo.png')
+    x.click('.com-publicar'); x.wait_for_selector('.modal')
+    ok('Publicar comunicado' in x.locator('.modal-cab').inner_text() and T1 in x.locator('.modal-cuerpo').inner_text() and 'de inmediato' in x.locator('.modal-cab').inner_text(), 'antes de publicarlo pide confirmar')
+    x.dblclick('.modal .btn-primario')   # un doble clic no lo publica dos veces
+    x.wait_for_selector('.com-card', timeout=15000); x.wait_for_timeout(600)
+    tarjeta = x.locator('.com-card').first.inner_text()
+    ok(x.locator('.com-card').count() == 1 and x.locator('.com-error').count() == 0 and T1 in tarjeta and 'Vigente' in tarjeta and 'Mario Rivera' in tarjeta and 'hasta que lo retires' in tarjeta
+       and x.input_value('.com-titulo-in') == '' and x.input_value('.com-contexto-in') == '' and pestana(x) == ['Comunicados', '1'],
+       'queda publicado una sola vez (aunque sea con doble clic), como vigente hasta que lo retiren, y el formulario vuelve a quedar en blanco', tarjeta)
+    # A los asesores les llega solo, arriba de las fallas y en violeta
+    a.wait_for_selector('.riel .com-item', timeout=20000); t.wait_for_selector('.riel .com-item', timeout=20000)
+    item = en_panel(a).first.inner_text()
+    orden = secciones(a)
+    color = a.evaluate("() => getComputedStyle(document.querySelector('.riel .com-item'), '::before').backgroundColor")
+    roja = a.evaluate("() => { const f = document.querySelector('.riel .falla-item'); return f ? getComputedStyle(f, '::before').backgroundColor : ''; }")
+    ok(a.locator('.aviso').count() == 0 and T1 in item and 'Informativo' in item and 'Nuevo' in item and 'Publicado a ' in item and 'Clientes de TV satelital' in item,
+       'a la asesora le aparece solo en su consulta, sin tener que actualizar: ' + ' · '.join(item.split('\n')[:3]), item)
+    ok(orden[:2] == ['Comunicados 1', 'Activas ' + str(a.locator('.riel .falla-item[data-s="ACTIVA"]').count())] and color == 'rgb(111, 66, 211)' and color != roja,
+       'va en su propia sección, arriba de las fallas activas, y en violeta (las fallas siguen en rojo)', [orden, color, roja])
+    ok(T1 in en_panel(t).first.inner_text(), 'en Tiendas también aparece')
+    s.wait_for_function(hay_com(1), timeout=20000)
+    av = s.evaluate(de_com)
+    ok(len(av) == 1 and av[0]['t'] == 'Comunicado: ' + T1 and av[0]['b'] == 'Clientes de TV satelital (DTH) de todo el país pueden estar sin señal. Infórmale al cliente que es una falla general. Lo publicó Mario Rivera. Clic para verlo.',
+       'a la supervisora, con Alertas a un lado, le llega el aviso de escritorio: ' + (av[0]['t'] + ' · ' + av[0]['b'] if av else ''), av)
+    ok(not x.evaluate(de_com) if x.evaluate('() => Array.isArray(window.__avisos)') else True, 'a quien lo publicó no le llega su propio aviso')
+    en_panel(a).first.locator('.com-item-cab').click(); a.wait_for_selector('.riel .com-det', timeout=5000)
+    det = a.locator('.riel .com-det').inner_text()
+    ok('Infórmale al cliente que es una falla general.' in det and 'Por Mario Rivera' in det and 'Ver menos' in det and en_panel(a).first.locator('.com-item-cab').get_attribute('aria-expanded') == 'true'
+       and '@' not in det, 'al tocarlo se abre completo y dice quién lo publicó (sin su correo)', det)
+    a.click('.riel .com-menos'); a.wait_for_timeout(200)
+    ok(a.locator('.riel .com-det').count() == 0, 'y Ver menos lo cierra')
+    # Otro más largo: el más nuevo va primero y el contexto se corta con "Ver todo"
+    x.fill('.com-titulo-in', T2); x.fill('.com-contexto-in', C2); x.click('.com-publicar'); x.click('.modal .btn-primario')
+    x.wait_for_function("() => document.querySelectorAll('.com-card').length === 2", timeout=15000)
+    a.wait_for_function("() => document.querySelectorAll('.riel .com-item').length === 2", timeout=20000); a.wait_for_timeout(300)
+    ok(T2 in en_panel(a).first.inner_text() and en_panel(a).first.locator('.com-ver').count() == 1 and en_panel(a).nth(1).locator('.com-ver').count() == 0
+       and secciones(a)[0] == 'Comunicados 2',
+       'con dos, el más nuevo va primero; si el contexto no cabe en cuatro líneas sale "Ver todo"', en_panel(a).first.inner_text())
+    a.locator('.riel').screenshot(path=OUT + 'e15b_comunicados_asesor.png')
+    a.screenshot(path=OUT + 'e15c_consulta_con_comunicados.png')
+    # El mismo título dos veces no entra: la página avisa y, si otra persona se adelanta, lo frena el servidor
+    x.fill('.com-titulo-in', 'falla general de dth'); x.fill('.com-contexto-in', 'Otra redacción'); x.wait_for_timeout(250)
+    ok(x.locator('.com-igual').count() == 1 and 'que publicó Mario Rivera' in x.locator('.com-igual').inner_text() and x.locator('.com-publicar').is_disabled(),
+       'un título que ya está vigente no se puede publicar otra vez: avisa quién publicó el que ya está')
+    x.fill('.com-titulo-in', 'Mantenimiento de la plataforma'); x.fill('.com-contexto-in', 'Hoy de 10 a 11 de la noche.'); x.click('.com-publicar'); x.wait_for_selector('.modal')
+    w.evaluate("() => Backend.comunicado('publicar', { comunicado: { titulo: 'Mantenimiento de la plataforma', contexto: 'Lo publicó otra persona un momento antes.' } })")
+    x.click('.modal .btn-primario'); x.wait_for_selector('.com-error', timeout=15000)
+    ok('Ya hay un comunicado vigente con ese título, que publicó Ana López' in x.locator('.com-error').inner_text() and x.locator('.modal').count() == 0,
+       'si otra persona publica el mismo justo antes, el servidor frena el segundo y la página dice quién lo publicó', x.locator('.com-error').inner_text())
+    x.wait_for_function("() => document.querySelectorAll('.com-card').length === 3", timeout=15000)
+    ok('Ana López' in x.locator('.com-card', has_text='Mantenimiento de la plataforma').inner_text(), 'y lo trae para verlo ahí mismo')
+    # Con un servidor de antes (sin los comunicados), la página lo dice
+    x.evaluate("() => { window.__com = Backend.comunicado; Backend.comunicado = () => Promise.reject(Object.assign(new Error('Acción desconocida.'), { codigo: 'DATOS' })); }")
+    x.fill('.com-titulo-in', 'Prueba con el servidor de antes'); x.fill('.com-contexto-in', 'No debe publicarse.'); x.click('.com-publicar'); x.click('.modal .btn-primario')
+    x.wait_for_selector('.com-error:has-text("Code.gs")', timeout=15000)
+    ok('El servidor todavía no tiene los comunicados' in x.locator('.com-error').inner_text(), 'si el servidor todavía es el de antes, pide pegar el Code.gs nuevo en vez de fallar', x.locator('.com-error').inner_text())
+    x.evaluate("() => { Backend.comunicado = window.__com; }")
+    x.fill('.com-titulo-in', ''); x.fill('.com-contexto-in', '')
+    # Editar: llega el texto nuevo, marcado como Actualizado, sin otro aviso de escritorio
+    s.wait_for_function(hay_com(3), timeout=20000)
+    s.evaluate('() => { window.__avisos = []; }')
+    x.locator('.com-card', has_text=T1).locator('.com-editar').click(); x.wait_for_timeout(300)
+    ok(x.input_value('.com-titulo-in') == T1 and x.input_value('.com-contexto-in') == C1 and 'Editar comunicado' in x.locator('.com-form-cab').inner_text() and x.locator('.com-publicar').is_disabled()
+       and x.locator('.com-publicar').inner_text() == 'Guardar cambios', 'Editar pone el comunicado en el formulario; mientras no cambie nada, no deja guardar')
+    x.fill('.com-contexto-in', C1 + '\nActualización: hora estimada, 3:00 p. m.'); x.click('.com-publicar'); x.click('.modal .btn-primario')
+    x.wait_for_function("() => /Actualizó/.test(document.querySelector('.comunicados').innerText)", timeout=15000)
+    a.wait_for_function("() => [...document.querySelectorAll('.riel .com-item')].some((e) => /Actualizado a /.test(e.innerText))", timeout=20000)
+    editado = a.locator('.riel .com-item', has_text=T1)
+    ok(editado.locator('.com-marca').inner_text().strip() == 'Actualizado' and 'Actualizado a ' in editado.locator('.com-meta').inner_text()
+       and 'Mario Rivera' in x.locator('.com-card', has_text=T1).locator('.meta').inner_text() and 'cambió el contexto' in x.locator('.com-card', has_text=T1).locator('.meta').inner_text(),
+       'al editarlo, a la asesora le llega el texto nuevo marcado como Actualizado, y Workforce ve quién lo cambió', editado.inner_text())
+    editado.locator('.com-item-cab').click()
+    ok('hora estimada, 3:00 p. m.' in a.locator('.riel .com-det').inner_text(), 'con el texto nuevo completo al abrirlo')
+    a.click('.riel .com-menos')
+    a.wait_for_timeout(2500)
+    ok(not s.evaluate(de_com), 'editarlo no manda otro aviso de escritorio', s.evaluate(de_com))
+    # Retirar: se quita solo de los asesores y queda en los retirados de Workforce
+    x.locator('.com-card', has_text=T2).locator('.com-retirar').click(); x.wait_for_selector('.modal')
+    ok('Retirar comunicado' in x.locator('.modal-cab').inner_text() and 'dejarán de verlo' in x.locator('.modal-cab').inner_text() and T2 in x.locator('.modal-cuerpo').inner_text(), 'retirar pide confirmar')
+    x.screenshot(path=OUT + 'e15d_comunicados_workforce.png')
+    x.click('.modal .btn-primario'); x.wait_for_selector('.com-retirados', timeout=15000)
+    a.wait_for_function("() => document.querySelectorAll('.riel .com-item').length === 2", timeout=20000)
+    ok(T2 not in a.locator('.riel .com-seccion').inner_text() and T2 in x.locator('.com-retirados').inner_text() and x.locator('.com-card').count() == 2
+       and pestana(x) == ['Comunicados', '2'],
+       'al retirarlo desaparece solo del panel de los asesores y queda en la lista de retirados de Workforce')
+    s.wait_for_function(hay_com(1), timeout=20000)
+    av = s.evaluate(de_com)
+    ok(len(av) == 1 and av[0]['t'] == 'Comunicado retirado: ' + T2 and av[0]['b'] == 'Ya no está vigente. Lo retiró Mario Rivera.', 'y a la supervisora le llega el aviso de que se retiró: ' + (av[0]['b'] if av else ''), av)
+    x.locator('.com-retirados tbody tr', has_text=T2).locator('button').click(); x.wait_for_timeout(300)
+    ok(x.input_value('.com-titulo-in') == T2 and x.input_value('.com-contexto-in') == C2 and 'Nuevo comunicado' in x.locator('.com-form-cab').inner_text() and x.locator('.com-publicar').is_enabled(),
+       '"Usar de nuevo" pone el texto de uno retirado en el formulario, para publicarlo otra vez')
+    x.locator('.publicar-barra button', has_text='Cancelar').click(); x.wait_for_timeout(200)
+    ok(x.input_value('.com-titulo-in') == '' and x.input_value('.com-contexto-in') == '', 'y Cancelar deja el formulario en blanco')
+    # En una pantalla angosta el panel queda abajo: los comunicados suben arriba del buscador
+    a.set_viewport_size({'width': 1100, 'height': 900}); a.evaluate('() => window.scrollTo(0, 0)'); a.wait_for_timeout(500)
+    arriba = a.evaluate("""() => { const c = document.querySelector('.com-arriba'), b = document.querySelector('.buscador'), p = document.querySelector('.riel .com-seccion');
+      return { n: c ? c.querySelectorAll('.com-item').length : 0, alto: c ? c.offsetHeight : 0, antes: !!c && c.getBoundingClientRect().bottom <= b.getBoundingClientRect().top + 1,
+        panel: p ? p.offsetHeight : -1, ancho: document.documentElement.scrollWidth <= window.innerWidth + 1 }; }""")
+    ok(arriba['n'] == 2 and arriba['alto'] > 0 and arriba['antes'] and arriba['panel'] == 0 and arriba['ancho'],
+       'en una pantalla angosta, donde el panel de fallas queda abajo, los comunicados suben arriba del buscador (y no se repiten en el panel)', arriba)
+    a.screenshot(path=OUT + 'e15e_comunicados_angosta.png')
+    a.set_viewport_size({'width': 1440, 'height': 900}); a.wait_for_timeout(400)
+    ok(a.evaluate("() => document.querySelector('.com-arriba').offsetHeight") == 0 and en_panel(a).count() == 2, 'y en pantalla ancha vuelven al panel')
+    # Se retiran los que quedan: la sección desaparece
+    x.evaluate("async () => { for (const c of Model.comunicadosVigentes(G.s.comunicados)) await A.retirarComunicado(c.id); }")
+    a.wait_for_function("() => document.querySelectorAll('.com-item').length === 0", timeout=20000)
+    ok(a.locator('.riel-seccion h4', has_text='Comunicados').count() == 0 and a.locator('.com-arriba').count() == 0, 'sin comunicados vigentes, la sección se quita del panel')
 
     ok(not [e for e in errores if 'ERR_' not in e and 'status of 503' not in e], 'sin errores de JavaScript en las páginas', errores[:5])   # los 503 son los que simula la prueba
     b.close()

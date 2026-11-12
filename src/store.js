@@ -69,13 +69,14 @@ const Store = (() => {
 
   async function leerTodo(opciones) {
     const sinBase = opciones && opciones.sinBase;
-    const [meta, base, baseHist, fallas] = await Promise.all(['meta', sinBase ? null : 'base', 'baseHist', 'fallas'].map((k) => (k ? leer(k) : null)));
+    const [meta, base, baseHist, fallas, comunicados] = await Promise.all(['meta', sinBase ? null : 'base', 'baseHist', 'fallas', 'comunicados'].map((k) => (k ? leer(k) : null)));
     const m = meta || { version: 0 };
     version = m.version || 0;
-    return { meta: m, base: base || null, baseHist: baseHist || [], fallas: fallas || [] };
+    return { meta: m, base: base || null, baseHist: baseHist || [], fallas: fallas || [], comunicados: comunicados || [] };
   }
   async function leerMeta() { return (await leer('meta')) || { version: 0 }; }
   async function leerFallas() { return (await leer('fallas')) || []; }
+  async function leerComunicados() { return (await leer('comunicados')) || []; }
 
   /* Guarda cambios de Workforce, sube la versión y avisa a todas las sesiones abiertas */
   async function confirmar(cambio, cambios) {
@@ -147,7 +148,7 @@ const Store = (() => {
   }
 
   return {
-    init, leerTodo, leerMeta, leerFallas, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
+    init, leerTodo, leerMeta, leerFallas, leerComunicados, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
     alCambiar: (fn) => { alCambiarFns.add(fn); return () => alCambiarFns.delete(fn); },
     alLog: (fn) => { alLogFns.add(fn); return () => alLogFns.delete(fn); },
     get version() { return version; },

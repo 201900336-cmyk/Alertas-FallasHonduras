@@ -11,6 +11,7 @@
  *  Lo que guarda:
  *    - Base        la base semanal de clientes (se reemplaza completa en cada carga)
  *    - Fallas      las fallas publicadas por Workforce HN y su historial
+ *    - Comunicados los avisos informativos de Workforce HN que no son una falla de nodo (se crea sola con el primero)
  *    - Usuarios    correos de Genesys con acceso Workforce, Jefatura o supervisor de Call Center
  *    - Cargas      quién subió cada base y cuándo
  *    - Catalogo    resumen por nodo (sin datos personales), oculta
@@ -20,13 +21,13 @@
  *  Secretos (nunca en el código): la llave de las sesiones y las contraseñas
  *  cifradas viven en Propiedades del script. No se ven en GitHub ni en la página.
  *
- *  No edites las hojas Base, Fallas, Cargas ni Catalogo a mano: usa Alertas.
+ *  No edites las hojas Base, Fallas, Comunicados, Cargas ni Catalogo a mano: usa Alertas.
  *  Las hojas Usuarios y Tiendas sí se editan a mano (menú Alertas > Mostrar las pestañas).
  * ============================================================================
  */
 
 const ALERTAS = {
-  VERSION: '3.8',                // se ve en la pestaña INICIO
+  VERSION: '3.9',                // se ve en la pestaña INICIO
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -69,9 +70,15 @@ const ALERTAS = {
   SMS_POR_DIA: 15000,
   SMS_CONTROL_MAX: 40,           // números de control del equipo (menú Alertas > 5. Números de control)
   AVISOS_MAX: 8,                 // fallas publicadas, reabiertas o cerradas que guarda "estado" para el aviso de escritorio
+  // Comunicados (3.9): avisos informativos que no son una falla de nodo. Solo título y contexto.
+  COMUNICADO_TITULO: 80,         // letras del título, como mucho
+  COMUNICADO_CONTEXTO: 600,      // y del contexto
+  COMUNICADOS_MAX: 10,           // vigentes a la vez: son avisos puntuales; si se llega al tope, hay que retirar alguno
+  DIAS_COMUNICADOS: 30,          // días que Workforce sigue viendo un comunicado después de retirarlo
+  AVISOS_COMUNICADOS: 4,         // comunicados publicados o retirados que guarda "estado" para el aviso de escritorio
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares', accesos: 'Accesos', reporteSms: 'Reporte SMS' },
+  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares', accesos: 'Accesos', reporteSms: 'Reporte SMS', comunicados: 'Comunicados' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura', supervisor: 'Supervisor' },
   ESCRIBEN: ['workforce', 'jefatura'],
   // Ven las posibles fallas (el aviso de 5 clientes en 60 min) y las pueden reportar; publicar fallas, solo Workforce y Jefatura
@@ -101,6 +108,7 @@ const COL_OPCIONALES = ['MEGAS', 'TELEFONO', 'HUELLA'];
 const COL_FALLAS = ['ID', 'Estado', 'Motivo', 'Motivo (otro)', 'Explicación al cliente', 'Nodos', 'Inicio', 'Solución estimada',
   'Publicada', 'Publicó', 'Cerrada', 'Cerró', 'Nota de cierre', 'Referencia', 'Notas internas', 'Clientes', 'HFC', 'GPON', 'Datos (no editar)',
   'Número de falla'];   // llegó después: va al final para no mover las columnas de las fallas que ya existen
+const COL_COMUNICADOS = ['ID', 'Estado', 'Título', 'Contexto', 'Publicado', 'Publicó', 'Actualizado', 'Retirado', 'Retiró', 'Datos (no editar)'];
 const COL_USUARIOS = ['Correo de Genesys', 'Nombre', 'Rol (workforce, jefatura, supervisor, concentrix o bloqueado)', 'Activo (SÍ o NO)', 'Notas'];
 const COL_CARGAS = ['Fecha', 'Subió', 'Archivo', 'Servicios', 'HFC', 'GPON', 'Nodos', 'Contratos nuevos', 'Ya no aparecen', 'Cambios de nodo'];
 const COL_CONSULTAS = ['Fecha', 'Usuario', 'Nombre', 'Acceso', 'Tienda', 'Tipo', 'Contrato', 'Nodo', 'Resultado', 'Falla'];
@@ -129,10 +137,10 @@ const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
   telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_, monitoreo: accionMonitoreo_,
-  uso: accionUso_, conexiones: accionConexiones_, consultasNodo: accionConsultasNodo_
+  uso: accionUso_, conexiones: accionConexiones_, consultasNodo: accionConsultasNodo_, comunicado: accionComunicado_
 };
 const PUBLICAS = { config: true, login: true, monitoreo: true };
-const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true, conexiones: true, consultasNodo: true };
+const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true, conexiones: true, consultasNodo: true, comunicado: true };
 const DE_ALERTAS = { alertas: true, alerta: true };   // Workforce, Jefatura y los supervisores de Call Center
 
 /* ============================================================================
@@ -231,13 +239,16 @@ function estado_() {
 /* aviso: lo último que pasó con cada falla (publicada, reabierta, resuelta o descartada) queda en "avisos"
    (las últimas 8) para el aviso de escritorio de todos. Cada falla tiene un solo aviso, el más reciente: al
    cerrarla, el de publicada cambia por el de resuelta, y una página que todavía no avisó la publicación ya
-   no avisa de una falla que terminó. Un aviso sin tipo solo quita el de esa falla. */
+   no avisa de una falla que terminó. Un aviso sin tipo solo quita el de esa falla.
+   extra: campos que cambian en el estado, o una función que lo ajusta ya con la versión nueva (así los
+   comunicados guardan su propia lista de avisos). */
 function subirVersion_(cambio, extra, aviso) {
   const raw = props_().getProperty('ESTADO');
   const e = raw ? JSON.parse(raw) : { version: 1, baseVersion: 0, cambio: null };
   e.version = (e.version || 1) + 1;
   e.cambio = cambio;
-  if (extra) Object.keys(extra).forEach((k) => { e[k] = extra[k]; });
+  if (typeof extra === 'function') extra(e);
+  else if (extra) Object.keys(extra).forEach((k) => { e[k] = extra[k]; });
   if (aviso) {
     const otros = (e.avisos || []).filter((x) => x.id !== aviso.id);
     e.avisos = aviso.tipo ? otros.concat(Object.assign({ v: e.version }, aviso)).slice(-ALERTAS.AVISOS_MAX) : otros;
@@ -742,7 +753,7 @@ function limitar_(ses) {
 
 function accionEstado_() {
   const e = estado_();
-  return { version: e.version, baseVersion: e.baseVersion, cambio: e.cambio, avisos: e.avisos || [], ahora: Date.now() };
+  return { version: e.version, baseVersion: e.baseVersion, cambio: e.cambio, avisos: e.avisos || [], avisosComunicados: e.avisosComunicados || [], ahora: Date.now() };
 }
 
 function accionCargar_(d, ses) {
@@ -756,6 +767,11 @@ function accionCargar_(d, ses) {
     res.cargas = leerCargas_();
   } else {
     res.fallas = fallasVisibles_();
+  }
+  // Los comunicados nunca frenan la entrada: si su hoja diera un error, la página abre sin ellos
+  try { res.comunicados = escribe ? comunicadosDeWorkforce_() : comunicadosVigentes_(); } catch (err) {
+    console.error('No se pudieron leer los comunicados: ' + (err && err.message));
+    res.comunicados = [];
   }
   return res;
 }
@@ -1112,6 +1128,181 @@ function lista_(arr, max) {
   return arr.slice(0, max).join(', ') + ' y ' + (arr.length - max) + ' más';
 }
 function texto_(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u001f]+/g, ' ').trim().slice(0, max); }
+
+/* ============================================================================
+ *  Comunicados (3.9)
+ *  Avisos informativos de Workforce HN para los asesores que no son una falla de nodo: una falla
+ *  general de DTH o de canales, o cualquier cosa puntual que haya que comunicar. Solo llevan título
+ *  y contexto (sin nodos, número de falla ni hora estimada). Los publican, editan y retiran
+ *  Workforce HN y Jefatura, y quedan vigentes hasta que alguien de ellos los retira. No cambian el
+ *  resultado de la consulta de ningún cliente.
+ * ========================================================================== */
+
+/* La hoja Comunicados se crea sola con el primer comunicado (oculta y protegida si las demás ya lo están) */
+function hojaComunicados_(crear) {
+  const libro = libro_();
+  return crear ? hojaEn_(libro, ALERTAS.HOJAS.comunicados, COL_COMUNICADOS) : libro.getSheetByName(ALERTAS.HOJAS.comunicados);
+}
+/* Lo que vale es la columna Datos: las demás están para leer la hoja a simple vista */
+function filaAComunicado_(f, n) {
+  let d = {};
+  try { d = JSON.parse(f[9] || '{}'); } catch (e) { d = {}; }
+  return {
+    id: String(f[0]), estado: d.estado || (String(f[1]) === 'Vigente' ? 'VIGENTE' : 'RETIRADO'),
+    titulo: d.titulo != null ? String(d.titulo) : String(f[2] || ''), contexto: d.contexto != null ? String(d.contexto) : String(f[3] || ''),
+    publicadoEn: d.publicadoEn || fechaMs_(f[4]), publicadoPor: d.publicadoPor || { u: '', nombre: String(f[5] || '') },
+    editadoEn: d.editadoEn || null, editadoPor: d.editadoPor || null, retiradoEn: d.retiradoEn || null, retiradoPor: d.retiradoPor || null,
+    historial: d.historial || [], _fila: n
+  };
+}
+function comunicadoAFila_(c) {
+  const fecha = (ms) => (ms ? new Date(ms) : '');
+  return [c.id, c.estado === 'VIGENTE' ? 'Vigente' : 'Retirado', c.titulo, c.contexto, fecha(c.publicadoEn), c.publicadoPor ? c.publicadoPor.nombre : '',
+    fecha(c.editadoEn), fecha(c.retiradoEn), c.retiradoPor ? c.retiradoPor.nombre : '',
+    JSON.stringify({ estado: c.estado, titulo: c.titulo, contexto: c.contexto, publicadoEn: c.publicadoEn, publicadoPor: c.publicadoPor, editadoEn: c.editadoEn,
+      editadoPor: c.editadoPor, retiradoEn: c.retiradoEn, retiradoPor: c.retiradoPor, historial: c.historial })];
+}
+function leerComunicados_(h) {
+  h = h || hojaComunicados_(false);
+  if (!h) return [];
+  const ult = h.getLastRow();
+  if (ult < 2) return [];
+  return h.getRange(2, 1, ult - 1, COL_COMUNICADOS.length).getValues().map((f, i) => (f[0] ? filaAComunicado_(f, i + 2) : null)).filter(Boolean);
+}
+/* El título y el contexto los escribe una persona: la fila se guarda como texto, para que la hoja nunca tome
+   por fórmula o por número algo que empiece con = o que sean solo dígitos. Las fechas, como fechas. */
+function guardarComunicado_(h, c) {
+  const fila = comunicadoAFila_(c);
+  let n = c._fila;
+  if (!n) {
+    n = h.getLastRow() + 1;
+    if (n > h.getMaxRows()) h.insertRowsAfter(h.getMaxRows(), 1);
+  }
+  h.getRange(n, 1, 1, fila.length).setNumberFormat('@');
+  [5, 7, 8].forEach((col) => h.getRange(n, col).setNumberFormat('dd/mm/yyyy hh:mm'));
+  h.getRange(n, 1, 1, fila.length).setValues([fila]);
+}
+/* Lo que reciben los asesores (Concentrix, supervisores y Tiendas): título, contexto, cuándo se publicó, si se
+   actualizó y el nombre de quien lo publicó. Sin correos ni historial: esa parte solo la ve Workforce HN. */
+function comunicadoPublico_(c) {
+  return { id: c.id, titulo: c.titulo, contexto: c.contexto, publicadoEn: c.publicadoEn, publicadoPor: { nombre: (c.publicadoPor && c.publicadoPor.nombre) || '' }, editadoEn: c.editadoEn || null };
+}
+const comunicadoMasNuevo_ = (a, b) => b.publicadoEn - a.publicadoEn;
+/* Los vigentes, del más nuevo al más viejo. En caché 10 minutos; cada cambio la borra. */
+function comunicadosVigentes_() {
+  const c = cache_().get('comunicados');
+  if (c) return JSON.parse(c);
+  const vigentes = leerComunicados_().filter((x) => x.estado === 'VIGENTE').sort(comunicadoMasNuevo_).map(comunicadoPublico_);
+  const txt = JSON.stringify(vigentes);
+  if (txt.length < 95000) cache_().put('comunicados', txt, 600);
+  return vigentes;
+}
+/* Workforce HN y Jefatura: los vigentes y los retirados en los últimos 30 días, completos (con su historial) */
+function comunicadosDeWorkforce_() {
+  const desde = Date.now() - ALERTAS.DIAS_COMUNICADOS * 86400000;
+  return leerComunicados_().filter((x) => x.estado === 'VIGENTE' || (x.retiradoEn || 0) >= desde).sort(comunicadoMasNuevo_).slice(0, 80).map(sinFila_);
+}
+
+/* El título va en una sola línea; el contexto conserva los saltos de línea (como mucho una línea en blanco seguida) */
+function validarComunicado_(x) {
+  const titulo = String(x.titulo == null ? '' : x.titulo).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const contexto = String(x.contexto == null ? '' : x.contexto).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ')
+    .split('\n').map((l) => l.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (!titulo || !contexto) throw fallo_('DATOS', 'Escribe el título y el contexto del comunicado.');
+  if (titulo.length > ALERTAS.COMUNICADO_TITULO) throw fallo_('DATOS', 'El título no puede pasar de ' + ALERTAS.COMUNICADO_TITULO + ' caracteres.');
+  if (contexto.length > ALERTAS.COMUNICADO_CONTEXTO) throw fallo_('DATOS', 'El contexto no puede pasar de ' + ALERTAS.COMUNICADO_CONTEXTO + ' caracteres.');
+  return { titulo: titulo, contexto: contexto };
+}
+/* ID de cada comunicado: C + fecha de Honduras (aammdd) + número del día: C26111201 */
+function nuevoIdComunicado_(todos, ahora) {
+  const pref = 'C' + Utilities.formatDate(new Date(ahora), ALERTAS.ZONA, 'yyMMdd');
+  let max = 0;
+  todos.forEach((c) => { if (String(c.id).indexOf(pref) === 0) max = Math.max(max, Number(String(c.id).slice(pref.length)) || 0); });
+  return pref + String(max + 1).padStart(2, '0');
+}
+/* El contexto en una línea para el aviso de escritorio: completo si es corto; si no, hasta la última palabra que
+   quepa en 160 caracteres, con puntos suspensivos */
+function resumenComunicado_(contexto) {
+  const s = String(contexto || '').replace(/\s+/g, ' ').trim();
+  if (s.length <= 160) return s;
+  const corte = s.slice(0, 159), esp = corte.lastIndexOf(' ');
+  return (esp > 100 ? corte.slice(0, esp) : corte).replace(/[\s,;:.]+$/, '') + '…';
+}
+/* Avisos de escritorio de los comunicados. Van aparte de los de las fallas: una página abierta desde antes de la
+   3.9 no los conoce y los leería como fallas. Cada comunicado tiene un solo aviso, el más reciente (publicado o
+   retirado), y se guardan los últimos 4. Editarlo no avisa de nuevo, pero el aviso que todavía no salió en alguna
+   PC lleva el texto corregido. */
+function avisosComunicados_(lista, c, tipo, version, ahora, por) {
+  const resumen = resumenComunicado_(c.contexto);
+  if (tipo === 'COMUNICADO_EDITADO') {
+    return lista.map((x) => (x.id === c.id && x.tipo === 'PUBLICADO' ? Object.assign({}, x, { titulo: c.titulo, resumen: resumen }) : x));
+  }
+  const x = tipo === 'COMUNICADO_RETIRADO' ? { v: version, id: c.id, tipo: 'RETIRADO', titulo: c.titulo, en: ahora, por: por.nombre }
+    : { v: version, id: c.id, tipo: 'PUBLICADO', titulo: c.titulo, resumen: resumen, en: ahora, por: por.nombre };
+  return lista.filter((y) => y.id !== c.id).concat(x).slice(-ALERTAS.AVISOS_COMUNICADOS);
+}
+
+function accionComunicado_(d, ses) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw fallo_('OCUPADO', 'Otra persona está guardando un cambio. Intenta de nuevo.');
+  try {
+    const op = String(d.op || '');
+    if (['publicar', 'editar', 'retirar'].indexOf(op) < 0) throw fallo_('DATOS', 'Operación no válida.');
+    const h = hojaComunicados_(true);
+    const todos = leerComunicados_(h);
+    const vigentes = todos.filter((x) => x.estado === 'VIGENTE');
+    const ahora = Date.now();
+    const por = { u: ses.u, nombre: ses.n };
+    // El mismo título dos veces (un doble clic, o dos personas publicando lo mismo a la vez): el segundo no entra.
+    // Se revisa aquí, con el candado puesto, porque la página de cada persona no ve lo que las demás están por publicar.
+    const exigirTituloLibre = (titulo, propio) => {
+      const igual = vigentes.filter((x) => x.id !== propio && normTienda_(x.titulo) === normTienda_(titulo))[0];
+      if (igual) {
+        throw fallo_('DUPLICADA', 'Ya hay un comunicado vigente con ese título' + (igual.publicadoPor && igual.publicadoPor.nombre ? ', que publicó ' + igual.publicadoPor.nombre : '')
+          + '. Edita ese comunicado, o retíralo antes de publicar otro igual.');
+      }
+    };
+    let c, tipo, texto;
+    if (op === 'publicar') {
+      const datos = validarComunicado_(d.comunicado || {});
+      exigirTituloLibre(datos.titulo, null);
+      if (vigentes.length >= ALERTAS.COMUNICADOS_MAX) throw fallo_('DATOS', 'Ya hay ' + ALERTAS.COMUNICADOS_MAX + ' comunicados vigentes. Retira alguno antes de publicar otro.');
+      c = {
+        id: nuevoIdComunicado_(todos, ahora), estado: 'VIGENTE', titulo: datos.titulo, contexto: datos.contexto, publicadoEn: ahora, publicadoPor: por,
+        editadoEn: null, editadoPor: null, retiradoEn: null, retiradoPor: null, historial: [{ accion: 'PUBLICADO', en: ahora, por: por, detalle: '' }]
+      };
+      tipo = 'COMUNICADO_PUBLICADO';
+      texto = 'publicó el comunicado «' + c.titulo + '»';
+    } else {
+      c = todos.filter((x) => x.id === String(d.id || ''))[0];
+      if (!c) throw fallo_('DATOS', 'El comunicado ya no existe.');
+      if (c.estado !== 'VIGENTE') throw fallo_('DATOS', 'Otra persona ya retiró este comunicado.');
+      if (op === 'editar') {
+        const datos = validarComunicado_(Object.assign({ titulo: c.titulo, contexto: c.contexto }, d.comunicado || {}));
+        const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : ''].filter(String);
+        if (!cambios.length) throw fallo_('DATOS', 'No hay cambios que guardar en el comunicado.');
+        exigirTituloLibre(datos.titulo, c.id);
+        c.titulo = datos.titulo; c.contexto = datos.contexto; c.editadoEn = ahora; c.editadoPor = por;
+        c.historial.push({ accion: 'EDITADO', en: ahora, por: por, detalle: 'Cambió ' + cambios.join(' y ') });
+        tipo = 'COMUNICADO_EDITADO';
+        texto = 'actualizó el comunicado «' + c.titulo + '»';
+      } else {
+        c.estado = 'RETIRADO'; c.retiradoEn = ahora; c.retiradoPor = por;
+        c.historial.push({ accion: 'RETIRADO', en: ahora, por: por, detalle: '' });
+        tipo = 'COMUNICADO_RETIRADO';
+        texto = 'retiró el comunicado «' + c.titulo + '»';
+      }
+      c.historial = c.historial.slice(-40);
+    }
+    guardarComunicado_(h, c);
+    cache_().remove('comunicados');
+    const e = subirVersion_({ tipo: tipo, texto: texto, por: por, en: ahora },
+      (est) => { est.avisosComunicados = avisosComunicados_(est.avisosComunicados || [], c, tipo, est.version, ahora, por); });
+    return { comunicado: sinFila_(c), version: e.version };
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 /* ============================================================================
  *  Catálogo de nodos (clientes por nodo, sin datos personales)

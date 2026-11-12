@@ -9,6 +9,8 @@ const G = {
   s: {
     arranque: 'cargando', mensaje: 'Conectando con Alertas…', config: null, user: null, avisoAcceso: '',
     meta: { version: 0, baseVersion: -1, demo: false }, resumen: null, cat: null, fallas: [], cargas: [], alertas: [],
+    // Comunicados: avisos informativos de Workforce que no son una falla de nodo (los asesores reciben solo los vigentes)
+    comunicados: [],
     now: Date.now(), remoto: null, ruta: 'consulta', tema: 'auto', tostadas: [], descartadas: {}, misConsultas: [],
     sinConexion: false, cargando: false,
     // Mapa en vivo: cuándo se revisó por última vez si hubo cambios, y lo último que le pasó a cada falla
@@ -92,7 +94,7 @@ const A = {
   // Sin avisos en esta pestaña: solo cuando el navegador los tiene bloqueados y la persona no los puede cambiar
   seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
-    G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
+    G.set({ user: null, cat: null, resumen: null, fallas: [], comunicados: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
       alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null, avisos: [], revisado: 0 });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
@@ -105,6 +107,7 @@ const A = {
     const d = await Backend.cargar(G.s.cat ? G.s.meta.baseVersion : -1);
     const cambios = {
       meta: { version: d.version, baseVersion: d.baseVersion, demo: !!d.demo }, resumen: d.resumen || null, fallas: d.fallas || [],
+      comunicados: d.comunicados || [],   // un servidor de antes de la 3.9 no los manda
       cargas: d.cargas || [], remoto: null, now: Date.now(), sinConexion: false, revisado: Date.now()
     };
     if (d.catalogo !== undefined) cambios.cat = d.catalogo ? Model.cargarCatalogo(d.catalogo) : null;
@@ -153,17 +156,21 @@ const A = {
     // así llega el aviso de escritorio. Son pocas personas, no cargan al servidor.
     setInterval(() => { if (G.s.user && veAlertas()) A.revisarAlertas(); }, 60000);
   },
-  /* Fallas que Workforce publicó, reabrió o cerró desde la última revisión: aviso de escritorio a todos los
-     que lo activaron, una vez por cada cosa, si Alertas no está a la vista (a la vista ya sale la barra de
-     cambios). No avisa lo que hizo esta misma página, lo que ya estaba al entrar ni lo de hace más de 30 minutos. */
+  /* Fallas que Workforce publicó, reabrió o cerró desde la última revisión, y comunicados que publicó o retiró:
+     aviso de escritorio a todos los que lo activaron, una vez por cada cosa, si Alertas no está a la vista (a la
+     vista, la consulta ya los muestra). No avisa lo que hizo esta misma página, lo que ya estaba al entrar ni lo
+     de hace más de 30 minutos. */
   avisarFallas(e) {
     if (A.pub.visto == null) return;   // todavía no termina de cargar al entrar
-    const nuevas = (e.avisos || []).filter((x) => x && x.v > A.pub.visto);
-    if (!nuevas.length) return;
-    A.pub.visto = Math.max(...nuevas.map((x) => x.v));
+    const sinVer = (lista) => (lista || []).filter((x) => x && x.v > A.pub.visto);
+    const fallas = sinVer(e.avisos), comunicados = sinVer(e.avisosComunicados);
+    if (!fallas.length && !comunicados.length) return;
+    A.pub.visto = Math.max(...fallas.concat(comunicados).map((x) => x.v));
     const ahora = e.ahora || Date.now();
-    const lista = nuevas.filter((x) => !A.pub.propias.has(x.v) && ahora - x.en < 30 * U.MIN);
-    if (lista.length && Avisos.activos() && (document.hidden || !document.hasFocus())) lista.slice(-3).forEach((x) => Avisos.falla(x));
+    const vale = (x) => !A.pub.propias.has(x.v) && ahora - x.en < 30 * U.MIN;
+    if (!Avisos.activos() || !(document.hidden || !document.hasFocus())) return;
+    fallas.filter(vale).slice(-3).forEach((x) => Avisos.falla(x));
+    comunicados.filter(vale).slice(-2).forEach((x) => Avisos.comunicado(x));
   },
   // Al tocar el aviso de una falla (nueva o resuelta): la página trae las fallas al día y muestra la consulta (con sus fallas)
   verAvisoFalla() { ir('consulta'); window.scrollTo({ top: 0 }); A.recargar().catch(() => {}); },
@@ -287,6 +294,20 @@ const A = {
   cerrarFalla: (id, cerradaEn, nota) => A.falla('cerrar', { id, cerradaEn, nota }),
   reabrirFalla: (id) => A.falla('reabrir', { id }),
 
+  /* Comunicados: avisos informativos que no son una falla de nodo (solo título y contexto). Los publican, editan
+     y retiran Workforce y Jefatura; quedan vigentes hasta que alguien los retira. */
+  async comunicado(op, datos) {
+    const r = await Backend.comunicado(op, datos);
+    A.pub.propias.add(r.version);
+    const salto = r.version > G.s.meta.version + 1;
+    G.set((s) => ({ comunicados: s.comunicados.filter((c) => c.id !== r.comunicado.id).concat(r.comunicado), meta: Object.assign({}, s.meta, { version: r.version }) }));
+    if (salto) A.recargar().catch(() => {});
+    return r.comunicado;
+  },
+  publicarComunicado: (c) => A.comunicado('publicar', { comunicado: c }),
+  editarComunicado: (id, c) => A.comunicado('editar', { id, comunicado: c }),
+  retirarComunicado: (id) => A.comunicado('retirar', { id }),
+
   async subirBase(base, alProgreso) {
     alProgreso({ fase: 'preparando' });
     await new Promise((r) => setTimeout(r, 20));
@@ -407,6 +428,13 @@ const Avisos = {
     // Etiqueta por falla, por tipo y por versión: cerrarla otra vez o reabrirla otra vez también sale en pantalla
     Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo + '-' + x.v, A.verAvisoFalla);
   },
+  /* Un comunicado que Workforce acaba de publicar o de retirar (lo que trae "estado" en avisosComunicados) */
+  comunicado(x) {
+    const [titulo, cuerpo] = x.tipo === 'RETIRADO'
+      ? ['Comunicado retirado: ' + x.titulo, 'Ya no está vigente. Lo retiró ' + x.por + '.']
+      : ['Comunicado: ' + x.titulo, (x.resumen ? (/…$/.test(x.resumen) ? x.resumen : U.conPunto(x.resumen)) + ' ' : '') + 'Lo publicó ' + x.por + '. Clic para verlo.'];
+    Avisos.crear(titulo, cuerpo, 'alertas-comunicado-' + x.id + '-' + x.tipo + '-' + x.v, A.verAvisoFalla);
+  },
   /* Desde el menú o el panel: para revisar que en esta PC se vean. Manda el aviso y abre la ayuda, que dice dónde
      sale y qué revisar si no sale (Windows puede tener apagadas las notificaciones o "No molestar" encendido). */
   ultimaPrueba: null,
@@ -420,7 +448,7 @@ const Avisos = {
   },
   prueba() {
     const um = umbralAlertas();
-    return Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
+    return Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla o un comunicado y cuando la falla se resuelva'
       + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba-' + Date.now());
   }
 };
@@ -472,6 +500,8 @@ const ICONOS = {
   abajo: '<path d="m6 9 6 6 6-6"/>',
   reporte: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>',
   campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
+  // Megáfono: los comunicados informativos (avisos que no son una falla de nodo)
+  megafono: '<path d="M3.5 10.2v3.6l3.6 1 8.4 3.9V5.3L7.1 9.2l-3.6 1z"/><path d="M8 15.2l.7 3.3a1.6 1.6 0 0 0 3.1-.7l-.4-1.3"/><path d="M18.3 9.3a4 4 0 0 1 0 5.4"/><path d="M20.6 6.9a7.4 7.4 0 0 1 0 10.2"/>',
   correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',
   ojo: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',

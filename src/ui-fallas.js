@@ -8,6 +8,7 @@ const deLocal = (s) => (s ? new Date(s).getTime() : null);
 function VistaFallas() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
+  const comunicadosVigentes = useMemo(() => Model.comunicadosVigentes(s.comunicados), [s.comunicados]);
   const [tab, setTab] = useState('publicar');
   const [edicion, setEdicion] = useState(null);
   const [semilla, setSemilla] = useState(null);
@@ -32,6 +33,7 @@ function VistaFallas() {
     ['publicar', edicion ? 'Editar ' + U.numeroFalla(edicion) : 'Publicar falla', null],
     ['activas', 'Activas', mf.activas.length],
     ['resueltas', 'Resueltas ' + CONFIG.horasVisibleTrasCierre + ' h', mf.resueltas.length],
+    ['comunicados', 'Comunicados', comunicadosVigentes.length],
     ['historial', 'Historial', s.fallas.length]
   ];
   const editar = (f) => { setEdicion(f); setSemilla(null); setTab('publicar'); window.scrollTo({ top: 0 }); };
@@ -50,6 +52,7 @@ function VistaFallas() {
     ${tab === 'activas' && html`<${ListaFallas} fallas=${mf.activas} vacio="No hay fallas activas. Cuando llegue un correo con nodos afectados, publícala en la pestaña Publicar falla."
         onEditar=${editar} onCerrar=${setCerrando} smsTodas=${true} />`}
     ${tab === 'resueltas' && html`<${ListaFallas} fallas=${mf.resueltas} vacio=${'No hay fallas cerradas en las últimas ' + CONFIG.horasVisibleTrasCierre + ' horas.'} />`}
+    ${tab === 'comunicados' && html`<${VistaComunicados} />`}
     ${tab === 'historial' && html`<${Historial} />`}
     ${cerrando && html`<${ModalCerrar} f=${cerrando} onCerrar=${() => setCerrando(null)} />`}
   </div>`;
@@ -833,4 +836,158 @@ function Historial() {
     </div>
     ${ver && html`<${ModalHistorialFalla} f=${ver} onCerrar=${() => setVer(null)} />`}
   </div>`;
+}
+
+/* ---------- Comunicados: avisos informativos que no son una falla de nodo ----------
+   Solo título y contexto (por ejemplo, una falla general de DTH o de canales): sin nodos, número de falla ni hora
+   estimada. Los asesores los ven arriba de las fallas, en violeta y marcados como informativos, hasta que alguien
+   de Workforce o Jefatura los retira. No cambian el resultado de la consulta de ningún cliente. */
+function VistaComunicados() {
+  const s = useG();
+  const vigentes = useMemo(() => Model.comunicadosVigentes(s.comunicados), [s.comunicados]);
+  const retirados = useMemo(() => Model.comunicadosRetirados(s.comunicados), [s.comunicados]);
+  const [edicion, setEdicion] = useState(null);
+  const [semilla, setSemilla] = useState(null);      // texto de un comunicado retirado que se va a publicar de nuevo
+  const [nuevos, setNuevos] = useState(0);            // cada vez que cambia, el formulario empieza de cero
+  const [retirando, setRetirando] = useState(null);
+  // Si otra persona retira el comunicado que se está editando, el formulario vuelve a "nuevo"
+  const editando = edicion && vigentes.some((c) => c.id === edicion.id) ? edicion : null;
+  const arriba = () => window.scrollTo({ top: 0 });
+  return html`<div class="comunicados">
+    <${FormComunicado} key=${editando ? editando.id : 'nuevo-' + nuevos} edicion=${editando} semilla=${editando ? null : semilla}
+      onListo=${(c, editado) => { setEdicion(null); setSemilla(null); setNuevos((n) => n + 1); tostada(editado ? 'Cambios guardados en el comunicado' : 'Comunicado publicado'); }}
+      onCancelar=${() => { setEdicion(null); setSemilla(null); setNuevos((n) => n + 1); }} />
+    <h2 class="com-subtitulo">Vigentes<span class="n">${vigentes.length}</span></h2>
+    ${vigentes.length
+      ? html`<div class="fallas-lista">${vigentes.map((c) => html`<${TarjetaComunicado} c=${c} now=${s.now} key=${c.id} editando=${!!editando && editando.id === c.id}
+          onEditar=${(x) => { setEdicion(x); arriba(); }} onRetirar=${setRetirando} />`)}</div>`
+      : html`<div class="panel vacio"><b>Sin comunicados vigentes</b>Lo que publiques aquí lo verán los asesores en su panel, arriba de las fallas, hasta que lo retires.</div>`}
+    ${retirados.length > 0 && html`<h2 class="com-subtitulo">Retirados en los últimos 30 días<span class="n">${retirados.length}</span></h2>
+      <div class="panel"><div class="tabla-envoltura"><table class="tabla com-retirados">
+        <thead><tr><th>Comunicado</th><th>Publicó</th><th>Retiró</th><th class="der">Estuvo visible</th><th></th></tr></thead>
+        <tbody>${retirados.slice(0, 50).map((c) => html`<tr key=${c.id}>
+          <td><b>${c.titulo}</b><div class="com-corto" title=${c.contexto}>${c.contexto}</div></td>
+          <td>${c.publicadoPor ? c.publicadoPor.nombre : ''}<div class="sub num">${U.dia(c.publicadoEn)}, ${U.hora(c.publicadoEn)}</div></td>
+          <td>${c.retiradoPor ? c.retiradoPor.nombre : ''}<div class="sub num">${U.dia(c.retiradoEn)}, ${U.hora(c.retiradoEn)}</div></td>
+          <td class="der">${U.dur(c.retiradoEn - c.publicadoEn)}</td>
+          <td class="der"><button class="btn btn-fantasma btn-chico" title="Pone su título y su contexto en el formulario, para publicarlo como uno nuevo"
+            onClick=${() => { setEdicion(null); setSemilla({ titulo: c.titulo, contexto: c.contexto }); setNuevos((n) => n + 1); arriba(); }}>Usar de nuevo</button></td>
+        </tr>`)}</tbody>
+      </table></div></div>`}
+    ${retirando && html`<${ModalRetirarComunicado} c=${retirando} onCerrar=${() => setRetirando(null)} />`}
+  </div>`;
+}
+
+/* Formulario para publicar un comunicado o editar uno vigente, con la vista previa de cómo lo verá el asesor */
+function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
+  const s = useG();
+  const L = CONFIG.comunicado;
+  const ini = edicion || semilla || {};
+  const [titulo, setTitulo] = useState(ini.titulo || '');
+  const [contexto, setContexto] = useState(ini.contexto || '');
+  const [confirmar, setConfirmar] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+  const enviando = useRef(false);
+  // Como lo guarda el servidor: el título en una línea; el contexto conserva los saltos de línea
+  const t = Model.tituloComunicado(titulo), x = Model.contextoComunicado(contexto);
+  const sinCambios = !!edicion && t === edicion.titulo && x === edicion.contexto;
+  const igual = t ? Model.comunicadoIgual(s.comunicados, t, edicion ? edicion.id : null) : null;
+  const listo = !Model.faltaComunicado(t, x) && !sinCambios && !igual;
+  // Así lo verá el asesor: recién publicado o, si se está editando, recién actualizado
+  const borrador = { id: edicion ? edicion.id : 'nuevo', titulo: t, contexto: x, publicadoEn: edicion ? edicion.publicadoEn : s.now, editadoEn: edicion ? s.now : null,
+    publicadoPor: edicion ? edicion.publicadoPor : A.quien() };
+  async function guardar() {
+    if (enviando.current) return;   // un doble clic no publica dos veces
+    enviando.current = true; setGuardando(true); setError('');
+    try {
+      const c = edicion ? await A.editarComunicado(edicion.id, { titulo: t, contexto: x }) : await A.publicarComunicado({ titulo: t, contexto: x });
+      setConfirmar(false); onListo(c, !!edicion);
+    } catch (e) {
+      setConfirmar(false);
+      // Un servidor de antes de la 3.9 todavía no conoce los comunicados
+      setError(/desconocida/i.test(e.message) ? 'El servidor todavía no tiene los comunicados. Pega el Code.gs nuevo en Apps Script y publica una versión nueva de la implementación.' : e.message);
+      // Otra persona publicó uno igual, o retiró el que se estaba editando: se trae lo último para verlo aquí mismo
+      if (e.codigo === 'DUPLICADA' || e.codigo === 'DATOS') A.recargar().catch(() => {});
+    } finally { enviando.current = false; setGuardando(false); }
+  }
+  const accion = edicion ? 'Guardar cambios' : 'Publicar comunicado';
+  return html`<div class="com-form">
+    <div class="panel">
+      <div class="com-form-cab"><span class="ico"><${Ico} n="megafono" s=${17} /></span>
+        <div><h3>${edicion ? 'Editar comunicado' : 'Nuevo comunicado'}</h3>
+          <p>Un aviso para los asesores que no es una falla de nodo. No lleva nodos, número de falla ni hora estimada.</p></div></div>
+      <label class="campo"><span class="campo-cab"><span>Título</span><span class="cuenta">${t.length} de ${L.titulo}</span></span>
+        <input class="input com-titulo-in" value=${titulo} maxlength=${L.titulo} placeholder="Ejemplo: Falla general de DTH"
+          onInput=${(e) => { setTitulo(e.currentTarget.value); setError(''); }} /></label>
+      <label class="campo"><span class="campo-cab"><span>Contexto</span><span class="cuenta">${x.length} de ${L.contexto}</span></span>
+        <textarea class="textarea com-contexto-in" rows="5" maxlength=${L.contexto} value=${contexto}
+          placeholder="Qué está pasando, a quiénes afecta y qué le dice el asesor al cliente."
+          onInput=${(e) => { setContexto(e.currentTarget.value); setError(''); }}></textarea>
+        <small>Los asesores lo leen tal como lo escribas aquí.</small></label>
+      ${igual && html`<div class="nota-linea com-igual" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>Ya hay un comunicado vigente con ese
+        título${igual.publicadoPor && igual.publicadoPor.nombre ? ', que publicó ' + igual.publicadoPor.nombre + ' ' + U.hace(igual.publicadoEn, s.now) : ''}. Edita ese comunicado, o retíralo antes de publicar otro igual.</span></div>`}
+      ${error && html`<div class="nota error-acceso com-error" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>`}
+    </div>
+    <div class="com-lado">
+      <div class="panel preview com-previa">
+        <div class="preview-cab">Así lo verá el asesor</div>
+        ${t && x ? html`<${ComunicadoItem} c=${borrador} now=${s.now} previa=${true} />`
+          : html`<div class="vacio" style="padding:10px 4px">Escribe el título y el contexto para ver la vista previa.</div>`}
+      </div>
+      <div class="publicar-barra">
+        ${(edicion || semilla) && html`<button class="btn btn-borde btn-grande" onClick=${onCancelar}>Cancelar</button>`}
+        <button class="btn btn-primario btn-grande com-publicar" disabled=${!listo} onClick=${() => setConfirmar(true)}>${accion}</button>
+      </div>
+      <p class="com-nota">${edicion ? 'Los asesores verán el texto nuevo al instante, marcado como actualizado.'
+        : 'Sale al instante en el panel de todos los asesores, arriba de las fallas, y les llega el aviso de escritorio.'}</p>
+    </div>
+    ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en el comunicado' : 'Publicar comunicado'} onCerrar=${() => setConfirmar(false)}
+        sub=${edicion ? 'Los asesores verán el texto nuevo de inmediato, marcado como actualizado.' : 'Todos los asesores lo verán de inmediato en su panel, arriba de las fallas.'}
+        pie=${html`<button class="btn btn-borde" onClick=${() => setConfirmar(false)}>Revisar</button>
+          <button class="btn btn-primario" disabled=${guardando} onClick=${guardar}>${accion}</button>`}>
+      <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${t}</b><p>${x}</p></div></div>
+    </${Modal}>`}
+  </div>`;
+}
+
+/* Un comunicado vigente, para Workforce: quién lo publicó, desde cuándo se ve y los botones para retirarlo o editarlo */
+function TarjetaComunicado({ c, now, editando, onEditar, onRetirar }) {
+  const edicion = c.editadoEn ? (c.historial || []).filter((h) => h.accion === 'EDITADO').slice(-1)[0] : null;
+  const detalle = edicion && edicion.detalle ? ' (' + edicion.detalle.charAt(0).toLowerCase() + edicion.detalle.slice(1) + ')' : '';
+  return html`<article class="panel com-card">
+    <div class="com-card-cab">
+      <div><span class="tipo"><${Ico} n="megafono" s=${15} />Comunicado informativo</span><h3>${c.titulo}</h3></div>
+      <div class="der"><span class="marca-estado" data-s="COMUNICADO">Vigente</span></div>
+    </div>
+    <p class="texto">${c.contexto}</p>
+    <dl class="meta">
+      <dt>Publicó</dt><dd>${c.publicadoPor ? c.publicadoPor.nombre : ''}, ${U.cuandoCorto(c.publicadoEn, now)}</dd>
+      ${c.editadoEn && html`<dt>Actualizó</dt><dd>${c.editadoPor ? c.editadoPor.nombre : ''}, ${U.cuandoCorto(c.editadoEn, now)}${detalle}</dd>`}
+      <dt>Visible</dt><dd>Desde ${U.hace(c.publicadoEn, now)}, hasta que lo retires</dd>
+    </dl>
+    <div class="acc">
+      <button class="btn btn-primario btn-chico com-retirar" onClick=${() => onRetirar(c)}><${Ico} n="cerrar" s=${16} />Retirar comunicado</button>
+      <button class="btn btn-borde btn-chico com-editar" disabled=${editando} onClick=${() => onEditar(c)}><${Ico} n="lapiz" s=${15} />${editando ? 'Editándolo arriba' : 'Editar'}</button>
+    </div>
+  </article>`;
+}
+
+function ModalRetirarComunicado({ c, onCerrar }) {
+  const [ocupado, setOcupado] = useState(false);
+  const enviando = useRef(false);
+  async function ok() {
+    if (enviando.current) return;   // un doble clic no lo retira dos veces (el segundo diría que otra persona ya lo retiró)
+    enviando.current = true; setOcupado(true);
+    try { await A.retirarComunicado(c.id); tostada('Comunicado retirado'); onCerrar(); } catch (e) {
+      tostada(e.message);
+      // Otra persona ya lo retiró: se trae lo último y se cierra; con un corte de red se puede intentar de nuevo
+      if (e.codigo === 'DATOS') { A.recargar().catch(() => {}); onCerrar(); } else { enviando.current = false; setOcupado(false); }
+    }
+  }
+  return html`<${Modal} titulo="Retirar comunicado" onCerrar=${onCerrar}
+      sub="Los asesores dejarán de verlo de inmediato. Queda 30 días en la lista de retirados, por si hay que publicarlo otra vez."
+      pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-primario" disabled=${ocupado} onClick=${ok}>Retirar comunicado</button>`}>
+    <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${c.titulo}</b><p>${c.contexto}</p></div></div>
+  </${Modal}>`;
 }

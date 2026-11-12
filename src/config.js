@@ -14,6 +14,11 @@ const CONFIG = {
   // Cliente reincidente: tantas fallas en su nodo en estos días (desde que es cliente).
   reincidente: { fallas: 3, dias: 90 },
 
+  // Comunicados: avisos informativos de Workforce que no son una falla de nodo (por ejemplo, una falla general
+  // de DTH o de canales). Solo llevan título y contexto, con estos largos como mucho (los mismos que revisa el
+  // servidor). Recién publicado o recién actualizado, la tarjeta lleva su marca durante estos minutos.
+  comunicado: { titulo: 80, contexto: 600, minutosNuevo: 30 },
+
   // Posible falla: un nodo sin falla publicada al que en los últimos 60 minutos le consultaron
   // 5 o más clientes distintos (Concentrix y Tiendas; las búsquedas de Workforce no cuentan),
   // o que 2 asesores reportaron. Con 3 o 4 clientes el nodo queda en observación.

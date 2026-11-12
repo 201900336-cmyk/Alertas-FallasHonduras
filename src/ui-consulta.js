@@ -7,6 +7,7 @@ const PLAY = { '3P': 'Triple play', '2P': 'Doble play', '1P': 'Un servicio' };
 function VistaConsulta() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
+  const comunicados = useMemo(() => Model.comunicadosVigentes(s.comunicados), [s.comunicados]);
   const [q, setQ] = useState('');
   const [res, setRes] = useState(null);
   const [sel, setSel] = useState(0);
@@ -76,6 +77,7 @@ function VistaConsulta() {
 
   return html`<div class="consulta">
     <section aria-label="Consulta de cliente">
+      ${comunicados.length > 0 && html`<${ComunicadosArriba} lista=${comunicados} now=${s.now} />`}
       ${veAlertas() && !esWorkforce() && html`<${PosiblesFallas} mf=${mf} />`}
       <form class="buscador" role="search" onSubmit=${(e) => { e.preventDefault(); consultar(q); }}>
         <label class="buscador-caja">
@@ -103,7 +105,7 @@ function VistaConsulta() {
         : buscando ? html`<div class="resultado"><div class="panel buscando"><span class="punto vivo"></span>Buscando en la base de clientes…</div></div>`
         : html`<${InicioAsesor} mf=${mf} onAbrir=${(c) => { setQ(String(c)); consultar(String(c)); }} />`}
     </section>
-    <${RielFallas} mf=${mf} now=${s.now} />
+    <${RielFallas} mf=${mf} now=${s.now} comunicados=${comunicados} />
   </div>`;
 }
 
@@ -585,14 +587,75 @@ function MapaVivo({ mf }) {
   </section>`;
 }
 
-/* ---------- Riel con las fallas activas y recientes ---------- */
-function RielFallas({ mf, now }) {
+/* ---------- Comunicados: avisos informativos de Workforce que no son una falla de nodo ----------
+   Solo título y contexto (por ejemplo, una falla general de DTH o de canales). Van arriba de las fallas, en violeta
+   y con la etiqueta "Informativo", hasta que Workforce los retira. No cambian el resultado de ninguna consulta. */
+const cuandoComunicado = (verbo, ts, now) => (U.esHoy(ts, now)
+  ? verbo + ' a ' + U.las(ts) + ', ' + (now - ts < U.MIN ? 'ahora' : U.hace(ts, now)) : verbo + ' ' + U.cuando(ts, now));
+/* Un comunicado en el panel. El contexto se corta a 4 líneas con "Ver todo"; al tocarlo se abre completo (ahí el
+   texto se puede seleccionar y copiar) y dice quién lo publicó. donde: el panel o la parte de arriba de la consulta
+   (el mismo comunicado sale en los dos sitios y cada uno necesita su propio id). previa: la vista previa de
+   Workforce, que no se abre. */
+function ComunicadoItem({ c, now, donde, previa }) {
+  const [abierto, setAbierto] = useState(false);
+  const [cortado, setCortado] = useState(false);
+  const ref = useRef(null);
+  // ¿El contexto no cabe en las líneas que se ven? Se mide en pantalla y se vuelve a medir si cambia el ancho
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const medir = () => setCortado(el.scrollHeight > el.clientHeight + 1);
+    medir();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [c.contexto, abierto]);
+  const marca = Model.marcaComunicado(c, now);
+  const idDet = 'com-det-' + (donde || 'panel') + '-' + c.id;
+  const cabeza = html`<div class="com-cab"><span class="com-etiqueta"><${Ico} n="megafono" s=${15} />Informativo</span>
+      ${marca && html`<span class="com-marca"><i></i>${marca === 'NUEVO' ? 'Nuevo' : 'Actualizado'}</span>`}</div>
+    <div class="com-titulo">${c.titulo}</div>`;
+  const resumen = html`<div class="com-contexto" ref=${ref}>${c.contexto}</div>
+    ${cortado && html`<span class="com-ver">Ver todo</span>`}
+    <div class="com-meta">${c.editadoEn ? cuandoComunicado('Actualizado', c.editadoEn, now) : cuandoComunicado('Publicado', c.publicadoEn, now)}</div>`;
+  if (previa) return html`<div class="com-item"><div class="com-item-cab">${cabeza}${resumen}</div></div>`;
+  return html`<div class="com-item" data-abierto=${abierto}>
+    <button type="button" class="com-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
+      ${cabeza}${!abierto && resumen}
+    </button>
+    ${abierto && html`<div class="com-det" id=${idDet}>
+      <div class="com-contexto completo">${c.contexto}</div>
+      <div><button type="button" class="enlace com-menos" onClick=${() => setAbierto(false)}>Ver menos</button></div>
+      <div class="com-pie">
+        <span>${cuandoComunicado('Publicado', c.publicadoEn, now)}</span>
+        ${c.editadoEn && html`<span>${cuandoComunicado('Actualizado', c.editadoEn, now)}</span>`}
+        ${c.publicadoPor && c.publicadoPor.nombre && html`<span>Por ${c.publicadoPor.nombre}</span>`}
+      </div>
+    </div>`}
+  </div>`;
+}
+/* En una pantalla angosta el panel de fallas queda debajo de la consulta: ahí los comunicados suben al principio
+   (con el contexto a 2 líneas), para que nadie tenga que bajar a buscarlos. En pantallas anchas esto no se ve. */
+function ComunicadosArriba({ lista, now }) {
+  return html`<div class="com-arriba" role="region" aria-label="Comunicados">
+    <h4><span>Comunicados</span><span>${lista.length}</span></h4>
+    ${lista.map((c) => html`<${ComunicadoItem} c=${c} now=${now} donde="arriba" key=${c.id} />`)}
+  </div>`;
+}
+
+/* ---------- Riel con los comunicados y las fallas activas y recientes ---------- */
+function RielFallas({ mf, now, comunicados }) {
   const s = useG();
   // A quien publica la base: las colonias salen cuando se vuelve a publicar una base de antes de que se guardaran
   const faltanColonias = s.cat && !s.cat.conColonias && puede('base') && mf.activas.length + mf.resueltas.length > 0;
   return html`<aside class="panel riel" aria-label="Fallas en la red">
     <div class="panel-cab"><h2>Fallas en la red</h2><span class="der sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados' : ''}</span></div>
     ${faltanColonias && html`<div class="nota atencion riel-nota falta-colonias"><${Ico} n="info" s=${16} /><span>Las colonias salen al volver a publicar la base en <a href="#base" onClick=${() => ir('base')}>Base</a>: sirve el mismo Excel de esta semana.</span></div>`}
+    ${comunicados && comunicados.length > 0 && html`<div class="riel-seccion com-seccion">
+      <h4><span>Comunicados</span><span>${comunicados.length}</span></h4>
+      ${comunicados.map((c) => html`<${ComunicadoItem} c=${c} now=${now} key=${c.id} />`)}
+    </div>`}
     <div class="riel-seccion">
       <h4><span>Activas</span><span>${mf.activas.length}</span></h4>
       ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)

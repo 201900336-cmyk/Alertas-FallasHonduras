@@ -473,6 +473,49 @@ const Model = (() => {
   }
   const PRIORIDAD = { FALLA: 0, RESUELTA: 1, SIN_FALLA: 2, SIN_NODO: 3 };
 
+  /* ---------- Comunicados (avisos informativos que no son una falla de nodo) ---------- */
+  /* El título y el contexto tal como los guarda el servidor (validarComunicado_): el título en una sola línea;
+     el contexto conserva los saltos de línea, como mucho con una línea en blanco seguida. */
+  const tituloComunicado = (t) => String(t == null ? '' : t).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const contextoComunicado = (t) => String(t == null ? '' : t).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ')
+    .split('\n').map((l) => l.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  /* Lo que le falta a un comunicado para poder guardarse ('' si está listo), con las mismas palabras del servidor */
+  function faltaComunicado(titulo, contexto) {
+    const L = CONFIG.comunicado;
+    if (!titulo || !contexto) return 'Escribe el título y el contexto del comunicado.';
+    if (titulo.length > L.titulo) return 'El título no puede pasar de ' + L.titulo + ' caracteres.';
+    if (contexto.length > L.contexto) return 'El contexto no puede pasar de ' + L.contexto + ' caracteres.';
+    return '';
+  }
+  /* Los vigentes (del más nuevo al más viejo) y los retirados (el último que se retiró, primero). A los asesores
+     solo les llegan los vigentes, sin estado; un servidor de antes de la 3.9 no manda ninguno. */
+  const comunicadosVigentes = (lista) => (lista || []).filter((c) => c && (c.estado || 'VIGENTE') === 'VIGENTE').sort((a, b) => b.publicadoEn - a.publicadoEn);
+  const comunicadosRetirados = (lista) => (lista || []).filter((c) => c && c.estado === 'RETIRADO').sort((a, b) => (b.retiradoEn || 0) - (a.retiradoEn || 0));
+  /* La marca de la tarjeta: recién publicado (NUEVO) o recién actualizado (ACTUALIZADO) */
+  function marcaComunicado(c, now) {
+    const lapso = CONFIG.comunicado.minutosNuevo * U.MIN;
+    if (c.editadoEn && now - c.editadoEn < lapso) return 'ACTUALIZADO';
+    return now - c.publicadoEn < lapso ? 'NUEVO' : '';
+  }
+  /* Otro comunicado vigente con el mismo título (sin fijarse en tildes, mayúsculas ni espacios), o null */
+  const claveComunicado = (t) => U.sinAcentos(t).toLowerCase().replace(/\s+/g, ' ').trim();
+  const comunicadoIgual = (lista, titulo, propioId) => comunicadosVigentes(lista).find((c) => c.id !== propioId && claveComunicado(c.titulo) === claveComunicado(titulo)) || null;
+  /* Igual que resumenComunicado_ del servidor: el contexto en una línea para el aviso de escritorio; si es largo,
+     hasta la última palabra que quepa en 160 caracteres, con puntos suspensivos */
+  function resumenComunicado(contexto) {
+    const s = String(contexto || '').replace(/\s+/g, ' ').trim();
+    if (s.length <= 160) return s;
+    const corte = s.slice(0, 159), esp = corte.lastIndexOf(' ');
+    return (esp > 100 ? corte.slice(0, esp) : corte).replace(/[\s,;:.]+$/, '') + '…';
+  }
+  /* Igual que nuevoIdComunicado_ del servidor: C + aammdd + número del día (C26111201) */
+  function nuevoIdComunicado(lista, now) {
+    const d = new Date(now);
+    const pref = 'C' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const usados = (lista || []).map((c) => String(c.id)).filter((id) => id.startsWith(pref)).map((id) => +id.slice(pref.length) || 0);
+    return pref + String((usados.length ? Math.max(...usados) : 0) + 1).padStart(2, '0');
+  }
+
   /* ---------- Mapa en vivo (inicio de la consulta) ---------- */
   const claveDep = (d) => U.sinAcentos(d).toUpperCase().replace(/\s+/g, ' ').trim();
   /* Los clientes de una falla por departamento, de más a menos: del catálogo de la base actual si trae colonias
@@ -1050,5 +1093,6 @@ const Model = (() => {
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
-    mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias };
+    mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias,
+    tituloComunicado, contextoComunicado, faltaComunicado, comunicadosVigentes, comunicadosRetirados, marcaComunicado, comunicadoIgual, nuevoIdComunicado, resumenComunicado };
 })();

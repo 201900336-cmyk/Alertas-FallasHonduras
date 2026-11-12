@@ -25,6 +25,8 @@
   --resuelta: #f2a50c; --resuelta-ink: #201600; --resuelta-soft: #fdf2d9; --resuelta-text: #8a5800;
   --ok: #12945a;      --ok-ink: #ffffff;    --ok-soft: #e2f3ea;    --ok-text: #0b6b40;
   --nodo-x: #5c6a7c;  --nodo-x-ink: #ffffff; --nodo-x-soft: #e8ecf1; --nodo-x-text: #45525f;
+  /* Comunicados (avisos informativos): violeta, que no se parece a ningún color que ya signifique algo */
+  --info: #6f42d3;    --info-soft: #e7defb; --info-text: #5630ad;
 
   --hfc: #c46a24;
   --gpon: #2a78d6;
@@ -52,6 +54,7 @@
     --resuelta: #f5b324; --resuelta-soft: #382a10; --resuelta-text: #f7c460;
     --ok: #1aa569; --ok-soft: #12301f; --ok-text: #5ed49b;
     --nodo-x: #66768b; --nodo-x-soft: #232b35; --nodo-x-text: #aab6c4;
+    --info: #9b7cf0; --info-soft: #33295a; --info-text: #c8b8ff;
     --hfc: #cb7535; --gpon: #4a90e8;
     --chart-ink: #aeb8c5; --chart-rest: #3a434f; --grid: #232a33; --axis: #3a434f;
     --seq-0: #1f252d; --seq-1: #45222a; --seq-2: #6b2832; --seq-3: #9a2f3a; --seq-4: #d23f4a; --seq-5: #ff7f88;
@@ -67,6 +70,7 @@
   --resuelta: #f5b324; --resuelta-soft: #382a10; --resuelta-text: #f7c460;
   --ok: #1aa569; --ok-soft: #12301f; --ok-text: #5ed49b;
   --nodo-x: #66768b; --nodo-x-soft: #232b35; --nodo-x-text: #aab6c4;
+  --info: #9b7cf0; --info-soft: #33295a; --info-text: #c8b8ff;
   --hfc: #cb7535; --gpon: #4a90e8;
   --chart-ink: #aeb8c5; --chart-rest: #3a434f; --grid: #232a33; --axis: #3a434f;
   --seq-0: #1f252d; --seq-1: #45222a; --seq-2: #6b2832; --seq-3: #9a2f3a; --seq-4: #d23f4a; --seq-5: #ff7f88;
@@ -1276,6 +1280,72 @@ table.conex-tabla { min-width: 680px; }
 .tostada { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 12px; background: var(--ink); color: var(--surface); font-size: 14px; font-weight: 550; box-shadow: var(--pop); transition: transform 220ms var(--ease-out), opacity 220ms ease; }
 @starting-style { .tostada { transform: translateY(10px); opacity: 0; } }
 
+/* ---------- Comunicados: avisos informativos que no son una falla de nodo ----------
+   La tarjeta tiene la forma de la de una falla, pero en violeta y con la etiqueta "Informativo". */
+.com-item {
+  position: relative; margin-bottom: 8px; border-radius: 12px;
+  background: color-mix(in srgb, var(--info-soft) 38%, var(--surface)); border: 1px solid color-mix(in srgb, var(--info) 24%, var(--surface));
+  transition: border-color 150ms ease;
+}
+.com-item::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--info); }
+.com-item[data-abierto="true"] { border-color: color-mix(in srgb, var(--info) 40%, var(--surface)); }
+.com-item:has(button.com-item-cab:hover) { border-color: color-mix(in srgb, var(--info) 40%, var(--surface)); }
+.com-item-cab { display: block; width: 100%; padding: 12px 12px 12px 16px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; }
+button.com-item-cab { cursor: pointer; }
+.com-item[data-abierto="true"] .com-item-cab { padding-bottom: 0; border-radius: 12px 12px 0 0; }
+.com-cab { display: flex; align-items: center; gap: 8px; }
+.com-etiqueta { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 7px; background: var(--info-soft); color: var(--info-text); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.com-marca { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--info-text); white-space: nowrap; }
+.com-marca i { width: 7px; height: 7px; border-radius: 50%; background: var(--info); }
+.com-titulo { margin-top: 8px; font-size: 14px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.com-contexto {
+  margin-top: 4px; font-size: 13px; line-height: 1.4; color: var(--ink-2); white-space: pre-line; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
+}
+.com-contexto.completo { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.com-ver { display: inline-block; margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.com-meta { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); }
+.com-det { margin: 0 12px 0 16px; padding: 0 0 12px; }
+.com-menos { margin-top: 4px; font-size: 12.5px; }
+.com-pie { margin-top: 10px; padding-top: 10px; border-top: 1px dashed color-mix(in srgb, var(--info) 40%, var(--surface)); font-size: 12.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
+/* En pantallas anchas los comunicados van en el panel; en angostas, arriba de la consulta (ver Adaptación) */
+.com-arriba { display: none; }
+.com-arriba h4 { margin: 0 4px 8px; font-size: 12.5px; color: var(--ink-3); font-weight: 650; display: flex; justify-content: space-between; }
+.marca-estado[data-s="COMUNICADO"] { background: var(--info-soft); color: var(--info-text); }
+
+/* Comunicados (Workforce): publicar, vigentes y retirados */
+.com-form { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
+.com-form > .panel { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 16px; }
+.com-form-cab { display: flex; align-items: center; gap: 12px; }
+.com-form-cab .ico { width: 28px; height: 28px; border-radius: 50%; background: var(--info-soft); color: var(--info-text); display: grid; place-items: center; flex: none; }
+.com-form-cab h3 { margin: 0; font-size: 16px; font-weight: 750; }
+.com-form-cab p { margin: 0; font-size: 13px; color: var(--ink-3); }
+.campo > .campo-cab { display: flex; justify-content: space-between; gap: 12px; }
+.campo-cab .cuenta { font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.com-form .nota-linea { margin-top: 0; }
+.com-lado { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.com-previa .com-item { width: 318px; max-width: 100%; margin-bottom: 0; }
+.com-nota { margin: -4px 2px 0; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.com-subtitulo { margin: 28px 0 12px; font-size: 16px; font-weight: 750; display: flex; align-items: center; gap: 8px; }
+.com-subtitulo .n { font-size: 12px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.com-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; position: relative; overflow: hidden; }
+.com-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--info); }
+.com-card-cab { display: flex; gap: 12px; align-items: flex-start; }
+.com-card-cab .tipo { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 650; color: var(--info-text); }
+.com-card-cab h3 { margin: 0; font-size: 18px; font-weight: 800; font-stretch: 112%; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.com-card-cab .der { margin-left: auto; }
+.com-card .texto { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); white-space: pre-line; overflow-wrap: anywhere; }
+.com-card .meta { margin: 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.com-card .meta dt { color: var(--ink-3); }
+.com-card .meta dd { margin: 0; color: var(--ink); font-weight: 550; }
+.com-card .acc { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.com-retirados td:first-child { min-width: 240px; max-width: 520px; }
+.com-corto { margin-top: 2px; font-size: 12.5px; color: var(--ink-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.com-resumen { align-items: flex-start; }
+.com-resumen > div { min-width: 0; }
+.com-resumen b { color: var(--ink); overflow-wrap: anywhere; }
+.com-resumen p { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; max-height: 180px; overflow: auto; }
+
 /* ---------- Adaptación ---------- */
 @media (max-width: 1180px) {
   .nav a span.txt { display: none; }
@@ -1285,6 +1355,11 @@ table.conex-tabla { min-width: 680px; }
 @media (max-width: 1240px) {
   .consulta { grid-template-columns: minmax(0, 1fr); }
   .riel { position: static; max-height: none; }
+  /* El panel de fallas queda abajo: los comunicados suben al principio de la consulta, con el contexto más corto */
+  .com-arriba { display: block; margin-bottom: 14px; }
+  .com-arriba .com-contexto:not(.completo) { -webkit-line-clamp: 2; line-clamp: 2; }
+  .riel .com-seccion { display: none; }
+  .com-form { grid-template-columns: minmax(0, 1fr); }
   .form-falla { grid-template-columns: minmax(0, 1fr); }
   .impacto { position: static; }
   .c-8, .c-7, .c-6, .c-5, .c-4 { grid-column: span 12; }

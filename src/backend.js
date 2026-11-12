@@ -139,6 +139,7 @@ function BackendRemoto() {
     },
     reportar: (rec) => llamar('reportar', { contrato: rec.contrato, nodo: rec.nodo }),
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
+    comunicado: (op, d) => llamar('comunicado', Object.assign({ op }, d), 60000),
     alertas: () => llamar('alertas', {}),
     alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
     marcarAlerta: (nodo, reportada, a, nota) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo, a, nota }),
@@ -348,11 +349,20 @@ function BackendLocal() {
       const d = await Store.leerTodo({ sinBase: true });
       const ultima = d.baseHist[d.baseHist.length - 1];
       const resumen = c.ix ? Object.assign({}, c.ix.resumen, { archivo: c.base.archivo, tieneMegas: c.base.tieneMegas, en: ultima && ultima.en, por: ultima && ultima.por }) : null;
-      const r = { version: d.meta.version || 0, baseVersion: c.bv, cambio: d.meta.cambio || null, demo: !!d.meta.demo, resumen, fallas: d.fallas, cargas: d.baseHist };
+      // Comunicados, como el servidor: Workforce y Jefatura reciben los vigentes y los retirados en los últimos 30
+      // días, completos; los demás, solo los vigentes y sin historial
+      const escribe = !!ses && ['workforce', 'jefatura'].includes(ses.usuario.rol), desdeCom = Date.now() - 30 * U.DIA;
+      const comunicados = escribe ? d.comunicados.filter((x) => x.estado === 'VIGENTE' || (x.retiradoEn || 0) >= desdeCom)
+        : Model.comunicadosVigentes(d.comunicados).map((x) => ({ id: x.id, titulo: x.titulo, contexto: x.contexto, publicadoEn: x.publicadoEn,
+          publicadoPor: { nombre: (x.publicadoPor && x.publicadoPor.nombre) || '' }, editadoEn: x.editadoEn || null }));
+      const r = { version: d.meta.version || 0, baseVersion: c.bv, cambio: d.meta.cambio || null, demo: !!d.meta.demo, resumen, fallas: d.fallas, cargas: d.baseHist, comunicados };
       if (baseVersion !== c.bv) r.catalogo = c.catJson;
       return r;
     },
-    async estado() { const m = await Store.leerMeta(); return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null, avisos: m.avisos || [], ahora: Date.now() }; },
+    async estado() {
+      const m = await Store.leerMeta();
+      return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null, avisos: m.avisos || [], avisosComunicados: m.avisosComunicados || [], ahora: Date.now() };
+    },
 
     async buscar(q) {
       const c = await indice();
@@ -438,6 +448,62 @@ function BackendLocal() {
       }
       const version = await confirmar(tipo, texto, { fallas, meta: avisos ? { avisos } : undefined });
       return { falla: f, version };
+    },
+
+    /* Comunicados (avisos informativos que no son una falla de nodo): igual que accionComunicado_ del servidor */
+    async comunicado(op, d) {
+      const lista = await Store.leerComunicados();
+      const ahora = Date.now(), por = quien();
+      const validar = (x) => {
+        const titulo = Model.tituloComunicado(x.titulo), contexto = Model.contextoComunicado(x.contexto);
+        const falta = Model.faltaComunicado(titulo, contexto);
+        if (falta) throw errorAlertas('DATOS', falta);
+        return { titulo, contexto };
+      };
+      const libre = (titulo, propio) => {
+        const igual = Model.comunicadoIgual(lista, titulo, propio);
+        if (igual) {
+          throw errorAlertas('DUPLICADA', 'Ya hay un comunicado vigente con ese título' + (igual.publicadoPor && igual.publicadoPor.nombre ? ', que publicó ' + igual.publicadoPor.nombre : '')
+            + '. Edita ese comunicado, o retíralo antes de publicar otro igual.');
+        }
+      };
+      let c, tipo, texto;
+      if (op === 'publicar') {
+        const datos = validar(d.comunicado || {});
+        libre(datos.titulo, null);
+        if (Model.comunicadosVigentes(lista).length >= 10) throw errorAlertas('DATOS', 'Ya hay 10 comunicados vigentes. Retira alguno antes de publicar otro.');
+        c = Object.assign(datos, { id: Model.nuevoIdComunicado(lista, ahora), estado: 'VIGENTE', publicadoEn: ahora, publicadoPor: por, editadoEn: null, editadoPor: null,
+          retiradoEn: null, retiradoPor: null, historial: [{ accion: 'PUBLICADO', en: ahora, por, detalle: '' }] });
+        lista.push(c);
+        tipo = 'COMUNICADO_PUBLICADO'; texto = 'publicó el comunicado «' + c.titulo + '»';
+      } else {
+        c = lista.find((x) => x.id === d.id);
+        if (!c) throw errorAlertas('DATOS', 'El comunicado ya no existe.');
+        if (c.estado !== 'VIGENTE') throw errorAlertas('DATOS', 'Otra persona ya retiró este comunicado.');
+        if (op === 'editar') {
+          const datos = validar(Object.assign({ titulo: c.titulo, contexto: c.contexto }, d.comunicado || {}));
+          const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : ''].filter(Boolean);
+          if (!cambios.length) throw errorAlertas('DATOS', 'No hay cambios que guardar en el comunicado.');
+          libre(datos.titulo, c.id);
+          Object.assign(c, datos, { editadoEn: ahora, editadoPor: por });
+          c.historial.push({ accion: 'EDITADO', en: ahora, por, detalle: 'Cambió ' + cambios.join(' y ') });
+          tipo = 'COMUNICADO_EDITADO'; texto = 'actualizó el comunicado «' + c.titulo + '»';
+        } else if (op === 'retirar') {
+          Object.assign(c, { estado: 'RETIRADO', retiradoEn: ahora, retiradoPor: por });
+          c.historial.push({ accion: 'RETIRADO', en: ahora, por, detalle: '' });
+          tipo = 'COMUNICADO_RETIRADO'; texto = 'retiró el comunicado «' + c.titulo + '»';
+        } else throw errorAlertas('DATOS', 'Operación no válida.');
+      }
+      // Igual que el servidor: un aviso de escritorio por comunicado (publicado o retirado), los últimos 4; editarlo
+      // no avisa de nuevo, pero el aviso que todavía no salió lleva el texto corregido
+      const meta = await Store.leerMeta();
+      const v = (meta.version || 0) + 1, resumen = Model.resumenComunicado(c.contexto), antes = meta.avisosComunicados || [];
+      const avisosComunicados = tipo === 'COMUNICADO_EDITADO'
+        ? antes.map((x) => (x.id === c.id && x.tipo === 'PUBLICADO' ? Object.assign({}, x, { titulo: c.titulo, resumen }) : x))
+        : antes.filter((x) => x.id !== c.id).concat(tipo === 'COMUNICADO_RETIRADO' ? { v, id: c.id, tipo: 'RETIRADO', titulo: c.titulo, en: ahora, por: por.nombre }
+          : { v, id: c.id, tipo: 'PUBLICADO', titulo: c.titulo, resumen, en: ahora, por: por.nombre }).slice(-4);
+      const version = await confirmar(tipo, texto, { comunicados: lista, meta: { avisosComunicados } });
+      return { comunicado: c, version };
     },
 
     async alertas() {
@@ -646,7 +712,7 @@ function BackendLocal() {
         nuevos: comparacion ? comparacion.nuevos : null, bajas: comparacion ? comparacion.bajas : null, cambiosNodo: comparacion ? comparacion.cambiosNodo : null
       };
       const cambios = { base, baseHist: (meta.demo ? [] : d.baseHist).concat(entrada).slice(-60), meta: { baseVersion: (meta.baseVersion || 0) + 1, demo: false } };
-      if (meta.demo) { cambios.fallas = []; await Store.borrarLogs(); }
+      if (meta.demo) { cambios.fallas = []; cambios.comunicados = []; await Store.borrarLogs(); }
       const version = await confirmar('BASE_ACTUALIZADA', 'actualizó la base de clientes (' + U.n(base.filas) + ' servicios)', cambios);
       return { comparacion, version };
     },
@@ -661,7 +727,7 @@ function BackendLocal() {
       await Store.borrarLogs();
       await Store.agregarLogs(esc.logs);
       await Store.confirmar({ tipo: 'DEMO', texto: 'cargó los datos de demostración', por: ses ? quien() : { u: 'demo', nombre: 'Alertas' } },
-        { base, baseHist: esc.baseHist, fallas: esc.fallas, meta: { demo: true, baseVersion: (meta.baseVersion || 0) + 1 } });
+        { base, baseHist: esc.baseHist, fallas: esc.fallas, comunicados: esc.comunicados, meta: { demo: true, baseVersion: (meta.baseVersion || 0) + 1, avisosComunicados: [] } });
     },
     async borrarTodo() {
       const meta = await Store.leerMeta();

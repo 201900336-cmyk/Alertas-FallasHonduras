@@ -1730,6 +1730,201 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
       'el ancho calculado de un texto nunca queda por debajo de lo que mide en pantalla (medido con la letra del sistema)', [U.anchoTexto('Francisco Morazán', 13, 650), U.anchoTexto('1,897 clientes', 12, 400)]);
   }
 
+  /* ---------- Comunicados: avisos informativos que no son una falla de nodo ---------- */
+  console.log('\n18. Comunicados informativos (solo título y contexto)');
+  {
+    g2.E.ahora = null; g2.E.usuario = null;
+    const CFG = vm.runInContext('CONFIG', lib);
+    const hu2 = g2.E.activo.getSheetByName('Usuarios');
+    hu2.appendRow(['mario.rivera@claro.com.hn', 'Mario Rivera', 'jefatura', 'SÍ', '']);
+    hu2.appendRow(['sofia.mejia@concentrix.com', 'Sofía Mejía', 'supervisor', 'SÍ', '']);
+    g2.cache.remove('usuarios');
+    g2.E.genesys.tokens.set('jefe', { name: 'Mario Rivera', email: 'mario.rivera@claro.com.hn' });
+    g2.E.genesys.tokens.set('sup', { name: 'Sofia Mejia', email: 'sofia.mejia@concentrix.com' });
+    C2.guardarCuenta('tiendas', 'tiendas', 'ClaroTiendas2026');
+    const tw = entrar2('w'), tj = entrar2('jefe'), ta = entrar2('a1'), ts = entrar2('sup');
+    const tt = g2.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaroTiendas2026', nombre: 'Pedro Mejía', tienda: 'CAC Castaños' } }).datos.token;
+    const com = (token, op, extra) => g2.post({ accion: 'comunicado', token, datos: Object.assign({ op }, extra || {}) });
+    const cargar = (token) => g2.post({ accion: 'cargar', token, datos: { baseVersion: -1 } }).datos;
+    const estado = () => g2.post({ accion: 'estado', token: ta }).datos;
+    const hojaCom = () => g2.E.activo.getSheetByName('Comunicados');
+    const T1 = 'Falla general de DTH', X1 = 'Clientes de TV satelital (DTH) de todo el país pueden estar sin señal.\n\nInfórmale al cliente que es una falla general.';
+
+    ok(CFG.comunicado.titulo === g2.ejecutar('ALERTAS.COMUNICADO_TITULO') && CFG.comunicado.contexto === g2.ejecutar('ALERTAS.COMUNICADO_CONTEXTO'),
+      'la página y el servidor usan los mismos largos para el título y el contexto', CFG.comunicado);
+    let d = cargar(ta);
+    ok(Array.isArray(d.comunicados) && !d.comunicados.length && !hojaCom(), 'sin comunicados, los asesores reciben la lista vacía y la hoja Comunicados todavía no existe', d.comunicados);
+    const sinPermiso = [ta, ts, tt].map((t) => com(t, 'publicar', { comunicado: { titulo: T1, contexto: X1 } }));
+    ok(sinPermiso.every((x) => !x.ok && x.codigo === 'PERMISO') && !hojaCom(), 'un asesor, una supervisora y Tiendas no pueden publicar comunicados', sinPermiso);
+
+    const fallasAntes = JSON.stringify(estado().avisos);
+    r = com(tw, 'publicar', { comunicado: { titulo: '  Falla   general\tde DTH ', contexto: 'Clientes de TV satelital (DTH) de todo el país pueden   estar sin señal. \r\n\r\n\r\n\r\n  Infórmale al cliente que es una falla general.  ', numero: 'F123', nodos: ['GRA01'] } });
+    const c1 = r.ok ? r.datos.comunicado : {};
+    ok(r.ok && c1.id === 'C' + hoyId + '01' && c1.estado === 'VIGENTE' && c1.titulo === T1 && c1.contexto === X1 && c1.publicadoPor.nombre === 'Ana López' && c1.editadoEn === null
+      && c1.numero === undefined && c1.nodos === undefined,
+      'Workforce publica un comunicado: solo título y contexto (el título en una línea; el contexto conserva sus párrafos), con su ID del día ' + c1.id, r);
+    const h = hojaCom();
+    const fila1 = h ? h.getRange(1, 1, 2, 10).getValues() : [[], []];
+    ok(h && h.isSheetHidden() && deAlertas(h).length === 1 && fila1[0].join('|') === 'ID|Estado|Título|Contexto|Publicado|Publicó|Actualizado|Retirado|Retiró|Datos (no editar)'
+      && fila1[1][1] === 'Vigente' && fila1[1][2] === T1 && fila1[1][5] === 'Ana López' && Object.prototype.toString.call(fila1[1][4]) === '[object Date]',
+      'la hoja Comunicados se crea sola con el primero, oculta y protegida como las demás, y se lee bien a simple vista', fila1[1] && fila1[1].slice(0, 9));
+    const pubA = cargar(ta).comunicados, pubT = cargar(tt).comunicados, pubS = cargar(ts).comunicados;
+    ok(pubA.length === 1 && Object.keys(pubA[0]).sort().join() === 'contexto,editadoEn,id,publicadoEn,publicadoPor,titulo' && pubA[0].titulo === T1 && pubA[0].contexto === X1
+      && JSON.stringify(pubA[0].publicadoPor) === '{"nombre":"Ana López"}' && JSON.stringify(pubT) === JSON.stringify(pubA) && JSON.stringify(pubS) === JSON.stringify(pubA),
+      'Concentrix, Tiendas y los supervisores lo reciben al cargar: título, contexto, cuándo y el nombre de quien lo publicó', pubA);
+    ok(!/@|historial|"u"|estado/.test(JSON.stringify(pubA)), 'sin correos ni historial');
+    const deWf = cargar(tw).comunicados;
+    ok(deWf.length === 1 && deWf[0].estado === 'VIGENTE' && deWf[0].historial.length === 1 && deWf[0].historial[0].accion === 'PUBLICADO' && deWf[0].publicadoPor.u === 'ana.lopez@claro.com.hn' && deWf[0]._fila === undefined,
+      'Workforce lo recibe completo, con su historial', deWf);
+    let e = estado();
+    const av1 = e.avisosComunicados.find((x) => x.id === c1.id);
+    ok(e.cambio.tipo === 'COMUNICADO_PUBLICADO' && e.cambio.texto === 'publicó el comunicado «' + T1 + '»' && e.cambio.por.nombre === 'Ana López' && e.version === r.datos.version,
+      'estado avisa el cambio a todas las páginas: ' + e.cambio.texto, e.cambio);
+    ok(av1 && av1.tipo === 'PUBLICADO' && av1.v === e.version && av1.titulo === T1 && av1.por === 'Ana López' && av1.en > Date.now() - 60000
+      && av1.resumen === 'Clientes de TV satelital (DTH) de todo el país pueden estar sin señal. Infórmale al cliente que es una falla general.' && !/@/.test(JSON.stringify(e.avisosComunicados)),
+      'y trae el aviso de escritorio del comunicado (título, el contexto en una línea y quién lo publicó), sin correos', e.avisosComunicados);
+    ok(JSON.stringify(e.avisos) === fallasAntes, 'aparte de los avisos de las fallas: una página abierta desde antes no lo confunde con una falla');
+
+    // Lo que no se puede guardar
+    const malos = [
+      [{ titulo: '', contexto: 'x' }, /Escribe el título y el contexto/], [{ titulo: 'x', contexto: '  \n ' }, /Escribe el título y el contexto/], [{}, /Escribe el título y el contexto/],
+      [{ titulo: 'T'.repeat(81), contexto: 'x' }, /título no puede pasar de 80/], [{ titulo: 'x', contexto: 'C'.repeat(601) }, /contexto no puede pasar de 600/]
+    ].map(([x, re]) => { const y = com(tw, 'publicar', { comunicado: x }); return !y.ok && y.codigo === 'DATOS' && re.test(y.error) && Model.faltaComunicado(Model.tituloComunicado(x.titulo), Model.contextoComunicado(x.contexto)) === y.error; });
+    ok(malos.every(Boolean) && cargar(ta).comunicados.length === 1, 'sin título, sin contexto o más largos de la cuenta no se publican, y la página lo dice con las mismas palabras', malos);
+    ok(com(tw, 'archivar', { id: c1.id }).codigo === 'DATOS' && com(tw, 'editar', { id: 'C25010199', comunicado: { titulo: 'x', contexto: 'y' } }).error === 'El comunicado ya no existe.',
+      'una operación que no existe o un comunicado que no existe se rechazan');
+    const limites = com(tw, 'publicar', { comunicado: { titulo: 'T'.repeat(80), contexto: 'C'.repeat(600) } });
+    ok(limites.ok && limites.datos.comunicado.titulo.length === 80 && limites.datos.comunicado.contexto.length === 600, 'con 80 y 600 caracteres justos sí', limites.ok || limites);
+    com(tw, 'retirar', { id: limites.datos.comunicado.id });
+
+    // El mismo dos veces: dos personas publicando lo mismo, o un doble clic
+    r = com(tj, 'publicar', { comunicado: { titulo: ' FALLA  general de dth', contexto: 'Otra redacción' } });
+    ok(!r.ok && r.codigo === 'DUPLICADA' && r.error === 'Ya hay un comunicado vigente con ese título, que publicó Ana López. Edita ese comunicado, o retíralo antes de publicar otro igual.'
+      && cargar(ta).comunicados.length === 1, 'otro comunicado vigente con el mismo título (sin fijarse en mayúsculas ni espacios) no entra, y dice quién publicó el que ya está', r);
+
+    // Lo que escribe una persona nunca se toma por fórmula ni por número
+    r = com(tj, 'publicar', { comunicado: { titulo: '=1+1', contexto: '00123' } });
+    const cF = r.ok ? r.datos.comunicado : {};
+    const filaF = h.getRange(h.getLastRow(), 1, 1, 4).getValues()[0];
+    ok(r.ok && cF.id === 'C' + hoyId + '03' && filaF[2] === '=1+1' && filaF[3] === '00123' && cargar(ta).comunicados.some((x) => x.titulo === '=1+1' && x.contexto === '00123') && cF.publicadoPor.nombre === 'Mario Rivera',
+      'Jefatura también publica; un título que empieza con = o un contexto de solo dígitos quedan como texto en la hoja', [r.ok || r, filaF]);
+    ok(cargar(ta).comunicados.map((x) => x.id).join() === cF.id + ',' + c1.id, 'los vigentes llegan del más nuevo al más viejo', cargar(ta).comunicados.map((x) => x.id));
+
+    // Editar: no avisa de nuevo, pero el aviso que falta por salir lleva el texto corregido
+    const largo = 'Algunos canales de TV se ven en negro o sin audio en todo el país, tanto en HFC como en GPON. No es una falla del nodo ni del equipo del cliente. El área técnica ya trabaja en la solución y todavía no hay hora estimada.';
+    r = com(tj, 'editar', { id: c1.id, comunicado: { contexto: largo } });
+    const c1e = r.ok ? r.datos.comunicado : {};
+    ok(r.ok && c1e.titulo === T1 && c1e.contexto === largo && c1e.editadoEn >= c1.publicadoEn && c1e.editadoPor.nombre === 'Mario Rivera' && c1e.publicadoPor.nombre === 'Ana López'
+      && c1e.historial.length === 2 && c1e.historial[1].accion === 'EDITADO' && c1e.historial[1].detalle === 'Cambió el contexto',
+      'editar el contexto conserva el título y a quien lo publicó, y anota quién lo cambió y qué', c1e.historial);
+    e = estado();
+    const av1e = e.avisosComunicados.find((x) => x.id === c1.id);
+    ok(e.cambio.tipo === 'COMUNICADO_EDITADO' && e.cambio.texto === 'actualizó el comunicado «' + T1 + '»' && av1e.v === av1.v && av1e.tipo === 'PUBLICADO' && av1e.en === av1.en
+      && av1e.resumen.length <= 160 && /…$/.test(av1e.resumen) && largo.indexOf(av1e.resumen.slice(0, -1)) === 0 && /[a-záéíóúñ]$/i.test(av1e.resumen.slice(0, -1))
+      && av1e.resumen === Model.resumenComunicado(largo),
+      'al editarlo no se avisa de nuevo (el aviso conserva su versión), pero lleva el texto nuevo: un contexto largo se corta en una palabra, con puntos suspensivos', av1e);
+    const pubE = cargar(ta).comunicados.find((x) => x.id === c1.id);
+    ok(pubE.contexto === largo && pubE.editadoEn === c1e.editadoEn, 'los asesores reciben el texto nuevo y cuándo se actualizó', pubE);
+    r = com(tw, 'editar', { id: c1.id, comunicado: { titulo: 'Falla general de DTH y de canales' } });
+    ok(r.ok && r.datos.comunicado.contexto === largo && r.datos.comunicado.historial[2].detalle === 'Cambió el título' && estado().avisosComunicados.find((x) => x.id === c1.id).titulo === 'Falla general de DTH y de canales',
+      'cambiar solo el título conserva el contexto', r.ok || r);
+    r = com(tw, 'editar', { id: c1.id, comunicado: { titulo: 'Falla general de DTH y de canales', contexto: largo } });
+    ok(!r.ok && r.codigo === 'DATOS' && /No hay cambios/.test(r.error), 'guardar sin haber cambiado nada no hace nada', r);
+    r = com(tw, 'editar', { id: c1.id, comunicado: { titulo: '=1+1' } });
+    ok(!r.ok && r.codigo === 'DUPLICADA', 'al editar tampoco se puede dejar el título igual al de otro comunicado vigente', r);
+    com(tw, 'editar', { id: c1.id, comunicado: { titulo: T1 } });
+
+    // Retirar: los asesores dejan de verlo; Workforce lo conserva 30 días
+    const vAntes = estado().version;
+    r = com(tw, 'retirar', { id: cF.id });
+    ok(r.ok && r.datos.comunicado.estado === 'RETIRADO' && r.datos.comunicado.retiradoPor.nombre === 'Ana López' && r.datos.version === vAntes + 1
+      && cargar(ta).comunicados.map((x) => x.id).join() === c1.id, 'al retirarlo, los asesores dejan de recibirlo de inmediato', r.ok || r);
+    e = estado();
+    const avR = e.avisosComunicados.filter((x) => x.id === cF.id);
+    ok(avR.length === 1 && avR[0].tipo === 'RETIRADO' && avR[0].v === e.version && avR[0].titulo === '=1+1' && avR[0].por === 'Ana López' && avR[0].resumen === undefined
+      && e.cambio.texto === 'retiró el comunicado «=1+1»', 'su aviso cambia a retirado (el de publicado ya no sale)', avR);
+    ok(com(tj, 'retirar', { id: cF.id }).error === 'Otra persona ya retiró este comunicado.' && com(tj, 'editar', { id: cF.id, comunicado: { contexto: 'x' } }).error === 'Otra persona ya retiró este comunicado.',
+      'no se puede retirar dos veces ni editar uno retirado');
+    const wfR = cargar(tw).comunicados;
+    ok(wfR.length === 3 && wfR.filter((x) => x.estado === 'RETIRADO').length === 2 && wfR.find((x) => x.id === cF.id).historial.slice(-1)[0].accion === 'RETIRADO',
+      'Workforce sigue viendo los retirados, con quién los retiró', wfR.map((x) => x.id + ':' + x.estado));
+    r = com(tw, 'publicar', { comunicado: { titulo: '=1+1', contexto: 'Otra vez' } });
+    ok(r.ok && r.datos.comunicado.id === 'C' + hoyId + '04', 'retirado el anterior, se puede publicar otro con el mismo título', r.ok || r);
+    com(tw, 'retirar', { id: r.datos.comunicado.id });
+
+    // Tope de vigentes y avisos guardados
+    const ids = [];
+    for (let i = 2; i <= 10; i++) { const y = com(tw, 'publicar', { comunicado: { titulo: 'Aviso de prueba ' + i, contexto: 'Contexto ' + i } }); if (y.ok) ids.push(y.datos.comunicado.id); }
+    r = com(tw, 'publicar', { comunicado: { titulo: 'Aviso de prueba 11', contexto: 'Contexto 11' } });
+    ok(ids.length === 9 && cargar(ta).comunicados.length === 10 && !r.ok && r.codigo === 'DATOS' && /Ya hay 10 comunicados vigentes/.test(r.error), 'como mucho 10 vigentes a la vez: el siguiente pide retirar alguno', r);
+    e = estado();
+    ok(e.avisosComunicados.length === 4 && new Set(e.avisosComunicados.map((x) => x.id)).size === 4 && e.avisosComunicados.map((x) => x.id).join() === ids.slice(-4).join()
+      && JSON.stringify(e.avisos) === fallasAntes, 'estado guarda los últimos 4 avisos de comunicados, uno por comunicado, y no toca los de las fallas', e.avisosComunicados.map((x) => x.id + ':' + x.tipo));
+    ids.forEach((id) => com(tw, 'retirar', { id }));
+    ok(cargar(ta).comunicados.map((x) => x.id).join() === c1.id, 'retirados los de prueba, queda el vigente');
+
+    // Apps Script no guarda propiedades de más de 9 KB: con los avisos más largos posibles, "estado" queda lejos de ese tope
+    const largos = [];
+    for (let i = 1; i <= 4; i++) { const y = com(tw, 'publicar', { comunicado: { titulo: 'ñ'.repeat(79) + i, contexto: 'ñ'.repeat(600) } }); if (y.ok) largos.push(y.datos.comunicado.id); }
+    const pesoEstado = Buffer.byteLength(g2.E.props.get('ESTADO'));
+    e = estado();
+    ok(largos.length === 4 && e.avisosComunicados.length === 4 && e.avisosComunicados.every((x) => x.titulo.length === 80 && x.resumen.length === 160) && pesoEstado < 6000,
+      'con 4 comunicados del largo máximo, escritos con letras que pesan el doble, lo que guarda "estado" sigue lejos del tope de 9 KB de Apps Script (' + pesoEstado + ' bytes)', pesoEstado);
+    largos.forEach((id) => com(tw, 'retirar', { id }));
+    ok(cargar(ta).comunicados.map((x) => x.id).join() === c1.id && Buffer.byteLength(g2.E.props.get('ESTADO')) < pesoEstado, 'y al retirarlos, sus avisos ya no llevan el contexto');
+
+    // A los 30 días de retirado, Workforce ya no lo recibe; el vigente sigue hasta que alguien lo retire
+    g2.E.ahora = Date.now() + 31 * U.DIA;
+    const tw31 = entrar2('w'), ta31 = entrar2('a1');
+    const en31 = cargar(tw31).comunicados;
+    ok(en31.length === 1 && en31[0].id === c1.id && en31[0].estado === 'VIGENTE' && cargar(ta31).comunicados.length === 1,
+      'a los 31 días, Workforce ya no recibe los retirados; el vigente sigue ahí hasta que alguien lo retire', en31.map((x) => x.id + ':' + x.estado));
+    g2.E.ahora = null;
+
+    // Una hoja Comunicados dañada nunca deja a nadie sin entrar
+    const filaC1 = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues().findIndex((x) => x[0] === c1.id) + 2;
+    h.getRange(filaC1, 10).setValue('esto no es JSON'); g2.cache.remove('comunicados');
+    const leido = cargar(ta).comunicados;
+    ok(leido.length === 1 && leido[0].id === c1.id && leido[0].titulo === T1 && leido[0].contexto === largo, 'si la columna Datos de una fila se daña, el comunicado se lee de las columnas a la vista', leido);
+    h.deleteColumns(9, 2); g2.cache.remove('comunicados');
+    const rota = g2.post({ accion: 'cargar', token: ta, datos: { baseVersion: -1 } }), rotaW = g2.post({ accion: 'cargar', token: tw, datos: { baseVersion: -1 } });
+    ok(rota.ok && Array.isArray(rota.datos.fallas) && rota.datos.comunicados.length === 0 && rotaW.ok && rotaW.datos.comunicados.length === 0 && Array.isArray(rotaW.datos.fallas),
+      'y si la hoja Comunicados no se puede leer, la página abre igual, con sus fallas y sin comunicados', [rota.ok, rotaW.ok]);
+
+    // La página: las mismas reglas que el servidor
+    const textos = [['  Falla   general\tde DTH ', ' uno \r\n\r\n\r\n dos  tres \n'], ['Título\ncon salto', 'a  b\r\nc\td'], ['x', 'línea 1\n\n\n\n\nlínea 2\n\n'], ['Señal: 100%', '']];
+    const iguales = textos.map(([t, x]) => {
+      let s; try { s = g2.ejecutar('validarComunicado_(' + JSON.stringify({ titulo: t, contexto: x || 'y' }) + ')'); } catch (err) { s = null; }
+      return s && s.titulo === Model.tituloComunicado(t) && s.contexto === Model.contextoComunicado(x || 'y');
+    });
+    ok(iguales.every(Boolean) && Model.tituloComunicado('  Falla   general\tde DTH ') === T1 && Model.contextoComunicado(' uno \r\n\r\n\r\n dos  tres \n') === 'uno\n\ndos tres',
+      'la página limpia el título y el contexto igual que el servidor (así el contador de caracteres coincide)', iguales);
+    ok(Model.resumenComunicado('Corto.') === 'Corto.' && Model.resumenComunicado(X1) === g2.ejecutar('resumenComunicado_(' + JSON.stringify(X1) + ')')
+      && Model.resumenComunicado('a'.repeat(300)).length === 160, 'y resume el contexto para el aviso igual que el servidor');
+    const MIN = U.MIN, t0c = new Date(2026, 10, 12, 8, 0, 0).getTime();
+    const pub = (id, min, extra) => Object.assign({ id, titulo: 'T ' + id, contexto: 'x', publicadoEn: t0c - min * MIN, editadoEn: null }, extra || {});
+    ok(Model.marcaComunicado(pub('a', 3), t0c) === 'NUEVO' && Model.marcaComunicado(pub('a', 29), t0c) === 'NUEVO' && Model.marcaComunicado(pub('a', 31), t0c) === ''
+      && Model.marcaComunicado(pub('a', 200, { editadoEn: t0c - 5 * MIN }), t0c) === 'ACTUALIZADO' && Model.marcaComunicado(pub('a', 10, { editadoEn: t0c - 2 * MIN }), t0c) === 'ACTUALIZADO'
+      && Model.marcaComunicado(pub('a', 200, { editadoEn: t0c - 40 * MIN }), t0c) === '' && CFG.comunicado.minutosNuevo === 30,
+      'la tarjeta se marca Nuevo los primeros 30 minutos y Actualizado los 30 minutos después de un cambio');
+    const mezcla = [pub('v1', 50), pub('r1', 300, { estado: 'RETIRADO', retiradoEn: t0c - 100 * MIN }), pub('v2', 5, { estado: 'VIGENTE' }), null, pub('r2', 400, { estado: 'RETIRADO', retiradoEn: t0c - 20 * MIN })];
+    ok(Model.comunicadosVigentes(mezcla).map((x) => x.id).join() === 'v2,v1' && Model.comunicadosRetirados(mezcla).map((x) => x.id).join() === 'r2,r1'
+      && !Model.comunicadosVigentes(undefined).length && !Model.comunicadosVigentes(null).length,
+      'los vigentes van del más nuevo al más viejo (los que llegan sin estado son vigentes) y los retirados, el último retirado primero; un servidor de antes, que no manda comunicados, no rompe nada');
+    const conT = [pub('v1', 50, { titulo: 'Falla general de DTH' }), pub('r1', 300, { titulo: 'Corte de energía', estado: 'RETIRADO' })];
+    ok(Model.comunicadoIgual(conT, ' FALLA  general de dth ', null).id === 'v1' && Model.comunicadoIgual(conT, 'Falla general de DTH', 'v1') === null
+      && Model.comunicadoIgual(conT, 'corte de energia', null) === null && Model.comunicadoIgual(conT, 'Otro', null) === null,
+      'la página reconoce un título repetido entre los vigentes (sin tildes ni mayúsculas), no contra sí mismo ni contra los retirados');
+    const hoyLocal = String(new Date().getFullYear()).slice(2) + String(new Date().getMonth() + 1).padStart(2, '0') + String(new Date().getDate()).padStart(2, '0');
+    ok(Model.nuevoIdComunicado([], Date.now()) === 'C' + hoyLocal + '01' && Model.nuevoIdComunicado([{ id: 'C' + hoyLocal + '07' }, { id: 'C25010109' }], Date.now()) === 'C' + hoyLocal + '08'
+      && g2.ejecutar("nuevoIdComunicado_([{ id: 'C" + hoyId + "07' }, { id: 'C25010109' }], Date.now())") === 'C' + hoyId + '08', 'el ID sigue el número del día, en la página (demostración) y en el servidor');
+    const genDemo = Demo.generar(Date.now()), ixDemo = Model.indexar(genDemo.base);
+    const escDemo = Demo.escenario(ixDemo, Model.cargarCatalogo(Model.catalogo(ixDemo)), genDemo.nodos, Date.now());
+    ok(Model.comunicadosVigentes(escDemo.comunicados).length === 1 && Model.comunicadosRetirados(escDemo.comunicados).length === 1 && new Set(escDemo.comunicados.map((x) => x.id)).size === 2
+      && escDemo.comunicados.every((x) => /^C\d{8}$/.test(x.id) && x.titulo && x.contexto && !Model.faltaComunicado(x.titulo, x.contexto) && x.historial.length),
+      'la demostración trae un comunicado vigente y uno retirado de ejemplo', escDemo.comunicados.map((x) => x.id + ':' + x.estado));
+  }
+
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);
   process.exit(fallos ? 1 : 0);

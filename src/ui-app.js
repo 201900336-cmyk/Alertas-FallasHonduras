@@ -410,7 +410,7 @@ function PuertaAvisos() {
     setIntento(true);
     if ((await Avisos.activar()) === 'granted') listo(); else A.reportarAvisos();
   }
-  const que = 'cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva' + (veAlertas() ? ', y cuando haya una posible falla' : '');
+  const que = 'cuando ' + CONFIG.equipo + ' publique una falla o un comunicado y cuando la falla se resuelva' + (veAlertas() ? ', y cuando haya una posible falla' : '');
   return html`<section class="puerta-avisos" aria-labelledby="puerta-titulo">
     <div class="puerta-ico"><${Ico} n="campana" s=${30} /></div>
     ${p === 'denied' ? html`

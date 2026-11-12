@@ -37,6 +37,8 @@
   --resuelta: #f2a50c; --resuelta-ink: #201600; --resuelta-soft: #fdf2d9; --resuelta-text: #8a5800;
   --ok: #12945a;      --ok-ink: #ffffff;    --ok-soft: #e2f3ea;    --ok-text: #0b6b40;
   --nodo-x: #5c6a7c;  --nodo-x-ink: #ffffff; --nodo-x-soft: #e8ecf1; --nodo-x-text: #45525f;
+  /* Comunicados (avisos informativos): violeta, que no se parece a ningún color que ya signifique algo */
+  --info: #6f42d3;    --info-soft: #e7defb; --info-text: #5630ad;
 
   --hfc: #c46a24;
   --gpon: #2a78d6;
@@ -64,6 +66,7 @@
     --resuelta: #f5b324; --resuelta-soft: #382a10; --resuelta-text: #f7c460;
     --ok: #1aa569; --ok-soft: #12301f; --ok-text: #5ed49b;
     --nodo-x: #66768b; --nodo-x-soft: #232b35; --nodo-x-text: #aab6c4;
+    --info: #9b7cf0; --info-soft: #33295a; --info-text: #c8b8ff;
     --hfc: #cb7535; --gpon: #4a90e8;
     --chart-ink: #aeb8c5; --chart-rest: #3a434f; --grid: #232a33; --axis: #3a434f;
     --seq-0: #1f252d; --seq-1: #45222a; --seq-2: #6b2832; --seq-3: #9a2f3a; --seq-4: #d23f4a; --seq-5: #ff7f88;
@@ -79,6 +82,7 @@
   --resuelta: #f5b324; --resuelta-soft: #382a10; --resuelta-text: #f7c460;
   --ok: #1aa569; --ok-soft: #12301f; --ok-text: #5ed49b;
   --nodo-x: #66768b; --nodo-x-soft: #232b35; --nodo-x-text: #aab6c4;
+  --info: #9b7cf0; --info-soft: #33295a; --info-text: #c8b8ff;
   --hfc: #cb7535; --gpon: #4a90e8;
   --chart-ink: #aeb8c5; --chart-rest: #3a434f; --grid: #232a33; --axis: #3a434f;
   --seq-0: #1f252d; --seq-1: #45222a; --seq-2: #6b2832; --seq-3: #9a2f3a; --seq-4: #d23f4a; --seq-5: #ff7f88;
@@ -1288,6 +1292,72 @@ table.conex-tabla { min-width: 680px; }
 .tostada { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 12px; background: var(--ink); color: var(--surface); font-size: 14px; font-weight: 550; box-shadow: var(--pop); transition: transform 220ms var(--ease-out), opacity 220ms ease; }
 @starting-style { .tostada { transform: translateY(10px); opacity: 0; } }
 
+/* ---------- Comunicados: avisos informativos que no son una falla de nodo ----------
+   La tarjeta tiene la forma de la de una falla, pero en violeta y con la etiqueta "Informativo". */
+.com-item {
+  position: relative; margin-bottom: 8px; border-radius: 12px;
+  background: color-mix(in srgb, var(--info-soft) 38%, var(--surface)); border: 1px solid color-mix(in srgb, var(--info) 24%, var(--surface));
+  transition: border-color 150ms ease;
+}
+.com-item::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--info); }
+.com-item[data-abierto="true"] { border-color: color-mix(in srgb, var(--info) 40%, var(--surface)); }
+.com-item:has(button.com-item-cab:hover) { border-color: color-mix(in srgb, var(--info) 40%, var(--surface)); }
+.com-item-cab { display: block; width: 100%; padding: 12px 12px 12px 16px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; }
+button.com-item-cab { cursor: pointer; }
+.com-item[data-abierto="true"] .com-item-cab { padding-bottom: 0; border-radius: 12px 12px 0 0; }
+.com-cab { display: flex; align-items: center; gap: 8px; }
+.com-etiqueta { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 7px; background: var(--info-soft); color: var(--info-text); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.com-marca { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--info-text); white-space: nowrap; }
+.com-marca i { width: 7px; height: 7px; border-radius: 50%; background: var(--info); }
+.com-titulo { margin-top: 8px; font-size: 14px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.com-contexto {
+  margin-top: 4px; font-size: 13px; line-height: 1.4; color: var(--ink-2); white-space: pre-line; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
+}
+.com-contexto.completo { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.com-ver { display: inline-block; margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.com-meta { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); }
+.com-det { margin: 0 12px 0 16px; padding: 0 0 12px; }
+.com-menos { margin-top: 4px; font-size: 12.5px; }
+.com-pie { margin-top: 10px; padding-top: 10px; border-top: 1px dashed color-mix(in srgb, var(--info) 40%, var(--surface)); font-size: 12.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
+/* En pantallas anchas los comunicados van en el panel; en angostas, arriba de la consulta (ver Adaptación) */
+.com-arriba { display: none; }
+.com-arriba h4 { margin: 0 4px 8px; font-size: 12.5px; color: var(--ink-3); font-weight: 650; display: flex; justify-content: space-between; }
+.marca-estado[data-s="COMUNICADO"] { background: var(--info-soft); color: var(--info-text); }
+
+/* Comunicados (Workforce): publicar, vigentes y retirados */
+.com-form { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
+.com-form > .panel { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 16px; }
+.com-form-cab { display: flex; align-items: center; gap: 12px; }
+.com-form-cab .ico { width: 28px; height: 28px; border-radius: 50%; background: var(--info-soft); color: var(--info-text); display: grid; place-items: center; flex: none; }
+.com-form-cab h3 { margin: 0; font-size: 16px; font-weight: 750; }
+.com-form-cab p { margin: 0; font-size: 13px; color: var(--ink-3); }
+.campo > .campo-cab { display: flex; justify-content: space-between; gap: 12px; }
+.campo-cab .cuenta { font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.com-form .nota-linea { margin-top: 0; }
+.com-lado { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.com-previa .com-item { width: 318px; max-width: 100%; margin-bottom: 0; }
+.com-nota { margin: -4px 2px 0; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.com-subtitulo { margin: 28px 0 12px; font-size: 16px; font-weight: 750; display: flex; align-items: center; gap: 8px; }
+.com-subtitulo .n { font-size: 12px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.com-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; position: relative; overflow: hidden; }
+.com-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--info); }
+.com-card-cab { display: flex; gap: 12px; align-items: flex-start; }
+.com-card-cab .tipo { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 650; color: var(--info-text); }
+.com-card-cab h3 { margin: 0; font-size: 18px; font-weight: 800; font-stretch: 112%; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.com-card-cab .der { margin-left: auto; }
+.com-card .texto { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); white-space: pre-line; overflow-wrap: anywhere; }
+.com-card .meta { margin: 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.com-card .meta dt { color: var(--ink-3); }
+.com-card .meta dd { margin: 0; color: var(--ink); font-weight: 550; }
+.com-card .acc { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.com-retirados td:first-child { min-width: 240px; max-width: 520px; }
+.com-corto { margin-top: 2px; font-size: 12.5px; color: var(--ink-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.com-resumen { align-items: flex-start; }
+.com-resumen > div { min-width: 0; }
+.com-resumen b { color: var(--ink); overflow-wrap: anywhere; }
+.com-resumen p { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; max-height: 180px; overflow: auto; }
+
 /* ---------- Adaptación ---------- */
 @media (max-width: 1180px) {
   .nav a span.txt { display: none; }
@@ -1297,6 +1367,11 @@ table.conex-tabla { min-width: 680px; }
 @media (max-width: 1240px) {
   .consulta { grid-template-columns: minmax(0, 1fr); }
   .riel { position: static; max-height: none; }
+  /* El panel de fallas queda abajo: los comunicados suben al principio de la consulta, con el contexto más corto */
+  .com-arriba { display: block; margin-bottom: 14px; }
+  .com-arriba .com-contexto:not(.completo) { -webkit-line-clamp: 2; line-clamp: 2; }
+  .riel .com-seccion { display: none; }
+  .com-form { grid-template-columns: minmax(0, 1fr); }
   .form-falla { grid-template-columns: minmax(0, 1fr); }
   .impacto { position: static; }
   .c-8, .c-7, .c-6, .c-5, .c-4 { grid-column: span 12; }
@@ -1848,6 +1923,11 @@ const CONFIG = {
   // Cliente reincidente: tantas fallas en su nodo en estos días (desde que es cliente).
   reincidente: { fallas: 3, dias: 90 },
 
+  // Comunicados: avisos informativos de Workforce que no son una falla de nodo (por ejemplo, una falla general
+  // de DTH o de canales). Solo llevan título y contexto, con estos largos como mucho (los mismos que revisa el
+  // servidor). Recién publicado o recién actualizado, la tarjeta lleva su marca durante estos minutos.
+  comunicado: { titulo: 80, contexto: 600, minutosNuevo: 30 },
+
   // Posible falla: un nodo sin falla publicada al que en los últimos 60 minutos le consultaron
   // 5 o más clientes distintos (Concentrix y Tiendas; las búsquedas de Workforce no cuentan),
   // o que 2 asesores reportaron. Con 3 o 4 clientes el nodo queda en observación.
@@ -2306,13 +2386,14 @@ const Store = (() => {
 
   async function leerTodo(opciones) {
     const sinBase = opciones && opciones.sinBase;
-    const [meta, base, baseHist, fallas] = await Promise.all(['meta', sinBase ? null : 'base', 'baseHist', 'fallas'].map((k) => (k ? leer(k) : null)));
+    const [meta, base, baseHist, fallas, comunicados] = await Promise.all(['meta', sinBase ? null : 'base', 'baseHist', 'fallas', 'comunicados'].map((k) => (k ? leer(k) : null)));
     const m = meta || { version: 0 };
     version = m.version || 0;
-    return { meta: m, base: base || null, baseHist: baseHist || [], fallas: fallas || [] };
+    return { meta: m, base: base || null, baseHist: baseHist || [], fallas: fallas || [], comunicados: comunicados || [] };
   }
   async function leerMeta() { return (await leer('meta')) || { version: 0 }; }
   async function leerFallas() { return (await leer('fallas')) || []; }
+  async function leerComunicados() { return (await leer('comunicados')) || []; }
 
   /* Guarda cambios de Workforce, sube la versión y avisa a todas las sesiones abiertas */
   async function confirmar(cambio, cambios) {
@@ -2384,7 +2465,7 @@ const Store = (() => {
   }
 
   return {
-    init, leerTodo, leerMeta, leerFallas, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
+    init, leerTodo, leerMeta, leerFallas, leerComunicados, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
     alCambiar: (fn) => { alCambiarFns.add(fn); return () => alCambiarFns.delete(fn); },
     alLog: (fn) => { alLogFns.add(fn); return () => alLogFns.delete(fn); },
     get version() { return version; },
@@ -2868,6 +2949,49 @@ const Model = (() => {
     return { tipo: 'SIN_FALLA', falla: null };
   }
   const PRIORIDAD = { FALLA: 0, RESUELTA: 1, SIN_FALLA: 2, SIN_NODO: 3 };
+
+  /* ---------- Comunicados (avisos informativos que no son una falla de nodo) ---------- */
+  /* El título y el contexto tal como los guarda el servidor (validarComunicado_): el título en una sola línea;
+     el contexto conserva los saltos de línea, como mucho con una línea en blanco seguida. */
+  const tituloComunicado = (t) => String(t == null ? '' : t).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const contextoComunicado = (t) => String(t == null ? '' : t).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ')
+    .split('\n').map((l) => l.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  /* Lo que le falta a un comunicado para poder guardarse ('' si está listo), con las mismas palabras del servidor */
+  function faltaComunicado(titulo, contexto) {
+    const L = CONFIG.comunicado;
+    if (!titulo || !contexto) return 'Escribe el título y el contexto del comunicado.';
+    if (titulo.length > L.titulo) return 'El título no puede pasar de ' + L.titulo + ' caracteres.';
+    if (contexto.length > L.contexto) return 'El contexto no puede pasar de ' + L.contexto + ' caracteres.';
+    return '';
+  }
+  /* Los vigentes (del más nuevo al más viejo) y los retirados (el último que se retiró, primero). A los asesores
+     solo les llegan los vigentes, sin estado; un servidor de antes de la 3.9 no manda ninguno. */
+  const comunicadosVigentes = (lista) => (lista || []).filter((c) => c && (c.estado || 'VIGENTE') === 'VIGENTE').sort((a, b) => b.publicadoEn - a.publicadoEn);
+  const comunicadosRetirados = (lista) => (lista || []).filter((c) => c && c.estado === 'RETIRADO').sort((a, b) => (b.retiradoEn || 0) - (a.retiradoEn || 0));
+  /* La marca de la tarjeta: recién publicado (NUEVO) o recién actualizado (ACTUALIZADO) */
+  function marcaComunicado(c, now) {
+    const lapso = CONFIG.comunicado.minutosNuevo * U.MIN;
+    if (c.editadoEn && now - c.editadoEn < lapso) return 'ACTUALIZADO';
+    return now - c.publicadoEn < lapso ? 'NUEVO' : '';
+  }
+  /* Otro comunicado vigente con el mismo título (sin fijarse en tildes, mayúsculas ni espacios), o null */
+  const claveComunicado = (t) => U.sinAcentos(t).toLowerCase().replace(/\s+/g, ' ').trim();
+  const comunicadoIgual = (lista, titulo, propioId) => comunicadosVigentes(lista).find((c) => c.id !== propioId && claveComunicado(c.titulo) === claveComunicado(titulo)) || null;
+  /* Igual que resumenComunicado_ del servidor: el contexto en una línea para el aviso de escritorio; si es largo,
+     hasta la última palabra que quepa en 160 caracteres, con puntos suspensivos */
+  function resumenComunicado(contexto) {
+    const s = String(contexto || '').replace(/\s+/g, ' ').trim();
+    if (s.length <= 160) return s;
+    const corte = s.slice(0, 159), esp = corte.lastIndexOf(' ');
+    return (esp > 100 ? corte.slice(0, esp) : corte).replace(/[\s,;:.]+$/, '') + '…';
+  }
+  /* Igual que nuevoIdComunicado_ del servidor: C + aammdd + número del día (C26111201) */
+  function nuevoIdComunicado(lista, now) {
+    const d = new Date(now);
+    const pref = 'C' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const usados = (lista || []).map((c) => String(c.id)).filter((id) => id.startsWith(pref)).map((id) => +id.slice(pref.length) || 0);
+    return pref + String((usados.length ? Math.max(...usados) : 0) + 1).padStart(2, '0');
+  }
 
   /* ---------- Mapa en vivo (inicio de la consulta) ---------- */
   const claveDep = (d) => U.sinAcentos(d).toUpperCase().replace(/\s+/g, ' ').trim();
@@ -3446,7 +3570,8 @@ const Model = (() => {
 
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
-    mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias };
+    mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias,
+    tituloComunicado, contextoComunicado, faltaComunicado, comunicadosVigentes, comunicadosRetirados, marcaComunicado, comunicadoIgual, nuevoIdComunicado, resumenComunicado };
 })();
 
 
@@ -3743,7 +3868,21 @@ const Demo = (() => {
       filas: ix.n - (3 - k) * ent(40, 90), hfc: ix.resumen.hfc, gpon: ix.resumen.gpon - (3 - k) * ent(30, 60), nodos: ix.resumen.nodos,
       nuevos: k ? ent(60, 140) : null, bajas: k ? ent(10, 40) : null, cambiosNodo: k ? ent(2, 15) : null
     }));
-    return { fallas, logs, baseHist, f1, f2 };
+    // Comunicados (avisos informativos que no son una falla de nodo): uno retirado ayer y uno vigente, de ejemplo
+    const rPub = now - 27 * H, rFin = now - 23.5 * H, cPub = now - 25 * M;
+    const comunicados = [{
+      id: Model.nuevoIdComunicado([], rPub), estado: 'RETIRADO', titulo: 'Falla general de DTH',
+      contexto: 'Clientes de TV satelital (DTH) de todo el país pueden estar sin señal. El área técnica ya trabaja en la solución. Infórmale al cliente que es una falla general.',
+      publicadoEn: rPub, publicadoPor: W[0], editadoEn: null, editadoPor: null, retiradoEn: rFin, retiradoPor: W[1],
+      historial: [hist('PUBLICADO', rPub, W[0]), hist('RETIRADO', rFin, W[1])]
+    }];
+    comunicados.push({
+      id: Model.nuevoIdComunicado(comunicados, cPub), estado: 'VIGENTE', titulo: 'Falla general de canales',
+      contexto: 'Algunos canales de TV se ven en negro o sin audio en todo el país, tanto en HFC como en GPON. No es una falla del nodo ni del equipo del cliente. El área técnica ya trabaja en la solución y todavía no hay hora estimada. Avisaremos por aquí cuando quede resuelto.',
+      publicadoEn: cPub, publicadoPor: W[2], editadoEn: null, editadoPor: null, retiradoEn: null, retiradoPor: null,
+      historial: [hist('PUBLICADO', cPub, W[2])]
+    });
+    return { fallas, logs, baseHist, comunicados, f1, f2 };
   }
 
   return { generar, escenario, WORKFORCE, ASESORES };
@@ -3892,6 +4031,7 @@ function BackendRemoto() {
     },
     reportar: (rec) => llamar('reportar', { contrato: rec.contrato, nodo: rec.nodo }),
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
+    comunicado: (op, d) => llamar('comunicado', Object.assign({ op }, d), 60000),
     alertas: () => llamar('alertas', {}),
     alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
     marcarAlerta: (nodo, reportada, a, nota) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo, a, nota }),
@@ -4101,11 +4241,20 @@ function BackendLocal() {
       const d = await Store.leerTodo({ sinBase: true });
       const ultima = d.baseHist[d.baseHist.length - 1];
       const resumen = c.ix ? Object.assign({}, c.ix.resumen, { archivo: c.base.archivo, tieneMegas: c.base.tieneMegas, en: ultima && ultima.en, por: ultima && ultima.por }) : null;
-      const r = { version: d.meta.version || 0, baseVersion: c.bv, cambio: d.meta.cambio || null, demo: !!d.meta.demo, resumen, fallas: d.fallas, cargas: d.baseHist };
+      // Comunicados, como el servidor: Workforce y Jefatura reciben los vigentes y los retirados en los últimos 30
+      // días, completos; los demás, solo los vigentes y sin historial
+      const escribe = !!ses && ['workforce', 'jefatura'].includes(ses.usuario.rol), desdeCom = Date.now() - 30 * U.DIA;
+      const comunicados = escribe ? d.comunicados.filter((x) => x.estado === 'VIGENTE' || (x.retiradoEn || 0) >= desdeCom)
+        : Model.comunicadosVigentes(d.comunicados).map((x) => ({ id: x.id, titulo: x.titulo, contexto: x.contexto, publicadoEn: x.publicadoEn,
+          publicadoPor: { nombre: (x.publicadoPor && x.publicadoPor.nombre) || '' }, editadoEn: x.editadoEn || null }));
+      const r = { version: d.meta.version || 0, baseVersion: c.bv, cambio: d.meta.cambio || null, demo: !!d.meta.demo, resumen, fallas: d.fallas, cargas: d.baseHist, comunicados };
       if (baseVersion !== c.bv) r.catalogo = c.catJson;
       return r;
     },
-    async estado() { const m = await Store.leerMeta(); return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null, avisos: m.avisos || [], ahora: Date.now() }; },
+    async estado() {
+      const m = await Store.leerMeta();
+      return { version: m.version || 0, baseVersion: m.baseVersion || 0, cambio: m.cambio || null, avisos: m.avisos || [], avisosComunicados: m.avisosComunicados || [], ahora: Date.now() };
+    },
 
     async buscar(q) {
       const c = await indice();
@@ -4191,6 +4340,62 @@ function BackendLocal() {
       }
       const version = await confirmar(tipo, texto, { fallas, meta: avisos ? { avisos } : undefined });
       return { falla: f, version };
+    },
+
+    /* Comunicados (avisos informativos que no son una falla de nodo): igual que accionComunicado_ del servidor */
+    async comunicado(op, d) {
+      const lista = await Store.leerComunicados();
+      const ahora = Date.now(), por = quien();
+      const validar = (x) => {
+        const titulo = Model.tituloComunicado(x.titulo), contexto = Model.contextoComunicado(x.contexto);
+        const falta = Model.faltaComunicado(titulo, contexto);
+        if (falta) throw errorAlertas('DATOS', falta);
+        return { titulo, contexto };
+      };
+      const libre = (titulo, propio) => {
+        const igual = Model.comunicadoIgual(lista, titulo, propio);
+        if (igual) {
+          throw errorAlertas('DUPLICADA', 'Ya hay un comunicado vigente con ese título' + (igual.publicadoPor && igual.publicadoPor.nombre ? ', que publicó ' + igual.publicadoPor.nombre : '')
+            + '. Edita ese comunicado, o retíralo antes de publicar otro igual.');
+        }
+      };
+      let c, tipo, texto;
+      if (op === 'publicar') {
+        const datos = validar(d.comunicado || {});
+        libre(datos.titulo, null);
+        if (Model.comunicadosVigentes(lista).length >= 10) throw errorAlertas('DATOS', 'Ya hay 10 comunicados vigentes. Retira alguno antes de publicar otro.');
+        c = Object.assign(datos, { id: Model.nuevoIdComunicado(lista, ahora), estado: 'VIGENTE', publicadoEn: ahora, publicadoPor: por, editadoEn: null, editadoPor: null,
+          retiradoEn: null, retiradoPor: null, historial: [{ accion: 'PUBLICADO', en: ahora, por, detalle: '' }] });
+        lista.push(c);
+        tipo = 'COMUNICADO_PUBLICADO'; texto = 'publicó el comunicado «' + c.titulo + '»';
+      } else {
+        c = lista.find((x) => x.id === d.id);
+        if (!c) throw errorAlertas('DATOS', 'El comunicado ya no existe.');
+        if (c.estado !== 'VIGENTE') throw errorAlertas('DATOS', 'Otra persona ya retiró este comunicado.');
+        if (op === 'editar') {
+          const datos = validar(Object.assign({ titulo: c.titulo, contexto: c.contexto }, d.comunicado || {}));
+          const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : ''].filter(Boolean);
+          if (!cambios.length) throw errorAlertas('DATOS', 'No hay cambios que guardar en el comunicado.');
+          libre(datos.titulo, c.id);
+          Object.assign(c, datos, { editadoEn: ahora, editadoPor: por });
+          c.historial.push({ accion: 'EDITADO', en: ahora, por, detalle: 'Cambió ' + cambios.join(' y ') });
+          tipo = 'COMUNICADO_EDITADO'; texto = 'actualizó el comunicado «' + c.titulo + '»';
+        } else if (op === 'retirar') {
+          Object.assign(c, { estado: 'RETIRADO', retiradoEn: ahora, retiradoPor: por });
+          c.historial.push({ accion: 'RETIRADO', en: ahora, por, detalle: '' });
+          tipo = 'COMUNICADO_RETIRADO'; texto = 'retiró el comunicado «' + c.titulo + '»';
+        } else throw errorAlertas('DATOS', 'Operación no válida.');
+      }
+      // Igual que el servidor: un aviso de escritorio por comunicado (publicado o retirado), los últimos 4; editarlo
+      // no avisa de nuevo, pero el aviso que todavía no salió lleva el texto corregido
+      const meta = await Store.leerMeta();
+      const v = (meta.version || 0) + 1, resumen = Model.resumenComunicado(c.contexto), antes = meta.avisosComunicados || [];
+      const avisosComunicados = tipo === 'COMUNICADO_EDITADO'
+        ? antes.map((x) => (x.id === c.id && x.tipo === 'PUBLICADO' ? Object.assign({}, x, { titulo: c.titulo, resumen }) : x))
+        : antes.filter((x) => x.id !== c.id).concat(tipo === 'COMUNICADO_RETIRADO' ? { v, id: c.id, tipo: 'RETIRADO', titulo: c.titulo, en: ahora, por: por.nombre }
+          : { v, id: c.id, tipo: 'PUBLICADO', titulo: c.titulo, resumen, en: ahora, por: por.nombre }).slice(-4);
+      const version = await confirmar(tipo, texto, { comunicados: lista, meta: { avisosComunicados } });
+      return { comunicado: c, version };
     },
 
     async alertas() {
@@ -4399,7 +4604,7 @@ function BackendLocal() {
         nuevos: comparacion ? comparacion.nuevos : null, bajas: comparacion ? comparacion.bajas : null, cambiosNodo: comparacion ? comparacion.cambiosNodo : null
       };
       const cambios = { base, baseHist: (meta.demo ? [] : d.baseHist).concat(entrada).slice(-60), meta: { baseVersion: (meta.baseVersion || 0) + 1, demo: false } };
-      if (meta.demo) { cambios.fallas = []; await Store.borrarLogs(); }
+      if (meta.demo) { cambios.fallas = []; cambios.comunicados = []; await Store.borrarLogs(); }
       const version = await confirmar('BASE_ACTUALIZADA', 'actualizó la base de clientes (' + U.n(base.filas) + ' servicios)', cambios);
       return { comparacion, version };
     },
@@ -4414,7 +4619,7 @@ function BackendLocal() {
       await Store.borrarLogs();
       await Store.agregarLogs(esc.logs);
       await Store.confirmar({ tipo: 'DEMO', texto: 'cargó los datos de demostración', por: ses ? quien() : { u: 'demo', nombre: 'Alertas' } },
-        { base, baseHist: esc.baseHist, fallas: esc.fallas, meta: { demo: true, baseVersion: (meta.baseVersion || 0) + 1 } });
+        { base, baseHist: esc.baseHist, fallas: esc.fallas, comunicados: esc.comunicados, meta: { demo: true, baseVersion: (meta.baseVersion || 0) + 1, avisosComunicados: [] } });
     },
     async borrarTodo() {
       const meta = await Store.leerMeta();
@@ -4439,6 +4644,8 @@ const G = {
   s: {
     arranque: 'cargando', mensaje: 'Conectando con Alertas…', config: null, user: null, avisoAcceso: '',
     meta: { version: 0, baseVersion: -1, demo: false }, resumen: null, cat: null, fallas: [], cargas: [], alertas: [],
+    // Comunicados: avisos informativos de Workforce que no son una falla de nodo (los asesores reciben solo los vigentes)
+    comunicados: [],
     now: Date.now(), remoto: null, ruta: 'consulta', tema: 'auto', tostadas: [], descartadas: {}, misConsultas: [],
     sinConexion: false, cargando: false,
     // Mapa en vivo: cuándo se revisó por última vez si hubo cambios, y lo último que le pasó a cada falla
@@ -4522,7 +4729,7 @@ const A = {
   // Sin avisos en esta pestaña: solo cuando el navegador los tiene bloqueados y la persona no los puede cambiar
   seguirSinAvisos() { guardarSS('alertas-sin-avisos', true); G.set({ sinAvisos: true }); A.reportarAvisos(); },
   limpiar() {
-    G.set({ user: null, cat: null, resumen: null, fallas: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
+    G.set({ user: null, cat: null, resumen: null, fallas: [], comunicados: [], cargas: [], alertas: [], misConsultas: [], remoto: null, meta: { version: 0, baseVersion: -1, demo: false },
       alertaAbierta: null, alertasNuevas: [], semillaFalla: null, pruebaAvisos: null, avisos: [], revisado: 0 });
     A.pub = { visto: null, propias: new Set() };
     guardarSS('alertas-mis-consultas', []);
@@ -4535,6 +4742,7 @@ const A = {
     const d = await Backend.cargar(G.s.cat ? G.s.meta.baseVersion : -1);
     const cambios = {
       meta: { version: d.version, baseVersion: d.baseVersion, demo: !!d.demo }, resumen: d.resumen || null, fallas: d.fallas || [],
+      comunicados: d.comunicados || [],   // un servidor de antes de la 3.9 no los manda
       cargas: d.cargas || [], remoto: null, now: Date.now(), sinConexion: false, revisado: Date.now()
     };
     if (d.catalogo !== undefined) cambios.cat = d.catalogo ? Model.cargarCatalogo(d.catalogo) : null;
@@ -4583,17 +4791,21 @@ const A = {
     // así llega el aviso de escritorio. Son pocas personas, no cargan al servidor.
     setInterval(() => { if (G.s.user && veAlertas()) A.revisarAlertas(); }, 60000);
   },
-  /* Fallas que Workforce publicó, reabrió o cerró desde la última revisión: aviso de escritorio a todos los
-     que lo activaron, una vez por cada cosa, si Alertas no está a la vista (a la vista ya sale la barra de
-     cambios). No avisa lo que hizo esta misma página, lo que ya estaba al entrar ni lo de hace más de 30 minutos. */
+  /* Fallas que Workforce publicó, reabrió o cerró desde la última revisión, y comunicados que publicó o retiró:
+     aviso de escritorio a todos los que lo activaron, una vez por cada cosa, si Alertas no está a la vista (a la
+     vista, la consulta ya los muestra). No avisa lo que hizo esta misma página, lo que ya estaba al entrar ni lo
+     de hace más de 30 minutos. */
   avisarFallas(e) {
     if (A.pub.visto == null) return;   // todavía no termina de cargar al entrar
-    const nuevas = (e.avisos || []).filter((x) => x && x.v > A.pub.visto);
-    if (!nuevas.length) return;
-    A.pub.visto = Math.max(...nuevas.map((x) => x.v));
+    const sinVer = (lista) => (lista || []).filter((x) => x && x.v > A.pub.visto);
+    const fallas = sinVer(e.avisos), comunicados = sinVer(e.avisosComunicados);
+    if (!fallas.length && !comunicados.length) return;
+    A.pub.visto = Math.max(...fallas.concat(comunicados).map((x) => x.v));
     const ahora = e.ahora || Date.now();
-    const lista = nuevas.filter((x) => !A.pub.propias.has(x.v) && ahora - x.en < 30 * U.MIN);
-    if (lista.length && Avisos.activos() && (document.hidden || !document.hasFocus())) lista.slice(-3).forEach((x) => Avisos.falla(x));
+    const vale = (x) => !A.pub.propias.has(x.v) && ahora - x.en < 30 * U.MIN;
+    if (!Avisos.activos() || !(document.hidden || !document.hasFocus())) return;
+    fallas.filter(vale).slice(-3).forEach((x) => Avisos.falla(x));
+    comunicados.filter(vale).slice(-2).forEach((x) => Avisos.comunicado(x));
   },
   // Al tocar el aviso de una falla (nueva o resuelta): la página trae las fallas al día y muestra la consulta (con sus fallas)
   verAvisoFalla() { ir('consulta'); window.scrollTo({ top: 0 }); A.recargar().catch(() => {}); },
@@ -4717,6 +4929,20 @@ const A = {
   cerrarFalla: (id, cerradaEn, nota) => A.falla('cerrar', { id, cerradaEn, nota }),
   reabrirFalla: (id) => A.falla('reabrir', { id }),
 
+  /* Comunicados: avisos informativos que no son una falla de nodo (solo título y contexto). Los publican, editan
+     y retiran Workforce y Jefatura; quedan vigentes hasta que alguien los retira. */
+  async comunicado(op, datos) {
+    const r = await Backend.comunicado(op, datos);
+    A.pub.propias.add(r.version);
+    const salto = r.version > G.s.meta.version + 1;
+    G.set((s) => ({ comunicados: s.comunicados.filter((c) => c.id !== r.comunicado.id).concat(r.comunicado), meta: Object.assign({}, s.meta, { version: r.version }) }));
+    if (salto) A.recargar().catch(() => {});
+    return r.comunicado;
+  },
+  publicarComunicado: (c) => A.comunicado('publicar', { comunicado: c }),
+  editarComunicado: (id, c) => A.comunicado('editar', { id, comunicado: c }),
+  retirarComunicado: (id) => A.comunicado('retirar', { id }),
+
   async subirBase(base, alProgreso) {
     alProgreso({ fase: 'preparando' });
     await new Promise((r) => setTimeout(r, 20));
@@ -4837,6 +5063,13 @@ const Avisos = {
     // Etiqueta por falla, por tipo y por versión: cerrarla otra vez o reabrirla otra vez también sale en pantalla
     Avisos.crear(titulo, cuerpo, 'alertas-falla-' + x.id + '-' + x.tipo + '-' + x.v, A.verAvisoFalla);
   },
+  /* Un comunicado que Workforce acaba de publicar o de retirar (lo que trae "estado" en avisosComunicados) */
+  comunicado(x) {
+    const [titulo, cuerpo] = x.tipo === 'RETIRADO'
+      ? ['Comunicado retirado: ' + x.titulo, 'Ya no está vigente. Lo retiró ' + x.por + '.']
+      : ['Comunicado: ' + x.titulo, (x.resumen ? (/…$/.test(x.resumen) ? x.resumen : U.conPunto(x.resumen)) + ' ' : '') + 'Lo publicó ' + x.por + '. Clic para verlo.'];
+    Avisos.crear(titulo, cuerpo, 'alertas-comunicado-' + x.id + '-' + x.tipo + '-' + x.v, A.verAvisoFalla);
+  },
   /* Desde el menú o el panel: para revisar que en esta PC se vean. Manda el aviso y abre la ayuda, que dice dónde
      sale y qué revisar si no sale (Windows puede tener apagadas las notificaciones o "No molestar" encendido). */
   ultimaPrueba: null,
@@ -4850,7 +5083,7 @@ const Avisos = {
   },
   prueba() {
     const um = umbralAlertas();
-    return Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva'
+    return Avisos.crear('Avisos de Alertas activados', 'Te avisaremos aquí cuando ' + CONFIG.equipo + ' publique una falla o un comunicado y cuando la falla se resuelva'
       + (veAlertas() ? ', y cuando ' + um.clientes + ' clientes distintos del mismo nodo consulten en ' + um.minutos + ' minutos' : '') + '.', 'alertas-prueba-' + Date.now());
   }
 };
@@ -4902,6 +5135,8 @@ const ICONOS = {
   abajo: '<path d="m6 9 6 6 6-6"/>',
   reporte: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>',
   campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
+  // Megáfono: los comunicados informativos (avisos que no son una falla de nodo)
+  megafono: '<path d="M3.5 10.2v3.6l3.6 1 8.4 3.9V5.3L7.1 9.2l-3.6 1z"/><path d="M8 15.2l.7 3.3a1.6 1.6 0 0 0 3.1-.7l-.4-1.3"/><path d="M18.3 9.3a4 4 0 0 1 0 5.4"/><path d="M20.6 6.9a7.4 7.4 0 0 1 0 10.2"/>',
   correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',
   ojo: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
@@ -5015,6 +5250,7 @@ const PLAY = { '3P': 'Triple play', '2P': 'Doble play', '1P': 'Un servicio' };
 function VistaConsulta() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
+  const comunicados = useMemo(() => Model.comunicadosVigentes(s.comunicados), [s.comunicados]);
   const [q, setQ] = useState('');
   const [res, setRes] = useState(null);
   const [sel, setSel] = useState(0);
@@ -5084,6 +5320,7 @@ function VistaConsulta() {
 
   return html`<div class="consulta">
     <section aria-label="Consulta de cliente">
+      ${comunicados.length > 0 && html`<${ComunicadosArriba} lista=${comunicados} now=${s.now} />`}
       ${veAlertas() && !esWorkforce() && html`<${PosiblesFallas} mf=${mf} />`}
       <form class="buscador" role="search" onSubmit=${(e) => { e.preventDefault(); consultar(q); }}>
         <label class="buscador-caja">
@@ -5111,7 +5348,7 @@ function VistaConsulta() {
         : buscando ? html`<div class="resultado"><div class="panel buscando"><span class="punto vivo"></span>Buscando en la base de clientes…</div></div>`
         : html`<${InicioAsesor} mf=${mf} onAbrir=${(c) => { setQ(String(c)); consultar(String(c)); }} />`}
     </section>
-    <${RielFallas} mf=${mf} now=${s.now} />
+    <${RielFallas} mf=${mf} now=${s.now} comunicados=${comunicados} />
   </div>`;
 }
 
@@ -5593,14 +5830,75 @@ function MapaVivo({ mf }) {
   </section>`;
 }
 
-/* ---------- Riel con las fallas activas y recientes ---------- */
-function RielFallas({ mf, now }) {
+/* ---------- Comunicados: avisos informativos de Workforce que no son una falla de nodo ----------
+   Solo título y contexto (por ejemplo, una falla general de DTH o de canales). Van arriba de las fallas, en violeta
+   y con la etiqueta "Informativo", hasta que Workforce los retira. No cambian el resultado de ninguna consulta. */
+const cuandoComunicado = (verbo, ts, now) => (U.esHoy(ts, now)
+  ? verbo + ' a ' + U.las(ts) + ', ' + (now - ts < U.MIN ? 'ahora' : U.hace(ts, now)) : verbo + ' ' + U.cuando(ts, now));
+/* Un comunicado en el panel. El contexto se corta a 4 líneas con "Ver todo"; al tocarlo se abre completo (ahí el
+   texto se puede seleccionar y copiar) y dice quién lo publicó. donde: el panel o la parte de arriba de la consulta
+   (el mismo comunicado sale en los dos sitios y cada uno necesita su propio id). previa: la vista previa de
+   Workforce, que no se abre. */
+function ComunicadoItem({ c, now, donde, previa }) {
+  const [abierto, setAbierto] = useState(false);
+  const [cortado, setCortado] = useState(false);
+  const ref = useRef(null);
+  // ¿El contexto no cabe en las líneas que se ven? Se mide en pantalla y se vuelve a medir si cambia el ancho
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const medir = () => setCortado(el.scrollHeight > el.clientHeight + 1);
+    medir();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [c.contexto, abierto]);
+  const marca = Model.marcaComunicado(c, now);
+  const idDet = 'com-det-' + (donde || 'panel') + '-' + c.id;
+  const cabeza = html`<div class="com-cab"><span class="com-etiqueta"><${Ico} n="megafono" s=${15} />Informativo</span>
+      ${marca && html`<span class="com-marca"><i></i>${marca === 'NUEVO' ? 'Nuevo' : 'Actualizado'}</span>`}</div>
+    <div class="com-titulo">${c.titulo}</div>`;
+  const resumen = html`<div class="com-contexto" ref=${ref}>${c.contexto}</div>
+    ${cortado && html`<span class="com-ver">Ver todo</span>`}
+    <div class="com-meta">${c.editadoEn ? cuandoComunicado('Actualizado', c.editadoEn, now) : cuandoComunicado('Publicado', c.publicadoEn, now)}</div>`;
+  if (previa) return html`<div class="com-item"><div class="com-item-cab">${cabeza}${resumen}</div></div>`;
+  return html`<div class="com-item" data-abierto=${abierto}>
+    <button type="button" class="com-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
+      ${cabeza}${!abierto && resumen}
+    </button>
+    ${abierto && html`<div class="com-det" id=${idDet}>
+      <div class="com-contexto completo">${c.contexto}</div>
+      <div><button type="button" class="enlace com-menos" onClick=${() => setAbierto(false)}>Ver menos</button></div>
+      <div class="com-pie">
+        <span>${cuandoComunicado('Publicado', c.publicadoEn, now)}</span>
+        ${c.editadoEn && html`<span>${cuandoComunicado('Actualizado', c.editadoEn, now)}</span>`}
+        ${c.publicadoPor && c.publicadoPor.nombre && html`<span>Por ${c.publicadoPor.nombre}</span>`}
+      </div>
+    </div>`}
+  </div>`;
+}
+/* En una pantalla angosta el panel de fallas queda debajo de la consulta: ahí los comunicados suben al principio
+   (con el contexto a 2 líneas), para que nadie tenga que bajar a buscarlos. En pantallas anchas esto no se ve. */
+function ComunicadosArriba({ lista, now }) {
+  return html`<div class="com-arriba" role="region" aria-label="Comunicados">
+    <h4><span>Comunicados</span><span>${lista.length}</span></h4>
+    ${lista.map((c) => html`<${ComunicadoItem} c=${c} now=${now} donde="arriba" key=${c.id} />`)}
+  </div>`;
+}
+
+/* ---------- Riel con los comunicados y las fallas activas y recientes ---------- */
+function RielFallas({ mf, now, comunicados }) {
   const s = useG();
   // A quien publica la base: las colonias salen cuando se vuelve a publicar una base de antes de que se guardaran
   const faltanColonias = s.cat && !s.cat.conColonias && puede('base') && mf.activas.length + mf.resueltas.length > 0;
   return html`<aside class="panel riel" aria-label="Fallas en la red">
     <div class="panel-cab"><h2>Fallas en la red</h2><span class="der sub">${mf.activas.length ? U.n(mf.clientesActivos) + ' clientes afectados' : ''}</span></div>
     ${faltanColonias && html`<div class="nota atencion riel-nota falta-colonias"><${Ico} n="info" s=${16} /><span>Las colonias salen al volver a publicar la base en <a href="#base" onClick=${() => ir('base')}>Base</a>: sirve el mismo Excel de esta semana.</span></div>`}
+    ${comunicados && comunicados.length > 0 && html`<div class="riel-seccion com-seccion">
+      <h4><span>Comunicados</span><span>${comunicados.length}</span></h4>
+      ${comunicados.map((c) => html`<${ComunicadoItem} c=${c} now=${now} key=${c.id} />`)}
+    </div>`}
     <div class="riel-seccion">
       <h4><span>Activas</span><span>${mf.activas.length}</span></h4>
       ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)
@@ -5688,6 +5986,7 @@ const deLocal = (s) => (s ? new Date(s).getTime() : null);
 function VistaFallas() {
   const s = useG();
   const mf = useMemo(() => Model.mapaFallas(s.fallas, s.now), [s.fallas, s.now]);
+  const comunicadosVigentes = useMemo(() => Model.comunicadosVigentes(s.comunicados), [s.comunicados]);
   const [tab, setTab] = useState('publicar');
   const [edicion, setEdicion] = useState(null);
   const [semilla, setSemilla] = useState(null);
@@ -5712,6 +6011,7 @@ function VistaFallas() {
     ['publicar', edicion ? 'Editar ' + U.numeroFalla(edicion) : 'Publicar falla', null],
     ['activas', 'Activas', mf.activas.length],
     ['resueltas', 'Resueltas ' + CONFIG.horasVisibleTrasCierre + ' h', mf.resueltas.length],
+    ['comunicados', 'Comunicados', comunicadosVigentes.length],
     ['historial', 'Historial', s.fallas.length]
   ];
   const editar = (f) => { setEdicion(f); setSemilla(null); setTab('publicar'); window.scrollTo({ top: 0 }); };
@@ -5730,6 +6030,7 @@ function VistaFallas() {
     ${tab === 'activas' && html`<${ListaFallas} fallas=${mf.activas} vacio="No hay fallas activas. Cuando llegue un correo con nodos afectados, publícala en la pestaña Publicar falla."
         onEditar=${editar} onCerrar=${setCerrando} smsTodas=${true} />`}
     ${tab === 'resueltas' && html`<${ListaFallas} fallas=${mf.resueltas} vacio=${'No hay fallas cerradas en las últimas ' + CONFIG.horasVisibleTrasCierre + ' horas.'} />`}
+    ${tab === 'comunicados' && html`<${VistaComunicados} />`}
     ${tab === 'historial' && html`<${Historial} />`}
     ${cerrando && html`<${ModalCerrar} f=${cerrando} onCerrar=${() => setCerrando(null)} />`}
   </div>`;
@@ -6513,6 +6814,160 @@ function Historial() {
     </div>
     ${ver && html`<${ModalHistorialFalla} f=${ver} onCerrar=${() => setVer(null)} />`}
   </div>`;
+}
+
+/* ---------- Comunicados: avisos informativos que no son una falla de nodo ----------
+   Solo título y contexto (por ejemplo, una falla general de DTH o de canales): sin nodos, número de falla ni hora
+   estimada. Los asesores los ven arriba de las fallas, en violeta y marcados como informativos, hasta que alguien
+   de Workforce o Jefatura los retira. No cambian el resultado de la consulta de ningún cliente. */
+function VistaComunicados() {
+  const s = useG();
+  const vigentes = useMemo(() => Model.comunicadosVigentes(s.comunicados), [s.comunicados]);
+  const retirados = useMemo(() => Model.comunicadosRetirados(s.comunicados), [s.comunicados]);
+  const [edicion, setEdicion] = useState(null);
+  const [semilla, setSemilla] = useState(null);      // texto de un comunicado retirado que se va a publicar de nuevo
+  const [nuevos, setNuevos] = useState(0);            // cada vez que cambia, el formulario empieza de cero
+  const [retirando, setRetirando] = useState(null);
+  // Si otra persona retira el comunicado que se está editando, el formulario vuelve a "nuevo"
+  const editando = edicion && vigentes.some((c) => c.id === edicion.id) ? edicion : null;
+  const arriba = () => window.scrollTo({ top: 0 });
+  return html`<div class="comunicados">
+    <${FormComunicado} key=${editando ? editando.id : 'nuevo-' + nuevos} edicion=${editando} semilla=${editando ? null : semilla}
+      onListo=${(c, editado) => { setEdicion(null); setSemilla(null); setNuevos((n) => n + 1); tostada(editado ? 'Cambios guardados en el comunicado' : 'Comunicado publicado'); }}
+      onCancelar=${() => { setEdicion(null); setSemilla(null); setNuevos((n) => n + 1); }} />
+    <h2 class="com-subtitulo">Vigentes<span class="n">${vigentes.length}</span></h2>
+    ${vigentes.length
+      ? html`<div class="fallas-lista">${vigentes.map((c) => html`<${TarjetaComunicado} c=${c} now=${s.now} key=${c.id} editando=${!!editando && editando.id === c.id}
+          onEditar=${(x) => { setEdicion(x); arriba(); }} onRetirar=${setRetirando} />`)}</div>`
+      : html`<div class="panel vacio"><b>Sin comunicados vigentes</b>Lo que publiques aquí lo verán los asesores en su panel, arriba de las fallas, hasta que lo retires.</div>`}
+    ${retirados.length > 0 && html`<h2 class="com-subtitulo">Retirados en los últimos 30 días<span class="n">${retirados.length}</span></h2>
+      <div class="panel"><div class="tabla-envoltura"><table class="tabla com-retirados">
+        <thead><tr><th>Comunicado</th><th>Publicó</th><th>Retiró</th><th class="der">Estuvo visible</th><th></th></tr></thead>
+        <tbody>${retirados.slice(0, 50).map((c) => html`<tr key=${c.id}>
+          <td><b>${c.titulo}</b><div class="com-corto" title=${c.contexto}>${c.contexto}</div></td>
+          <td>${c.publicadoPor ? c.publicadoPor.nombre : ''}<div class="sub num">${U.dia(c.publicadoEn)}, ${U.hora(c.publicadoEn)}</div></td>
+          <td>${c.retiradoPor ? c.retiradoPor.nombre : ''}<div class="sub num">${U.dia(c.retiradoEn)}, ${U.hora(c.retiradoEn)}</div></td>
+          <td class="der">${U.dur(c.retiradoEn - c.publicadoEn)}</td>
+          <td class="der"><button class="btn btn-fantasma btn-chico" title="Pone su título y su contexto en el formulario, para publicarlo como uno nuevo"
+            onClick=${() => { setEdicion(null); setSemilla({ titulo: c.titulo, contexto: c.contexto }); setNuevos((n) => n + 1); arriba(); }}>Usar de nuevo</button></td>
+        </tr>`)}</tbody>
+      </table></div></div>`}
+    ${retirando && html`<${ModalRetirarComunicado} c=${retirando} onCerrar=${() => setRetirando(null)} />`}
+  </div>`;
+}
+
+/* Formulario para publicar un comunicado o editar uno vigente, con la vista previa de cómo lo verá el asesor */
+function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
+  const s = useG();
+  const L = CONFIG.comunicado;
+  const ini = edicion || semilla || {};
+  const [titulo, setTitulo] = useState(ini.titulo || '');
+  const [contexto, setContexto] = useState(ini.contexto || '');
+  const [confirmar, setConfirmar] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+  const enviando = useRef(false);
+  // Como lo guarda el servidor: el título en una línea; el contexto conserva los saltos de línea
+  const t = Model.tituloComunicado(titulo), x = Model.contextoComunicado(contexto);
+  const sinCambios = !!edicion && t === edicion.titulo && x === edicion.contexto;
+  const igual = t ? Model.comunicadoIgual(s.comunicados, t, edicion ? edicion.id : null) : null;
+  const listo = !Model.faltaComunicado(t, x) && !sinCambios && !igual;
+  // Así lo verá el asesor: recién publicado o, si se está editando, recién actualizado
+  const borrador = { id: edicion ? edicion.id : 'nuevo', titulo: t, contexto: x, publicadoEn: edicion ? edicion.publicadoEn : s.now, editadoEn: edicion ? s.now : null,
+    publicadoPor: edicion ? edicion.publicadoPor : A.quien() };
+  async function guardar() {
+    if (enviando.current) return;   // un doble clic no publica dos veces
+    enviando.current = true; setGuardando(true); setError('');
+    try {
+      const c = edicion ? await A.editarComunicado(edicion.id, { titulo: t, contexto: x }) : await A.publicarComunicado({ titulo: t, contexto: x });
+      setConfirmar(false); onListo(c, !!edicion);
+    } catch (e) {
+      setConfirmar(false);
+      // Un servidor de antes de la 3.9 todavía no conoce los comunicados
+      setError(/desconocida/i.test(e.message) ? 'El servidor todavía no tiene los comunicados. Pega el Code.gs nuevo en Apps Script y publica una versión nueva de la implementación.' : e.message);
+      // Otra persona publicó uno igual, o retiró el que se estaba editando: se trae lo último para verlo aquí mismo
+      if (e.codigo === 'DUPLICADA' || e.codigo === 'DATOS') A.recargar().catch(() => {});
+    } finally { enviando.current = false; setGuardando(false); }
+  }
+  const accion = edicion ? 'Guardar cambios' : 'Publicar comunicado';
+  return html`<div class="com-form">
+    <div class="panel">
+      <div class="com-form-cab"><span class="ico"><${Ico} n="megafono" s=${17} /></span>
+        <div><h3>${edicion ? 'Editar comunicado' : 'Nuevo comunicado'}</h3>
+          <p>Un aviso para los asesores que no es una falla de nodo. No lleva nodos, número de falla ni hora estimada.</p></div></div>
+      <label class="campo"><span class="campo-cab"><span>Título</span><span class="cuenta">${t.length} de ${L.titulo}</span></span>
+        <input class="input com-titulo-in" value=${titulo} maxlength=${L.titulo} placeholder="Ejemplo: Falla general de DTH"
+          onInput=${(e) => { setTitulo(e.currentTarget.value); setError(''); }} /></label>
+      <label class="campo"><span class="campo-cab"><span>Contexto</span><span class="cuenta">${x.length} de ${L.contexto}</span></span>
+        <textarea class="textarea com-contexto-in" rows="5" maxlength=${L.contexto} value=${contexto}
+          placeholder="Qué está pasando, a quiénes afecta y qué le dice el asesor al cliente."
+          onInput=${(e) => { setContexto(e.currentTarget.value); setError(''); }}></textarea>
+        <small>Los asesores lo leen tal como lo escribas aquí.</small></label>
+      ${igual && html`<div class="nota-linea com-igual" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>Ya hay un comunicado vigente con ese
+        título${igual.publicadoPor && igual.publicadoPor.nombre ? ', que publicó ' + igual.publicadoPor.nombre + ' ' + U.hace(igual.publicadoEn, s.now) : ''}. Edita ese comunicado, o retíralo antes de publicar otro igual.</span></div>`}
+      ${error && html`<div class="nota error-acceso com-error" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>`}
+    </div>
+    <div class="com-lado">
+      <div class="panel preview com-previa">
+        <div class="preview-cab">Así lo verá el asesor</div>
+        ${t && x ? html`<${ComunicadoItem} c=${borrador} now=${s.now} previa=${true} />`
+          : html`<div class="vacio" style="padding:10px 4px">Escribe el título y el contexto para ver la vista previa.</div>`}
+      </div>
+      <div class="publicar-barra">
+        ${(edicion || semilla) && html`<button class="btn btn-borde btn-grande" onClick=${onCancelar}>Cancelar</button>`}
+        <button class="btn btn-primario btn-grande com-publicar" disabled=${!listo} onClick=${() => setConfirmar(true)}>${accion}</button>
+      </div>
+      <p class="com-nota">${edicion ? 'Los asesores verán el texto nuevo al instante, marcado como actualizado.'
+        : 'Sale al instante en el panel de todos los asesores, arriba de las fallas, y les llega el aviso de escritorio.'}</p>
+    </div>
+    ${confirmar && html`<${Modal} titulo=${edicion ? 'Guardar cambios en el comunicado' : 'Publicar comunicado'} onCerrar=${() => setConfirmar(false)}
+        sub=${edicion ? 'Los asesores verán el texto nuevo de inmediato, marcado como actualizado.' : 'Todos los asesores lo verán de inmediato en su panel, arriba de las fallas.'}
+        pie=${html`<button class="btn btn-borde" onClick=${() => setConfirmar(false)}>Revisar</button>
+          <button class="btn btn-primario" disabled=${guardando} onClick=${guardar}>${accion}</button>`}>
+      <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${t}</b><p>${x}</p></div></div>
+    </${Modal}>`}
+  </div>`;
+}
+
+/* Un comunicado vigente, para Workforce: quién lo publicó, desde cuándo se ve y los botones para retirarlo o editarlo */
+function TarjetaComunicado({ c, now, editando, onEditar, onRetirar }) {
+  const edicion = c.editadoEn ? (c.historial || []).filter((h) => h.accion === 'EDITADO').slice(-1)[0] : null;
+  const detalle = edicion && edicion.detalle ? ' (' + edicion.detalle.charAt(0).toLowerCase() + edicion.detalle.slice(1) + ')' : '';
+  return html`<article class="panel com-card">
+    <div class="com-card-cab">
+      <div><span class="tipo"><${Ico} n="megafono" s=${15} />Comunicado informativo</span><h3>${c.titulo}</h3></div>
+      <div class="der"><span class="marca-estado" data-s="COMUNICADO">Vigente</span></div>
+    </div>
+    <p class="texto">${c.contexto}</p>
+    <dl class="meta">
+      <dt>Publicó</dt><dd>${c.publicadoPor ? c.publicadoPor.nombre : ''}, ${U.cuandoCorto(c.publicadoEn, now)}</dd>
+      ${c.editadoEn && html`<dt>Actualizó</dt><dd>${c.editadoPor ? c.editadoPor.nombre : ''}, ${U.cuandoCorto(c.editadoEn, now)}${detalle}</dd>`}
+      <dt>Visible</dt><dd>Desde ${U.hace(c.publicadoEn, now)}, hasta que lo retires</dd>
+    </dl>
+    <div class="acc">
+      <button class="btn btn-primario btn-chico com-retirar" onClick=${() => onRetirar(c)}><${Ico} n="cerrar" s=${16} />Retirar comunicado</button>
+      <button class="btn btn-borde btn-chico com-editar" disabled=${editando} onClick=${() => onEditar(c)}><${Ico} n="lapiz" s=${15} />${editando ? 'Editándolo arriba' : 'Editar'}</button>
+    </div>
+  </article>`;
+}
+
+function ModalRetirarComunicado({ c, onCerrar }) {
+  const [ocupado, setOcupado] = useState(false);
+  const enviando = useRef(false);
+  async function ok() {
+    if (enviando.current) return;   // un doble clic no lo retira dos veces (el segundo diría que otra persona ya lo retiró)
+    enviando.current = true; setOcupado(true);
+    try { await A.retirarComunicado(c.id); tostada('Comunicado retirado'); onCerrar(); } catch (e) {
+      tostada(e.message);
+      // Otra persona ya lo retiró: se trae lo último y se cierra; con un corte de red se puede intentar de nuevo
+      if (e.codigo === 'DATOS') { A.recargar().catch(() => {}); onCerrar(); } else { enviando.current = false; setOcupado(false); }
+    }
+  }
+  return html`<${Modal} titulo="Retirar comunicado" onCerrar=${onCerrar}
+      sub="Los asesores dejarán de verlo de inmediato. Queda 30 días en la lista de retirados, por si hay que publicarlo otra vez."
+      pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-primario" disabled=${ocupado} onClick=${ok}>Retirar comunicado</button>`}>
+    <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${c.titulo}</b><p>${c.contexto}</p></div></div>
+  </${Modal}>`;
 }
 
 
@@ -8375,7 +8830,7 @@ function PuertaAvisos() {
     setIntento(true);
     if ((await Avisos.activar()) === 'granted') listo(); else A.reportarAvisos();
   }
-  const que = 'cuando ' + CONFIG.equipo + ' publique una falla y cuando se resuelva' + (veAlertas() ? ', y cuando haya una posible falla' : '');
+  const que = 'cuando ' + CONFIG.equipo + ' publique una falla o un comunicado y cuando la falla se resuelva' + (veAlertas() ? ', y cuando haya una posible falla' : '');
   return html`<section class="puerta-avisos" aria-labelledby="puerta-titulo">
     <div class="puerta-ico"><${Ico} n="campana" s=${30} /></div>
     ${p === 'denied' ? html`
