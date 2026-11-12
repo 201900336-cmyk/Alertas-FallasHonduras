@@ -38,6 +38,10 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
   ok(cfg0.ok && cfg0.datos.listaTiendas.length === 38, 'sin base interna configurada, config igual responde con la lista inicial de tiendas', cfg0);
   C.configurar();
   ok(g.E.activo.getSheetByName('Fallas') && g.E.activo.getSheetByName('Usuarios'), 'configurar crea las hojas');
+  // La versión va también al inicio del archivo: al abrirlo se sabe de un vistazo qué Code.gs es
+  const versionServidor = g.ejecutar('ALERTAS.VERSION');
+  const cabeceraCodigo = fs.readFileSync(path.join(RAIZ, 'servidor', 'Code.gs'), 'utf8').split('\n').slice(0, 5).join('\n');
+  ok(/^\d+\.\d+$/.test(versionServidor) && cabeceraCodigo.includes('Servidor ' + versionServidor + ' '), 'el encabezado de Code.gs dice la misma versión que el servidor (' + versionServidor + ')', cabeceraCodigo);
   const hTiendas = g.E.activo.getSheetByName('Tiendas');
   ok(hTiendas && hTiendas.getLastRow() === 39 && hTiendas.getRange(2, 1).getValue() === 'CAC Castaños', 'configurar crea la hoja Tiendas con las 38 tiendas', hTiendas && hTiendas.getLastRow());
   C.guardarGenesys({ region: 'mypurecloud.com', clientId: 'a1b2c3d4-0000-1111-2222-333344445555', rolPorDefecto: 'concentrix' });

@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- *  ALERTAS · Servidor (Google Apps Script)
+ *  ALERTAS · Servidor 3.9 (Google Apps Script)
  *  Certificación de fallas de red fija · Workforce HN
  * ============================================================================
  *
@@ -27,7 +27,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.9',                // se ve en la pestaña INICIO
+  VERSION: '3.9',                // se ve en la pestaña INICIO; al cambiarla, cámbiala también en la primera línea de este archivo
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)

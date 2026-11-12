@@ -366,7 +366,7 @@ Se llama, por ejemplo, `sms_F26110201_GRA01.csv` o `sms_fallas_activas_2026-11-0
 ## Cambios futuros
 
 - **La página**: edita los archivos de `src/`, corre `node build.js` y sube el `index.html` nuevo. No hace falta tocar `config.js`.
-- **El servidor**: pega el `Code.gs` nuevo en Apps Script y luego **Implementar > Administrar implementaciones > ✏️ Editar > Versión: Nueva versión > Implementar**. Así la URL `/exec` no cambia. (Si haces una implementación nueva, la URL cambia y hay que actualizar `config.js`.)
+- **El servidor**: pega el `Code.gs` nuevo en Apps Script (reemplazando todo el anterior; la versión va en la primera línea del archivo y en la pestaña **INICIO**) y luego **Implementar > Administrar implementaciones > ✏️ Editar > Versión: Nueva versión > Implementar**. Así la URL `/exec` no cambia. (Si haces una implementación nueva, la URL cambia y hay que actualizar `config.js`.)
 
 ## Seguridad
 
@@ -430,7 +430,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 439 pruebas del servidor y del modelo en un emulador de Apps Script
+npm test                           # 440 pruebas del servidor y del modelo en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente
