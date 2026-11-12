@@ -437,16 +437,6 @@ button { cursor: pointer; }
 .falla-item .zona .nodos-zona { color: var(--ink); font-weight: 600; font-stretch: 108%; letter-spacing: 0.01em; overflow-wrap: anywhere; }
 .falla-item .colonias { margin-top: 3px; padding-left: 20px; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
 .falla-item .m { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
-.falla-item .det { margin: 0 12px 0 16px; padding: 10px 0 12px; border-top: 1px dashed var(--line-2); display: flex; flex-direction: column; gap: 10px; }
-.zona-muni { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; font-size: 12px; color: var(--ink-3); }
-.zona-muni b { font-size: 13px; font-weight: 750; color: var(--ink); }
-.zona-muni .cuantos { margin-left: auto; font-variant-numeric: tabular-nums; }
-.zona-cols { display: flex; flex-wrap: wrap; gap: 6px; }
-.zona-cols .chip { height: auto; min-height: 26px; padding: 3px 10px; white-space: normal; line-height: 1.3; }
-.zona-cols .chip.mas { cursor: pointer; color: var(--ink); background: var(--surface); font-variant-numeric: tabular-nums; }
-.zona-cols .chip.mas:hover { border-color: var(--line-2); }
-.det-acc { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
-.falla-item .det > .sub { margin: 0; font-size: 12.5px; }
 .barra-tec { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 8px; gap: 2px; background: transparent; }
 .barra-tec i { display: block; height: 100%; border-radius: 3px; }
 .barra-tec .h { background: var(--hfc); } .barra-tec .g { background: var(--gpon); }
@@ -1300,11 +1290,9 @@ table.conex-tabla { min-width: 680px; }
   transition: border-color 150ms ease;
 }
 .com-item::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--info); }
-.com-item[data-abierto="true"] { border-color: color-mix(in srgb, var(--info) 40%, var(--surface)); }
 .com-item:has(button.com-item-cab:hover) { border-color: color-mix(in srgb, var(--info) 40%, var(--surface)); }
 .com-item-cab { display: block; width: 100%; padding: 12px 12px 12px 16px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; }
 button.com-item-cab { cursor: pointer; }
-.com-item[data-abierto="true"] .com-item-cab { padding-bottom: 0; border-radius: 12px 12px 0 0; }
 .com-cab { display: flex; align-items: center; gap: 8px; }
 .com-etiqueta { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 7px; background: var(--info-soft); color: var(--info-text); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .com-marca { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--info-text); white-space: nowrap; }
@@ -1314,12 +1302,8 @@ button.com-item-cab { cursor: pointer; }
   margin-top: 4px; font-size: 13px; line-height: 1.4; color: var(--ink-2); white-space: pre-line; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
 }
-.com-contexto.completo { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 .com-ver { display: inline-block; margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .com-meta { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); }
-.com-det { margin: 0 12px 0 16px; padding: 0 0 12px; }
-.com-menos { margin-top: 4px; font-size: 12.5px; }
-.com-pie { margin-top: 10px; padding-top: 10px; border-top: 1px dashed color-mix(in srgb, var(--info) 40%, var(--surface)); font-size: 12.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
 /* En pantallas anchas los comunicados van en el panel; en angostas, arriba de la consulta (ver Adaptación) */
 .com-arriba { display: none; }
 .com-arriba h4 { margin: 0 4px 8px; font-size: 12.5px; color: var(--ink-3); font-weight: 650; display: flex; justify-content: space-between; }
@@ -1357,6 +1341,163 @@ button.com-item-cab { cursor: pointer; }
 .com-resumen > div { min-width: 0; }
 .com-resumen b { color: var(--ink); overflow-wrap: anywhere; }
 .com-resumen p { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; max-height: 180px; overflow: auto; }
+
+/* ---------- Adjuntos de los comunicados ---------- */
+.com-adj { margin-top: 6px; display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 650; color: var(--info-text); }
+.campo-cab small { font-weight: 500; color: var(--ink-2); }
+.com-adjuntos { display: flex; flex-direction: column; gap: 8px; }
+.adj-lista { display: flex; flex-direction: column; gap: 6px; }
+.adj { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.adj-mini { flex: none; width: 46px; height: 38px; border-radius: 7px; background: var(--surface-3); color: var(--ink-2); display: grid; place-items: center; overflow: hidden; }
+.adj-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.adj-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.adj-txt b { font-size: 13.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adj-txt small { font-size: 12px; color: var(--ink-2); }
+.adj-avance { height: 4px; margin-top: 3px; border-radius: 999px; background: var(--surface-3); display: flex; }
+.adj-avance u { border-radius: 999px; background: var(--info); text-decoration: none; transition: width 200ms ease; }
+.adj-quitar { flex: none; width: 40px; height: 40px; border: 0; border-radius: 9px; background: none; color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
+.adj-quitar:hover { background: var(--falla-soft); color: var(--falla-text); }
+.adj-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.adj-acc { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.adj-acc small { flex: 1 1 260px; color: var(--ink-2); font-size: 12.5px; line-height: 1.35; }
+.adj-aviso { color: var(--ink-2); font-size: 12.5px; line-height: 1.35; }
+.com-resumen-adj { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12.5px; font-weight: 650; color: var(--info-text); }
+
+/* ---------- Modal de detalle (estilo monitoreo): fallas y comunicados ----------
+   El encabezado es oscuro en los dos temas, como el mapa en vivo; el cuerpo sigue el tema. */
+.mb-fondo { background: rgba(8, 11, 16, 0.74); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.mb { position: relative; max-height: calc(100vh - 40px); display: flex; flex-direction: column; background: var(--surface); color: var(--ink); border-radius: 22px; overflow: hidden;
+  box-shadow: 0 40px 90px -24px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08); transition: transform 200ms var(--ease-out), opacity 200ms ease; }
+@starting-style { .mb { transform: scale(0.97); opacity: 0; } }
+.mb-cab { flex: none; display: flex; align-items: flex-start; gap: 16px; padding: 24px 28px 0 32px; background: #0f141a; color: #eef1f5; }
+.mb[data-t="COMUNICADO"] .mb-cab { background: #1c1537; padding-bottom: 24px; }
+.mb-cab-txt { flex: 1; min-width: 0; }
+.mb-fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mb-pill { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 11px 0 9px; border-radius: 999px; background: #3a1c20; color: #ff8e95; font-size: 12px; font-weight: 800; letter-spacing: 0.09em; white-space: nowrap; }
+.mb-pill i { width: 8px; height: 8px; border-radius: 50%; background: #e2444f; box-shadow: 0 0 0 4px rgba(226, 68, 79, 0.25); animation: mb-pulso 1.8s ease-in-out infinite; }
+@keyframes mb-pulso { 0%, 100% { box-shadow: 0 0 0 3px rgba(226, 68, 79, 0.3); } 50% { box-shadow: 0 0 0 7px rgba(226, 68, 79, 0); } }
+.mb[data-t="RESUELTA"] .mb-pill { background: #382a10; color: #f7c460; }
+.mb[data-t="RESUELTA"] .mb-pill i { background: #f5b324; box-shadow: none; animation: none; }
+.mb[data-t="COMUNICADO"] .mb-pill { background: #33295a; color: #c8b8ff; padding-left: 8px; }
+.mb-num { font-size: 14px; font-weight: 700; font-stretch: 108%; letter-spacing: 0.02em; color: #b5bec9; }
+.mb-marca { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #c8b8ff; }
+.mb-marca i { width: 8px; height: 8px; border-radius: 50%; background: #9b7cf0; }
+.mb-cab h2 { margin: 10px 0 0; font-size: clamp(24px, 3.4vw, 32px); font-weight: 800; font-stretch: 112%; letter-spacing: -0.01em; line-height: 1.12; color: #ffffff; overflow-wrap: anywhere; }
+.mb-sub { margin-top: 10px; display: flex; align-items: flex-start; gap: 7px; font-size: 15px; line-height: 1.4; color: #b5bec9; overflow-wrap: anywhere; }
+.mb-sub svg { flex: none; margin-top: 2px; color: #ff8e95; }
+.mb[data-t="RESUELTA"] .mb-sub svg { color: #f7c460; }
+.mb-sub b { color: #ffffff; font-weight: 700; }
+.mb[data-t="COMUNICADO"] .mb-sub { color: #cfc8e6; }
+.mb-x { flex: none; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 13px; background: #e2444f; color: #ffffff; display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 8px 20px -6px rgba(226, 68, 79, 0.8); transition: background 120ms ease, transform 120ms ease; }
+.mb-x:hover { background: #f0525d; }
+.mb-x:active { transform: scale(0.94); }
+.mb-x:focus-visible { outline: 3px solid #ffffff; outline-offset: 2px; }
+.mb-datos { flex: none; padding: 22px 32px 26px; background: #0f141a; color: #eef1f5; display: flex; flex-direction: column; gap: 22px; }
+.mb-cifras { display: flex; align-items: flex-end; gap: 14px 36px; flex-wrap: wrap; }
+.mb-grande { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; }
+.mb-grande > span:first-child { font-size: 13px; color: #b5bec9; }
+.mb-grande > b { font-size: clamp(48px, 7vw, 68px); font-weight: 800; font-stretch: 125%; line-height: 1; letter-spacing: -0.01em; color: #ffffff; }
+.mb-tecs { margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: #b5bec9; }
+.mb-tecs span { display: inline-flex; align-items: center; gap: 6px; }
+.mb-tecs i { width: 9px; height: 9px; border-radius: 3px; background: #e08a45; }
+.mb-tecs i[data-t="GPON"] { background: #5b9cec; }
+.mb-tecs b { color: #ffffff; font-variant-numeric: tabular-nums; }
+.mb-dato { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.mb-dato b { font-size: 26px; font-weight: 800; font-stretch: 118%; line-height: 1.1; color: #ffffff; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mb-dato span { font-size: 13px; color: #b5bec9; }
+.mb-dato[data-d="eta"] b { color: #f7c460; }
+.mb-dato[data-d="ok"] b { color: #6fd8a4; }
+.mb-linea { display: flex; flex-direction: column; gap: 9px; }
+.mb-barra { position: relative; height: 10px; border-radius: 999px; background: #2a313b; }
+.mb-barra i { position: absolute; left: 0; top: 0; height: 100%; width: var(--p, 0%); border-radius: 999px; background: #e2444f; }
+.mb-barra u { position: absolute; top: -5px; left: clamp(10px, var(--p, 0%), calc(100% - 10px)); width: 20px; height: 20px; margin-left: -10px; box-sizing: border-box; border-radius: 50%; background: #ffffff; border: 5px solid #e2444f; }
+.mb-linea-txt { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; font-size: 12.5px; color: #b5bec9; }
+.mb-linea-txt b { color: #ffffff; font-weight: 650; }
+.mb-cuerpo { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 22px 32px 24px; display: flex; flex-direction: column; gap: 20px; }
+.mb-sec { display: flex; flex-direction: column; gap: 12px; }
+.mb-sec-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; }
+.mb-sec-cab h3 { margin: 0; font-size: 17px; font-weight: 750; font-stretch: 108%; }
+.mb-sec-cab span { font-size: 13px; color: var(--ink-2); }
+.mb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mb-munis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 32px; align-items: start; }
+.mb-muni { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.mb-muni-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.mb-muni-cab > b { font-size: 14.5px; font-weight: 750; overflow-wrap: anywhere; }
+.mb-muni-cab small { margin-left: 6px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+.mb-muni-cab > span { flex: none; font-size: 13px; color: var(--ink-2); }
+.mb-muni-cab > span b { color: var(--ink); font-variant-numeric: tabular-nums; }
+/* Con un solo municipio, sus colonias van a dos columnas y ocupan todo el ancho */
+.mb-muni:only-child { grid-column: 1 / -1; }
+.mb-cols { display: flex; flex-direction: column; gap: 9px; }
+.mb-muni:only-child .mb-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 32px; }
+.mb-col { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(36px, 1fr) 36px; align-items: center; gap: 10px; font-size: 13.5px; line-height: 1.3; }
+.mb-col > span { overflow-wrap: anywhere; }
+.mb-col > i { height: 8px; border-radius: 999px; background: var(--surface-3); display: flex; }
+.mb-col > i u { border-radius: 999px; background: var(--seq-4); }
+.mb[data-t="RESUELTA"] .mb-col > i u { background: var(--resuelta); }
+.mb-col > b { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mb-resto { font-size: 13px; color: var(--ink-2); }
+.mb-todas { font-size: 13.5px; }
+.mb-pie { flex: none; padding: 14px 32px; background: var(--surface-2); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.mb-pie b { color: var(--ink); font-weight: 650; }
+.mb-esc { display: inline-flex; align-items: center; gap: 7px; }
+.mb-texto { font-size: 16px; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; user-select: text; }
+/* Imágenes del comunicado */
+.mb-galeria { flex: none; background: #10141b; color: #eef1f5; }
+.mb-escena { position: relative; height: min(340px, 40vh); }
+.mb-img { height: 100%; display: grid; place-items: center; }
+.mb-img img { max-width: 100%; max-height: min(340px, 40vh); object-fit: contain; display: block; }
+.mb-img-estado { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px; color: #b5bec9; font-size: 14px; text-align: center; }
+.mb-img-estado .punto { color: #c8b8ff; }
+.mb-flecha { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: rgba(16, 20, 27, 0.8); color: #ffffff; display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.mb-flecha[data-l="izq"] { left: 12px; }
+.mb-flecha[data-l="der"] { right: 12px; }
+.mb-flecha:hover, .mb-ampliar:hover:not(:disabled) { background: #232a33; }
+.mb-cuenta { position: absolute; left: 14px; bottom: 14px; height: 28px; padding: 0 10px; border-radius: 8px; background: rgba(16, 20, 27, 0.8); color: #ffffff; font-size: 12.5px; font-weight: 650; display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
+.mb-ampliar { position: absolute; right: 14px; bottom: 14px; height: 44px; padding: 0 14px 0 12px; border: 0; border-radius: 10px; background: #10141b; color: #ffffff; font: inherit; font-size: 13.5px; font-weight: 650;
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.mb-ampliar:disabled { opacity: 0.5; cursor: default; }
+.mb-minis { display: flex; gap: 8px; padding: 10px 14px 12px; overflow-x: auto; border-top: 1px solid #232a33; }
+.mb-mini { position: relative; flex: none; width: 64px; height: 48px; padding: 0; border-radius: 8px; border: 2px solid transparent; background: #1c222a; color: #b5bec9; display: grid; place-items: center; cursor: pointer; overflow: hidden; }
+.mb-mini[aria-selected="true"] { border-color: #ffffff; }
+.mb-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mb-mini span { position: absolute; right: 3px; bottom: 2px; padding: 0 4px; border-radius: 4px; background: rgba(16, 20, 27, 0.75); color: #ffffff; font-size: 10.5px; font-weight: 700; }
+.mb-luz { position: fixed; inset: 0; z-index: 60; background: rgba(5, 7, 10, 0.95); display: flex; align-items: center; justify-content: center; padding: 70px 20px 56px; }
+.mb-luz-img { display: grid; place-items: center; }
+.mb-luz-img img { max-width: calc(100vw - 40px); max-height: calc(100vh - 130px); object-fit: contain; display: block; }
+.mb-luz .mb-x { position: absolute; top: 14px; right: 14px; }
+.mb-luz-pie { position: absolute; left: 0; right: 0; bottom: 18px; padding: 0 20px; text-align: center; color: #d5dbe3; font-size: 13.5px; overflow-wrap: anywhere; }
+/* Archivos del comunicado */
+.mb-archivos { display: flex; flex-direction: column; gap: 8px; }
+.mb-archivos h3 { margin: 0 0 2px; font-size: 15px; font-weight: 750; }
+.mb-archivo { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 9px 14px 9px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.mb-archivo:hover:not(:disabled) { border-color: var(--line-2); background: var(--surface-2); }
+.mb-archivo:disabled { cursor: progress; }
+.mb-archivo .ico { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--nodo-x-soft); color: var(--nodo-x-text); }
+.mb-archivo[data-ext="pdf"] .ico { background: var(--falla-soft); color: var(--falla-text); }
+.mb-archivo[data-ext="xlsx"] .ico { background: var(--ok-soft); color: var(--ok-text); }
+.mb-archivo[data-ext="pptx"] .ico { background: var(--resuelta-soft); color: var(--resuelta-text); }
+.mb-archivo .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mb-archivo .txt b { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-archivo .txt small { font-size: 12.5px; color: var(--ink-2); }
+.mb-archivo .acc { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; }
+@media (max-width: 640px), (max-height: 700px) {
+  /* En pantallas chicas se desplaza el modal entero (así el encabezado no se come la pantalla) */
+  .mb { overflow: auto; }
+  .mb-cuerpo { flex: none; overflow: visible; }
+}
+@media (max-width: 640px) {
+  .mb-cab { padding: 20px 16px 0 20px; }
+  .mb[data-t="COMUNICADO"] .mb-cab { padding-bottom: 20px; }
+  .mb-datos { padding: 18px 20px 22px; }
+  .mb-dato { align-items: flex-start; text-align: left; }
+  .mb-cuerpo { padding: 18px 20px 20px; }
+  .mb-munis, .mb-muni:only-child .mb-cols { grid-template-columns: minmax(0, 1fr); }
+  .mb-pie { padding: 12px 20px; }
+  .mb-linea-txt { flex-direction: column; }
+}
 
 /* ---------- Adaptación ---------- */
 @media (max-width: 1180px) {
@@ -1927,6 +2068,9 @@ const CONFIG = {
   // de DTH o de canales). Solo llevan título y contexto, con estos largos como mucho (los mismos que revisa el
   // servidor). Recién publicado o recién actualizado, la tarjeta lleva su marca durante estos minutos.
   comunicado: { titulo: 80, contexto: 600, minutosNuevo: 30 },
+  // Adjuntos de un comunicado (los mismos topes que el servidor): imágenes y archivos PDF, Word, Excel o PowerPoint.
+  // parte: letras (base64) por envío. ladoImagen: la página reduce las imágenes a ese lado mayor antes de subirlas.
+  adjuntos: { imagenes: 5, archivos: 3, imagenBytes: 700 * 1024, archivoBytes: 3145728, parte: 900000, ladoImagen: 1600 },
 
   // Posible falla: un nodo sin falla publicada al que en los últimos 60 minutos le consultaron
   // 5 o más clientes distintos (Concentrix y Tiendas; las búsquedas de Workforce no cuentan),
@@ -2464,8 +2608,20 @@ const Store = (() => {
     } catch (e) { /* nada */ }
   }
 
+  /* Adjuntos de los comunicados en la demostración: su contenido (base64) queda en este navegador */
+  const leerAdjunto = (id) => leer('adj:' + id);
+  const guardarAdjunto = (id, a) => guardar({ ['adj:' + id]: a });
+  async function borrarAdjuntos(ids) {
+    if (memoria) { ids.forEach((id) => { delete memoria.kv['adj:' + id]; }); return; }
+    await new Promise((ok, mal) => {
+      const tx = db.transaction('kv', 'readwrite'); const s = tx.objectStore('kv');
+      ids.forEach((id) => s.delete('adj:' + id));
+      tx.oncomplete = ok; tx.onerror = () => mal(tx.error); tx.onabort = () => mal(tx.error || new Error('Guardado cancelado'));
+    });
+  }
+
   return {
-    init, leerTodo, leerMeta, leerFallas, leerComunicados, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
+    init, leerTodo, leerMeta, leerFallas, leerComunicados, leerAdjunto, guardarAdjunto, borrarAdjuntos, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
     alCambiar: (fn) => { alCambiarFns.add(fn); return () => alCambiarFns.delete(fn); },
     alLog: (fn) => { alLogFns.add(fn); return () => alLogFns.delete(fn); },
     get version() { return version; },
@@ -2985,6 +3141,44 @@ const Model = (() => {
     const corte = s.slice(0, 159), esp = corte.lastIndexOf(' ');
     return (esp > 100 ? corte.slice(0, esp) : corte).replace(/[\s,;:.]+$/, '') + '…';
   }
+  /* Adjuntos de un comunicado: las mismas reglas que el servidor (ADJ_TIPOS, fichaNueva_, pesoAdjunto_ y
+     resumenAdjuntos_). El tipo sale de la extensión del nombre y solo valen los de la lista. */
+  const OOXML = 'application/vnd.openxmlformats-officedocument.';
+  const TIPOS_ADJUNTO = {
+    jpg: { tipo: 'image/jpeg', clase: 'imagen', sigla: 'JPG' }, jpeg: { tipo: 'image/jpeg', clase: 'imagen', sigla: 'JPG' }, png: { tipo: 'image/png', clase: 'imagen', sigla: 'PNG' },
+    pdf: { tipo: 'application/pdf', clase: 'archivo', sigla: 'PDF' }, docx: { tipo: OOXML + 'wordprocessingml.document', clase: 'archivo', sigla: 'Word' },
+    xlsx: { tipo: OOXML + 'spreadsheetml.sheet', clase: 'archivo', sigla: 'Excel' }, pptx: { tipo: OOXML + 'presentationml.presentation', clase: 'archivo', sigla: 'PowerPoint' }
+  };
+  const TIPOS_ADJUNTO_TEXTO = 'Solo se pueden adjuntar imágenes (JPG o PNG) y archivos PDF, Word, Excel o PowerPoint (.docx, .xlsx o .pptx).';
+  const nombreAdjunto = (n) => String(n == null ? '' : n).replace(/[\u0000-\u001f\u007f\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(-120);
+  function tipoAdjunto(nombre) {
+    const n = nombreAdjunto(nombre), ext = (n.match(/\.([A-Za-z0-9]{1,5})$/) || ['', ''])[1].toLowerCase();
+    const def = TIPOS_ADJUNTO[ext];
+    return def && n.length >= ext.length + 2 ? Object.assign({ ext }, def) : null;
+  }
+  const pesoAdjunto = (bytes) => (bytes >= 1048576 ? (Math.round(bytes / 104857.6) / 10) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB');
+  function resumenAdjuntos(lista) {
+    const img = (lista || []).filter((a) => a.clase === 'imagen').length, arch = (lista || []).length - img;
+    return [img ? (img === 1 ? '1 imagen' : img + ' imágenes') : '', arch ? (arch === 1 ? '1 archivo' : arch + ' archivos') : ''].filter(String).join(' y ');
+  }
+  const imagenesDe = (c) => ((c && c.adjuntos) || []).filter((a) => a.clase === 'imagen');
+  const archivosDe = (c) => ((c && c.adjuntos) || []).filter((a) => a.clase !== 'imagen');
+  /* Por qué no se puede adjuntar (con las mismas palabras del servidor), o '' si se puede. bytes: lo que pesa ya
+     listo para subir (una imagen, después de reducirla). */
+  function faltaAdjunto(nombre, bytes, lista) {
+    const def = tipoAdjunto(nombre), n = nombreAdjunto(nombre), L = CONFIG.adjuntos;
+    if (!def) return TIPOS_ADJUNTO_TEXTO;
+    if (bytes < 8) return 'El archivo «' + n + '» está vacío.';
+    if (def.clase === 'imagen') {
+      if (imagenesDe({ adjuntos: lista }).length >= L.imagenes) return 'Un comunicado lleva como mucho ' + L.imagenes + ' imágenes.';
+      if (bytes > L.imagenBytes) return 'La imagen «' + n + '» pesa más de ' + pesoAdjunto(L.imagenBytes) + '.';
+    } else {
+      if (archivosDe({ adjuntos: lista }).length >= L.archivos) return 'Un comunicado lleva como mucho ' + L.archivos + ' archivos adjuntos.';
+      if (bytes > L.archivoBytes) return 'El archivo «' + n + '» pesa más de ' + pesoAdjunto(L.archivoBytes) + '. Si es un manual pesado, pon en el comunicado el enlace a donde está guardado.';
+    }
+    return '';
+  }
+  const mismosAdjuntos = (a, b) => (a || []).map((x) => x.id).join() === (b || []).map((x) => x.id).join();
   /* Igual que nuevoIdComunicado_ del servidor: C + aammdd + número del día (C26111201) */
   function nuevoIdComunicado(lista, now) {
     const d = new Date(now);
@@ -3571,7 +3765,8 @@ const Model = (() => {
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
     mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias,
-    tituloComunicado, contextoComunicado, faltaComunicado, comunicadosVigentes, comunicadosRetirados, marcaComunicado, comunicadoIgual, nuevoIdComunicado, resumenComunicado };
+    tituloComunicado, contextoComunicado, faltaComunicado, comunicadosVigentes, comunicadosRetirados, marcaComunicado, comunicadoIgual, nuevoIdComunicado, resumenComunicado,
+    tipoAdjunto, nombreAdjunto, pesoAdjunto, resumenAdjuntos, imagenesDe, archivosDe, faltaAdjunto, mismosAdjuntos };
 })();
 
 
@@ -3924,7 +4119,7 @@ function BackendRemoto() {
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
-        const lectura = REINTENTABLES[accion] || (accion === 'sms' && datos && datos.op === 'resumen');
+        const lectura = REINTENTABLES[accion] || (accion === 'sms' && datos && datos.op === 'resumen') || (accion === 'adjunto' && datos && datos.op === 'bajar');
         if (!lectura || !e.reintentar || intento >= 2) throw e;
         await esperar((intento ? 2000 : 800) * (1 + Math.random() * 0.5));
       }
@@ -4032,6 +4227,7 @@ function BackendRemoto() {
     reportar: (rec) => llamar('reportar', { contrato: rec.contrato, nodo: rec.nodo }),
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
     comunicado: (op, d) => llamar('comunicado', Object.assign({ op }, d), 60000),
+    adjunto: (op, d) => llamar('adjunto', Object.assign({ op }, d), 90000),
     alertas: () => llamar('alertas', {}),
     alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
     marcarAlerta: (nodo, reportada, a, nota) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo, a, nota }),
@@ -4246,7 +4442,7 @@ function BackendLocal() {
       const escribe = !!ses && ['workforce', 'jefatura'].includes(ses.usuario.rol), desdeCom = Date.now() - 30 * U.DIA;
       const comunicados = escribe ? d.comunicados.filter((x) => x.estado === 'VIGENTE' || (x.retiradoEn || 0) >= desdeCom)
         : Model.comunicadosVigentes(d.comunicados).map((x) => ({ id: x.id, titulo: x.titulo, contexto: x.contexto, publicadoEn: x.publicadoEn,
-          publicadoPor: { nombre: (x.publicadoPor && x.publicadoPor.nombre) || '' }, editadoEn: x.editadoEn || null }));
+          publicadoPor: { nombre: (x.publicadoPor && x.publicadoPor.nombre) || '' }, editadoEn: x.editadoEn || null, adjuntos: x.adjuntos || [] }));
       const r = { version: d.meta.version || 0, baseVersion: c.bv, cambio: d.meta.cambio || null, demo: !!d.meta.demo, resumen, fallas: d.fallas, cargas: d.baseHist, comunicados };
       if (baseVersion !== c.bv) r.catalogo = c.catJson;
       return r;
@@ -4359,10 +4555,25 @@ function BackendLocal() {
             + '. Edita ese comunicado, o retíralo antes de publicar otro igual.');
         }
       };
-      let c, tipo, texto;
+      // Adjuntos, como el servidor: los que ya tenía se conservan y los nuevos tienen que haber terminado de subir
+      const adjuntosDe = async (ids, actuales) => {
+        const lista = [];
+        for (const id of [...new Set((ids || []).map(String))]) {
+          const ya = actuales.find((a) => a.id === id);
+          if (ya) { lista.push(ya); continue; }
+          const a = await Store.leerAdjunto(id);
+          if (!a || !a.ficha.completo) throw errorAlertas('DATOS', 'Uno de los adjuntos no terminó de subir. Quítalo y vuelve a adjuntarlo.');
+          lista.push({ id, nombre: a.ficha.nombre, tipo: a.ficha.tipo, clase: a.ficha.clase, bytes: a.ficha.bytes });
+        }
+        if (Model.imagenesDe({ adjuntos: lista }).length > CONFIG.adjuntos.imagenes) throw errorAlertas('DATOS', 'Un comunicado lleva como mucho ' + CONFIG.adjuntos.imagenes + ' imágenes.');
+        if (Model.archivosDe({ adjuntos: lista }).length > CONFIG.adjuntos.archivos) throw errorAlertas('DATOS', 'Un comunicado lleva como mucho ' + CONFIG.adjuntos.archivos + ' archivos adjuntos.');
+        return lista;
+      };
+      let c, tipo, texto, sobran = [];
       if (op === 'publicar') {
         const datos = validar(d.comunicado || {});
         libre(datos.titulo, null);
+        datos.adjuntos = await adjuntosDe((d.comunicado || {}).adjuntos, []);
         if (Model.comunicadosVigentes(lista).length >= 10) throw errorAlertas('DATOS', 'Ya hay 10 comunicados vigentes. Retira alguno antes de publicar otro.');
         c = Object.assign(datos, { id: Model.nuevoIdComunicado(lista, ahora), estado: 'VIGENTE', publicadoEn: ahora, publicadoPor: por, editadoEn: null, editadoPor: null,
           retiradoEn: null, retiradoPor: null, historial: [{ accion: 'PUBLICADO', en: ahora, por, detalle: '' }] });
@@ -4374,15 +4585,19 @@ function BackendLocal() {
         if (c.estado !== 'VIGENTE') throw errorAlertas('DATOS', 'Otra persona ya retiró este comunicado.');
         if (op === 'editar') {
           const datos = validar(Object.assign({ titulo: c.titulo, contexto: c.contexto }, d.comunicado || {}));
-          const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : ''].filter(Boolean);
+          const antes = c.adjuntos || [], pedidos = (d.comunicado || {}).adjuntos;
+          datos.adjuntos = Array.isArray(pedidos) ? await adjuntosDe(pedidos, antes) : antes;
+          const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : '', Model.mismosAdjuntos(datos.adjuntos, antes) ? '' : 'los adjuntos'].filter(Boolean);
           if (!cambios.length) throw errorAlertas('DATOS', 'No hay cambios que guardar en el comunicado.');
           libre(datos.titulo, c.id);
+          sobran = antes.filter((a) => !datos.adjuntos.some((b) => b.id === a.id)).map((a) => a.id);
           Object.assign(c, datos, { editadoEn: ahora, editadoPor: por });
-          c.historial.push({ accion: 'EDITADO', en: ahora, por, detalle: 'Cambió ' + cambios.join(' y ') });
+          c.historial.push({ accion: 'EDITADO', en: ahora, por, detalle: 'Cambió ' + (cambios.length > 2 ? cambios.slice(0, -1).join(', ') + ' y ' + cambios[cambios.length - 1] : cambios.join(' y ')) });
           tipo = 'COMUNICADO_EDITADO'; texto = 'actualizó el comunicado «' + c.titulo + '»';
         } else if (op === 'retirar') {
-          Object.assign(c, { estado: 'RETIRADO', retiradoEn: ahora, retiradoPor: por });
-          c.historial.push({ accion: 'RETIRADO', en: ahora, por, detalle: '' });
+          sobran = (c.adjuntos || []).map((a) => a.id);
+          c.historial.push({ accion: 'RETIRADO', en: ahora, por, detalle: sobran.length ? 'Tenía ' + Model.resumenAdjuntos(c.adjuntos) : '' });
+          Object.assign(c, { estado: 'RETIRADO', retiradoEn: ahora, retiradoPor: por, adjuntos: [] });
           tipo = 'COMUNICADO_RETIRADO'; texto = 'retiró el comunicado «' + c.titulo + '»';
         } else throw errorAlertas('DATOS', 'Operación no válida.');
       }
@@ -4395,7 +4610,38 @@ function BackendLocal() {
         : antes.filter((x) => x.id !== c.id).concat(tipo === 'COMUNICADO_RETIRADO' ? { v, id: c.id, tipo: 'RETIRADO', titulo: c.titulo, en: ahora, por: por.nombre }
           : { v, id: c.id, tipo: 'PUBLICADO', titulo: c.titulo, resumen, en: ahora, por: por.nombre }).slice(-4);
       const version = await confirmar(tipo, texto, { comunicados: lista, meta: { avisosComunicados } });
+      if (sobran.length) await Store.borrarAdjuntos(sobran).catch(() => {});
       return { comunicado: c, version };
+    },
+    /* Adjuntos en la demostración: igual que el servidor, por partes, pero guardados en este navegador */
+    async adjunto(op, d) {
+      const P = CONFIG.adjuntos.parte;
+      if (op === 'subir') {
+        let a;
+        if (!d.parte) {
+          const def = Model.tipoAdjunto(d.nombre), falta = Model.faltaAdjunto(d.nombre, d.bytes, []);
+          if (falta) throw errorAlertas('DATOS', falta);
+          const azar = crypto.getRandomValues(new Uint8Array(6));
+          a = { id: 'A' + Array.from(azar, (b) => b.toString(16).padStart(2, '0')).join(''), datos: '',
+            ficha: { nombre: Model.nombreAdjunto(d.nombre), tipo: def.tipo, clase: def.clase, bytes: d.bytes, largo: 4 * Math.ceil(d.bytes / 3), en: Date.now(), completo: false } };
+        } else {
+          a = await Store.leerAdjunto(d.id);
+          if (!a || a.ficha.completo || a.datos.length !== d.parte * P) throw errorAlertas('DATOS', 'La subida se interrumpió. Quita el adjunto y vuelve a ponerlo.');
+        }
+        a.datos += d.datos;
+        if (a.datos.length > a.ficha.largo) throw errorAlertas('DATOS', 'La subida se interrumpió. Quita el adjunto y vuelve a ponerlo.');
+        a.ficha.completo = a.datos.length === a.ficha.largo;
+        await Store.guardarAdjunto(a.id, a);
+        const f = a.ficha;
+        return { id: a.id, completo: f.completo, adjunto: f.completo ? { id: a.id, nombre: f.nombre, tipo: f.tipo, clase: f.clase, bytes: f.bytes } : null };
+      }
+      if (op === 'bajar') {
+        const a = await Store.leerAdjunto(d.id), k = d.parte || 0;
+        if (!a || !a.ficha.completo || k * P >= a.datos.length) throw errorAlertas('DATOS', 'Este adjunto ya no está disponible.');
+        const f = a.ficha;
+        return { id: a.id, nombre: f.nombre, tipo: f.tipo, clase: f.clase, bytes: f.bytes, partes: Math.ceil(a.datos.length / P), parte: k, datos: a.datos.slice(k * P, (k + 1) * P) };
+      }
+      throw errorAlertas('DATOS', 'Operación no válida.');
     },
 
     async alertas() {
@@ -4943,6 +5189,49 @@ const A = {
   editarComunicado: (id, c) => A.comunicado('editar', { id, comunicado: c }),
   retirarComunicado: (id) => A.comunicado('retirar', { id }),
 
+  /* Adjuntos de los comunicados (imágenes y archivos). El contenido no viaja con el comunicado: se pide al abrirlo,
+     por partes, y lo que ya se bajó queda en esta página (id → promesa con su dirección local). */
+  adjuntos: new Map(),
+  /* Sube un archivo y devuelve su ficha (id, nombre, tipo, clase y bytes). Las imágenes se reducen antes de subir.
+     lista: los adjuntos que ya lleva el comunicado, para respetar los topes. alAvanzar(0..1). */
+  async subirAdjunto(archivo, lista, alAvanzar) {
+    const listo = await Adjuntos.preparar(archivo);
+    const falta = Model.faltaAdjunto(listo.nombre, listo.blob.size, lista);
+    if (falta) throw Object.assign(new Error(falta), { codigo: 'DATOS' });
+    const b64 = await Adjuntos.aBase64(listo.blob), P = CONFIG.adjuntos.parte, n = Math.max(1, Math.ceil(b64.length / P));
+    let id = null, r = null;
+    for (let k = 0; k < n; k++) {
+      r = await Backend.adjunto('subir', { nombre: listo.nombre, bytes: listo.blob.size, parte: k, id, datos: b64.slice(k * P, (k + 1) * P) });
+      id = r.id;
+      if (alAvanzar) alAvanzar((k + 1) / n);
+    }
+    if (!r || !r.completo || !r.adjunto) throw Object.assign(new Error('La subida se interrumpió. Quita el adjunto y vuelve a ponerlo.'), { codigo: 'DATOS' });
+    A.adjuntos.set(id, Promise.resolve(URL.createObjectURL(listo.blob)));
+    return r.adjunto;
+  },
+  /* La dirección local (blob:) de un adjunto, bajándolo si hace falta. El tipo sale de la extensión del nombre y
+     solo de la lista permitida: lo que diga el servidor nunca hace que el navegador lo trate como una página. */
+  abrirAdjunto(a) {
+    let p = A.adjuntos.get(a.id);
+    if (!p) {
+      p = (async () => {
+        const def = Model.tipoAdjunto(a.nombre);
+        if (!def) throw new Error('Este adjunto no se puede abrir.');
+        const primera = await Backend.adjunto('bajar', { id: a.id, parte: 0 });
+        const partes = [primera.datos], n = primera.partes || 1;
+        // Las demás partes, de 3 en 3
+        for (let k = 1; k < n; k += 3) {
+          const tanda = await Promise.all([k, k + 1, k + 2].filter((x) => x < n).map((x) => Backend.adjunto('bajar', { id: a.id, parte: x })));
+          tanda.forEach((t) => partes.push(t.datos));
+        }
+        return URL.createObjectURL(new Blob([Adjuntos.deBase64(partes.join(''))], { type: def.tipo }));
+      })();
+      A.adjuntos.set(a.id, p);
+      p.catch(() => A.adjuntos.delete(a.id));
+    }
+    return p;
+  },
+
   async subirBase(base, alProgreso) {
     alProgreso({ fase: 'preparando' });
     await new Promise((r) => setTimeout(r, 20));
@@ -4985,6 +5274,53 @@ const motivoConocido = (f) => (f.motivo !== 'OTRO' && MOTIVO[f.motivo]) || null;
 function nombreMotivo(f) { const m = motivoConocido(f); return m ? m.nombre : f.motivoTexto || 'Otro motivo'; }
 function cortoMotivo(f) { const m = motivoConocido(f); return m ? m.corto : f.motivoTexto || 'Otro motivo'; }
 function clienteMotivo(f) { const m = motivoConocido(f); return m ? m.cliente : f.clienteTexto || 'una afectación en la red de su zona'; }
+/* Preparar un archivo para adjuntarlo: las imágenes se reducen (lado mayor de 1,600 px y JPG) hasta que pesen
+   menos del tope; los demás archivos van tal cual. */
+const Adjuntos = {
+  async preparar(archivo) {
+    const def = Model.tipoAdjunto(archivo.name), nombre = Model.nombreAdjunto(archivo.name);
+    if (!def || def.clase !== 'imagen') return { nombre, blob: archivo };
+    const L = CONFIG.adjuntos;
+    let img;
+    try { img = await Adjuntos.imagen(archivo); } catch (e) { throw Object.assign(new Error('No se pudo leer la imagen «' + nombre + '». Revisa que sea un JPG o un PNG.'), { codigo: 'DATOS' }); }
+    const lado = Math.max(img.width, img.height);
+    if (lado <= L.ladoImagen && archivo.size <= L.imagenBytes) return { nombre, blob: archivo };
+    // Se va bajando el tamaño y la calidad hasta que quepa
+    let blob = null;
+    for (const [tope, calidad] of [[L.ladoImagen, 0.86], [L.ladoImagen, 0.72], [1280, 0.72], [1024, 0.66], [800, 0.6]]) {
+      const f = Math.min(1, tope / lado), w = Math.max(1, Math.round(img.width * f)), h = Math.max(1, Math.round(img.height * f));
+      const lienzo = document.createElement('canvas');
+      lienzo.width = w; lienzo.height = h;
+      const ctx = lienzo.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);   // un PNG con transparencia queda sobre blanco
+      ctx.drawImage(img, 0, 0, w, h);
+      blob = await new Promise((ok) => lienzo.toBlob(ok, 'image/jpeg', calidad));
+      if (blob && blob.size <= L.imagenBytes) break;
+    }
+    if (!blob) throw Object.assign(new Error('No se pudo preparar la imagen «' + nombre + '».'), { codigo: 'DATOS' });
+    return { nombre: nombre.replace(/\.[A-Za-z0-9]+$/, '') + '.jpg', blob };
+  },
+  imagen(archivo) {
+    return new Promise((ok, mal) => {
+      const url = URL.createObjectURL(archivo), img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); ok(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('imagen')); };
+      img.src = url;
+    });
+  },
+  async aBase64(blob) {
+    const b = new Uint8Array(await blob.arrayBuffer());
+    let t = '';
+    for (let i = 0; i < b.length; i += 0x6000) t += String.fromCharCode.apply(null, b.subarray(i, i + 0x6000));   // múltiplo de 3: se puede partir
+    return btoa(t);
+  },
+  deBase64(texto) {
+    const t = atob(texto), b = new Uint8Array(t.length);
+    for (let i = 0; i < t.length; i++) b[i] = t.charCodeAt(i);
+    return b;
+  }
+};
+
 function puede(vista) { const u = G.s.user; return !!u && CONFIG.roles[u.rol].vistas.includes(vista); }
 const esWorkforce = () => { const u = G.s.user; return !!u && (u.rol === 'workforce' || u.rol === 'jefatura'); };
 /* Workforce, Jefatura y los supervisores de Call Center ven las posibles fallas (el aviso de 5 clientes en 60 min) */
@@ -5136,6 +5472,12 @@ const ICONOS = {
   reporte: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>',
   campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
   // Megáfono: los comunicados informativos (avisos que no son una falla de nodo)
+  // Adjuntos y modales
+  clip: '<path d="M20 11.5l-8 8a5 5 0 0 1-7.1-7.1l8.4-8.4a3.4 3.4 0 0 1 4.8 4.8l-8.3 8.3a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/>',
+  imagen: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="m4 17 4.6-4.4a1.6 1.6 0 0 1 2.2 0l2.4 2.3 1.6-1.5a1.6 1.6 0 0 1 2.2 0L20 16"/>',
+  archivo: '<path d="M13.5 3.5H7.8A1.8 1.8 0 0 0 6 5.3v13.4a1.8 1.8 0 0 0 1.8 1.8h8.4a1.8 1.8 0 0 0 1.8-1.8V8z"/><path d="M13.5 3.5V8H18"/><path d="M9 12.5h6M9 16h4"/>',
+  ampliar: '<path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/>',
+  izquierda: '<path d="m14.5 5.5-6.5 6.5 6.5 6.5"/>',
   megafono: '<path d="M3.5 10.2v3.6l3.6 1 8.4 3.9V5.3L7.1 9.2l-3.6 1z"/><path d="M8 15.2l.7 3.3a1.6 1.6 0 0 0 3.1-.7l-.4-1.3"/><path d="M18.3 9.3a4 4 0 0 1 0 5.4"/><path d="M20.6 6.9a7.4 7.4 0 0 1 0 10.2"/>',
   correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',
@@ -5257,6 +5599,12 @@ function VistaConsulta() {
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
+  // La falla o el comunicado que está abierto en el modal: { tipo, id }. Se busca en la lista de cada momento, así
+  // lo que Workforce cambie se ve al instante; si la falla sale del panel o retiran el comunicado, el modal se cierra.
+  const [detalle, setDetalle] = useState(null);
+  const abrir = (tipo, id) => setDetalle({ tipo, id });
+  const fallaAbierta = detalle && detalle.tipo === 'falla' ? mf.activas.concat(mf.resueltas).find((f) => f.id === detalle.id) : null;
+  const comunicadoAbierto = detalle && detalle.tipo === 'comunicado' ? comunicados.find((c) => c.id === detalle.id) : null;
   const ultima = useRef({ q: '', t: 0, res: null });
   // Aquí las fallas se cargan solas: un cambio que quedó pendiente estando en otra vista se trae al entrar
   const pendiente = s.remoto && A.cargaSola(s.remoto) ? s.remoto.version : 0;
@@ -5265,7 +5613,7 @@ function VistaConsulta() {
   useEffect(() => {
     const k = (e) => {
       const tag = (e.target.tagName || '').toLowerCase();
-      if (e.key === '/' && tag !== 'input' && tag !== 'textarea' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); inputRef.current && inputRef.current.focus(); inputRef.current && inputRef.current.select(); }
+      if (e.key === '/' && tag !== 'input' && tag !== 'textarea' && !e.ctrlKey && !e.metaKey && !document.querySelector('.fondo-modal')) { e.preventDefault(); inputRef.current && inputRef.current.focus(); inputRef.current && inputRef.current.select(); }
     };
     document.addEventListener('keydown', k);
     setTimeout(() => inputRef.current && inputRef.current.focus(), 50);
@@ -5320,7 +5668,7 @@ function VistaConsulta() {
 
   return html`<div class="consulta">
     <section aria-label="Consulta de cliente">
-      ${comunicados.length > 0 && html`<${ComunicadosArriba} lista=${comunicados} now=${s.now} />`}
+      ${comunicados.length > 0 && html`<${ComunicadosArriba} lista=${comunicados} now=${s.now} onAbrir=${abrir} />`}
       ${veAlertas() && !esWorkforce() && html`<${PosiblesFallas} mf=${mf} />`}
       <form class="buscador" role="search" onSubmit=${(e) => { e.preventDefault(); consultar(q); }}>
         <label class="buscador-caja">
@@ -5348,7 +5696,9 @@ function VistaConsulta() {
         : buscando ? html`<div class="resultado"><div class="panel buscando"><span class="punto vivo"></span>Buscando en la base de clientes…</div></div>`
         : html`<${InicioAsesor} mf=${mf} onAbrir=${(c) => { setQ(String(c)); consultar(String(c)); }} />`}
     </section>
-    <${RielFallas} mf=${mf} now=${s.now} comunicados=${comunicados} />
+    <${RielFallas} mf=${mf} now=${s.now} comunicados=${comunicados} onAbrir=${abrir} />
+    ${fallaAbierta && html`<${ModalFalla} f=${fallaAbierta} now=${s.now} onCerrar=${() => setDetalle(null)} />`}
+    ${comunicadoAbierto && html`<${ModalComunicado} c=${comunicadoAbierto} now=${s.now} onCerrar=${() => setDetalle(null)} />`}
   </div>`;
 }
 
@@ -5831,16 +6181,14 @@ function MapaVivo({ mf }) {
 }
 
 /* ---------- Comunicados: avisos informativos de Workforce que no son una falla de nodo ----------
-   Solo título y contexto (por ejemplo, una falla general de DTH o de canales). Van arriba de las fallas, en violeta
-   y con la etiqueta "Informativo", hasta que Workforce los retira. No cambian el resultado de ninguna consulta. */
+   Título y contexto (por ejemplo, una falla general de DTH o de canales), y a veces imágenes o archivos. Van arriba
+   de las fallas, en violeta y con la etiqueta "Informativo", hasta que Workforce los retira. No cambian el resultado
+   de ninguna consulta. */
 const cuandoComunicado = (verbo, ts, now) => (U.esHoy(ts, now)
   ? verbo + ' a ' + U.las(ts) + ', ' + (now - ts < U.MIN ? 'ahora' : U.hace(ts, now)) : verbo + ' ' + U.cuando(ts, now));
-/* Un comunicado en el panel. El contexto se corta a 4 líneas con "Ver todo"; al tocarlo se abre completo (ahí el
-   texto se puede seleccionar y copiar) y dice quién lo publicó. donde: el panel o la parte de arriba de la consulta
-   (el mismo comunicado sale en los dos sitios y cada uno necesita su propio id). previa: la vista previa de
-   Workforce, que no se abre. */
-function ComunicadoItem({ c, now, donde, previa }) {
-  const [abierto, setAbierto] = useState(false);
+/* Un comunicado en el panel. El contexto se corta a 4 líneas con "Ver todo" y, si trae imágenes o archivos, dice
+   cuántos; al tocarlo se abre completo en un modal. previa: la vista previa de Workforce, que no se abre. */
+function ComunicadoItem({ c, now, previa, onAbrir }) {
   const [cortado, setCortado] = useState(false);
   const ref = useRef(null);
   // ¿El contexto no cabe en las líneas que se ven? Se mide en pantalla y se vuelve a medir si cambia el ancho
@@ -5853,42 +6201,32 @@ function ComunicadoItem({ c, now, donde, previa }) {
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [c.contexto, abierto]);
+  }, [c.contexto]);
   const marca = Model.marcaComunicado(c, now);
-  const idDet = 'com-det-' + (donde || 'panel') + '-' + c.id;
-  const cabeza = html`<div class="com-cab"><span class="com-etiqueta"><${Ico} n="megafono" s=${15} />Informativo</span>
+  const adjuntos = Model.resumenAdjuntos(c.adjuntos);
+  const dentro = html`<div class="com-cab"><span class="com-etiqueta"><${Ico} n="megafono" s=${15} />Informativo</span>
       ${marca && html`<span class="com-marca"><i></i>${marca === 'NUEVO' ? 'Nuevo' : 'Actualizado'}</span>`}</div>
-    <div class="com-titulo">${c.titulo}</div>`;
-  const resumen = html`<div class="com-contexto" ref=${ref}>${c.contexto}</div>
+    <div class="com-titulo">${c.titulo}</div>
+    <div class="com-contexto" ref=${ref}>${c.contexto}</div>
     ${cortado && html`<span class="com-ver">Ver todo</span>`}
+    ${adjuntos && html`<div class="com-adj"><${Ico} n="clip" s=${14} />${adjuntos}</div>`}
     <div class="com-meta">${c.editadoEn ? cuandoComunicado('Actualizado', c.editadoEn, now) : cuandoComunicado('Publicado', c.publicadoEn, now)}</div>`;
-  if (previa) return html`<div class="com-item"><div class="com-item-cab">${cabeza}${resumen}</div></div>`;
-  return html`<div class="com-item" data-abierto=${abierto}>
-    <button type="button" class="com-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
-      ${cabeza}${!abierto && resumen}
-    </button>
-    ${abierto && html`<div class="com-det" id=${idDet}>
-      <div class="com-contexto completo">${c.contexto}</div>
-      <div><button type="button" class="enlace com-menos" onClick=${() => setAbierto(false)}>Ver menos</button></div>
-      <div class="com-pie">
-        <span>${cuandoComunicado('Publicado', c.publicadoEn, now)}</span>
-        ${c.editadoEn && html`<span>${cuandoComunicado('Actualizado', c.editadoEn, now)}</span>`}
-        ${c.publicadoPor && c.publicadoPor.nombre && html`<span>Por ${c.publicadoPor.nombre}</span>`}
-      </div>
-    </div>`}
+  if (previa) return html`<div class="com-item"><div class="com-item-cab">${dentro}</div></div>`;
+  return html`<div class="com-item">
+    <button type="button" class="com-item-cab" aria-haspopup="dialog" title="Abrir el comunicado" onClick=${() => onAbrir && onAbrir('comunicado', c.id)}>${dentro}</button>
   </div>`;
 }
 /* En una pantalla angosta el panel de fallas queda debajo de la consulta: ahí los comunicados suben al principio
    (con el contexto a 2 líneas), para que nadie tenga que bajar a buscarlos. En pantallas anchas esto no se ve. */
-function ComunicadosArriba({ lista, now }) {
+function ComunicadosArriba({ lista, now, onAbrir }) {
   return html`<div class="com-arriba" role="region" aria-label="Comunicados">
     <h4><span>Comunicados</span><span>${lista.length}</span></h4>
-    ${lista.map((c) => html`<${ComunicadoItem} c=${c} now=${now} donde="arriba" key=${c.id} />`)}
+    ${lista.map((c) => html`<${ComunicadoItem} c=${c} now=${now} onAbrir=${onAbrir} key=${c.id} />`)}
   </div>`;
 }
 
 /* ---------- Riel con los comunicados y las fallas activas y recientes ---------- */
-function RielFallas({ mf, now, comunicados }) {
+function RielFallas({ mf, now, comunicados, onAbrir }) {
   const s = useG();
   // A quien publica la base: las colonias salen cuando se vuelve a publicar una base de antes de que se guardaran
   const faltanColonias = s.cat && !s.cat.conColonias && puede('base') && mf.activas.length + mf.resueltas.length > 0;
@@ -5897,29 +6235,26 @@ function RielFallas({ mf, now, comunicados }) {
     ${faltanColonias && html`<div class="nota atencion riel-nota falta-colonias"><${Ico} n="info" s=${16} /><span>Las colonias salen al volver a publicar la base en <a href="#base" onClick=${() => ir('base')}>Base</a>: sirve el mismo Excel de esta semana.</span></div>`}
     ${comunicados && comunicados.length > 0 && html`<div class="riel-seccion com-seccion">
       <h4><span>Comunicados</span><span>${comunicados.length}</span></h4>
-      ${comunicados.map((c) => html`<${ComunicadoItem} c=${c} now=${now} key=${c.id} />`)}
+      ${comunicados.map((c) => html`<${ComunicadoItem} c=${c} now=${now} onAbrir=${onAbrir} key=${c.id} />`)}
     </div>`}
     <div class="riel-seccion">
       <h4><span>Activas</span><span>${mf.activas.length}</span></h4>
-      ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)
+      ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} onAbrir=${onAbrir} key=${f.id} />`)
         : html`<div class="vacio" style="padding:14px 8px"><b>Sin fallas activas</b>Workforce HN no ha publicado fallas en este momento.</div>`}
     </div>
     <div class="riel-seccion">
       <h4><span>Resueltas, visibles ${CONFIG.horasVisibleTrasCierre} h</span><span>${mf.resueltas.length}</span></h4>
-      ${mf.resueltas.length ? mf.resueltas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)
+      ${mf.resueltas.length ? mf.resueltas.map((f) => html`<${FallaItem} f=${f} now=${now} onAbrir=${onAbrir} key=${f.id} />`)
         : html`<div class="vacio" style="padding:10px 8px">Ninguna en las últimas ${CONFIG.horasVisibleTrasCierre} h.</div>`}
     </div>
   </aside>`;
 }
 
 /* Una falla en el panel: el departamento con sus nodos (los primeros 3 y cuántos más) y, debajo, las colonias con
-   más clientes. Al tocarla se ven sus colonias por municipio y, si son más de 3 nodos, todos los nodos. */
+   más clientes. Al tocarla se abre su detalle en un modal: colonias por municipio, todos los nodos y los tiempos. */
 const COLONIAS_POR_MUNICIPIO = 6, NODOS_A_LA_VISTA = 3;
-function FallaItem({ f, now }) {
+function FallaItem({ f, now, onAbrir }) {
   const s = useG();
-  const [abierto, setAbierto] = useState(false);
-  const [todas, setTodas] = useState(false);
-  const [verNodos, setVerNodos] = useState(false);
   const zona = useMemo(() => Model.zonaFalla(s.cat, f), [s.cat, f]);
   const activa = f.estado === 'ACTIVA';
   const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
@@ -5934,12 +6269,8 @@ function FallaItem({ f, now }) {
   const debajo = zona.top.length
     ? (masColonias > 0 ? zona.top.join(', ') + ' y ' + U.plural(masColonias, '1 colonia más', U.n(masColonias) + ' colonias más') : U.listaNatural(zona.top, 3))
     : U.listaNatural(munis.map(L), 3);
-  const grupos = zona.grupos ? zona.grupos.filter((g) => todas || g.principal) : [];
-  const hayMas = !!zona.grupos && zona.grupos.some((g) => !g.principal || g.cols.length > COLONIAS_POR_MUNICIPIO);
-  const muchosNodos = f.nodos.length > NODOS_A_LA_VISTA;
-  const idDet = 'falla-det-' + f.id;
   return html`<div class="falla-item" data-s=${f.estado}>
-    <button type="button" class="falla-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
+    <button type="button" class="falla-item-cab" aria-haspopup="dialog" title="Ver el detalle de la falla" onClick=${() => onAbrir && onAbrir('falla', f.id)}>
       <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
       ${zona.deps.length
         ? html`<div class="zona"><${Ico} n="pin" s=${15} /><span><b>${U.listaNatural(zona.deps.map(L), 3)}</b> · <span class="nodos-zona">${nodos}</span></span></div>`
@@ -5953,25 +6284,223 @@ function FallaItem({ f, now }) {
           ${imp.gpon > 0 && html`<span class="tec" data-t="GPON">GPON${imp.hfc > 0 ? ' ' + U.n(imp.gpon) : ''}</span>`}</span>
       </div>
     </button>
-    ${abierto && html`<div class="det" id=${idDet}>
-      ${zona.grupos
-        ? grupos.map((g) => html`<div class="zona-grupo" key=${g.dep + '|' + g.muni}>
-            <div class="zona-muni"><b>${L(g.muni) || 'Sin municipio'}</b>${(!unDep || !g.principal) && g.dep ? html`<span>${L(g.dep)}</span>` : ''}
-              <span class="cuantos">${U.plural(g.n, '1 cliente', U.n(g.n) + ' clientes')}</span></div>
-            <div class="zona-cols">
-              ${(todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO)).map(([c]) => html`<span class="chip" key=${c}>${c}</span>`)}
-              ${!todas && g.cols.length > COLONIAS_POR_MUNICIPIO && html`<button type="button" class="chip mas" title="Ver todas las colonias" onClick=${() => setTodas(true)}>+${U.n(g.cols.length - COLONIAS_POR_MUNICIPIO)}</button>`}
-            </div>
-          </div>`)
-        : (imp.munis || []).length > 0 && html`<div class="zona-cols">${imp.munis.map(([m, n]) => html`<span class="chip" key=${m}>${L(m)} · ${U.n(n)}</span>`)}</div>`}
-      ${(hayMas || muchosNodos) && html`<div class="det-acc">
-        ${hayMas && html`<button type="button" class="enlace" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + U.n(zona.colonias) + ' colonias'}</button>`}
-        ${muchosNodos && html`<button type="button" class="enlace" aria-expanded=${verNodos} onClick=${() => setVerNodos(!verNodos)}>${verNodos ? 'Ocultar los nodos' : 'Ver los ' + U.n(f.nodos.length) + ' nodos'}</button>`}
+  </div>`;
+}
+
+/* ---------- Modal de detalle (estilo monitoreo) ----------
+   Encabezado oscuro, como el mapa en vivo, con la X roja en la esquina. Se cierra con la X, con Esc o tocando
+   afuera. tipo: FALLA, RESUELTA o COMUNICADO (cambia el color del encabezado). */
+function ModalB({ tipo, etiqueta, cabeza, pie, onCerrar, ancho, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    // Con una imagen abierta en grande, Esc cierra primero la imagen (la atiende ella)
+    const k = (e) => { if (e.key === 'Escape' && !document.querySelector('.mb-luz')) onCerrar(); };
+    document.addEventListener('keydown', k);
+    const antes = document.activeElement;
+    const t = setTimeout(() => { const x = ref.current && ref.current.querySelector('.mb-x'); if (x) x.focus(); }, 30);
+    return () => { document.removeEventListener('keydown', k); clearTimeout(t); if (antes && antes.focus && document.contains(antes)) antes.focus(); };
+  }, []);
+  return html`<div class="fondo-modal mb-fondo" onMouseDown=${(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
+    <div class="mb" role="dialog" aria-modal="true" aria-label=${etiqueta} data-t=${tipo} ref=${ref} style=${'width:min(' + (ancho || 820) + 'px,100%)'}>
+      <div class="mb-cab">
+        <div class="mb-cab-txt">${cabeza}</div>
+        <button type="button" class="mb-x" aria-label="Cerrar" title="Cerrar (Esc)" onClick=${onCerrar}><${Ico} n="x" s=${22} /></button>
+      </div>
+      ${children}
+      <div class="mb-pie"><span>${pie}</span><span class="mb-esc"><span class="tecla">Esc</span>o la X para cerrar</span></div>
+    </div>
+  </div>`;
+}
+
+/* El detalle de una falla: clientes afectados, cuánto lleva y la hora estimada (con el avance), los nodos y las
+   colonias por municipio, de más a menos clientes. */
+function ModalFalla({ f, now, onCerrar }) {
+  const s = useG();
+  const [todas, setTodas] = useState(false);
+  const zona = useMemo(() => Model.zonaFalla(s.cat, f), [s.cat, f]);
+  const activa = f.estado === 'ACTIVA';
+  const imp = f.impacto || { total: 0, hfc: 0, gpon: 0, munis: [] };
+  const L = U.lugar;
+  const unDep = zona.deps.length <= 1;
+  const grupos = zona.grupos ? zona.grupos.filter((g) => todas || g.principal) : [];
+  const hayMas = !!zona.grupos && zona.grupos.some((g) => !g.principal || g.cols.length > COLONIAS_POR_MUNICIPIO);
+  const mayor = zona.grupos ? Math.max(1, ...zona.grupos.map((g) => (g.cols[0] ? g.cols[0][1] : 0))) : 1;
+  const conEta = activa && !!f.eta && f.eta > f.inicio;
+  const pasada = conEta && now >= f.eta;
+  const pct = conEta ? Math.max(0, Math.min(100, Math.round(100 * (now - f.inicio) / (f.eta - f.inicio)))) : 0;
+  const estado = activa ? (f.motivo === 'VALIDACION' ? 'EN VALIDACIÓN' : 'FALLA ACTIVA') : 'RESUELTA';
+  const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
+  const tec = html`<span class="mb-tecs">
+    ${imp.hfc > 0 && html`<span><i data-t="HFC"></i><b>${U.n(imp.hfc)}</b> HFC</span>`}${imp.gpon > 0 && html`<span><i data-t="GPON"></i><b>${U.n(imp.gpon)}</b> GPON</span>`}</span>`;
+  const cabeza = html`<div class="mb-fila"><span class="mb-pill"><i></i>${estado}</span><span class="mb-num">${U.numeroFalla(f)}</span></div>
+    <h2>${nombreMotivo(f)}</h2>
+    <div class="mb-sub"><${Ico} n="pin" s=${17} /><span>${zona.deps.length > 0 && html`<b>${U.listaNatural(zona.deps.map(L), 3)}</b> · `}${U.listaNatural(f.nodos, NODOS_A_LA_VISTA)}</span></div>`;
+  return html`<${ModalB} tipo=${activa ? 'FALLA' : 'RESUELTA'} etiqueta=${'Falla ' + U.numeroFalla(f) + ', ' + nombreMotivo(f)} cabeza=${cabeza} onCerrar=${onCerrar}
+      pie=${html`Publicó <b>${f.publicadaPor.nombre}</b>, ${U.cuandoCorto(f.publicadaEn, now)}${!activa && restante > 0 ? ' · Se oculta del panel en ' + U.dur(restante) : ''}`}>
+    <div class="mb-datos">
+      <div class="mb-cifras">
+        <div class="mb-grande"><span>Clientes afectados</span><b class="num">${U.n(imp.total)}</b>${tec}</div>
+        ${activa ? html`<div class="mb-dato"><b>${U.dur(now - f.inicio)}</b><span>lleva sin servicio</span></div>
+            <div class="mb-dato" data-d="eta"><b>${f.eta ? U.cuandoCorto(f.eta, now) : 'Por confirmar'}</b><span>solución estimada</span></div>`
+          : html`<div class="mb-dato"><b>${U.dur(f.cerradaEn - f.inicio)}</b><span>duró la falla</span></div>
+            <div class="mb-dato" data-d="ok"><b>${U.cuandoCorto(f.cerradaEn, now)}</b><span>se restableció el servicio</span></div>`}
+      </div>
+      ${conEta && html`<div class="mb-linea">
+        <div class="mb-barra" role="img" aria-label=${pasada ? 'Ya pasó la hora estimada de solución' : 'Va el ' + pct + ' % del tiempo estimado'} style=${'--p:' + Math.max(2, pct) + '%'}><i></i><u></u></div>
+        <div class="mb-linea-txt"><span>Inició ${U.cuandoCorto(f.inicio, now)}</span>
+          <b>${pasada ? 'Ya pasó la hora estimada' : 'Ahora, ' + U.hora(now) + ' · va el ' + pct + ' % del tiempo estimado'}</b>
+          <span>Estimada ${U.cuandoCorto(f.eta, now)}</span></div>
       </div>`}
-      ${verNodos && html`<div class="zona-cols nodos-falla">${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}</div>`}
-      <div class="sub">${U.conPunto('Publicada por ' + f.publicadaPor.nombre + ', ' + U.cuandoCorto(f.publicadaEn, now))}</div>
+      ${activa && !conEta && html`<div class="mb-linea-txt sola"><span>Inició ${U.cuandoCorto(f.inicio, now)}, ${U.hace(f.inicio, now)}</span><span>Todavía sin hora estimada de solución</span></div>`}
+    </div>
+    <div class="mb-cuerpo">
+      ${f.nodos.length > NODOS_A_LA_VISTA && html`<div class="mb-sec">
+        <div class="mb-sec-cab"><h3>Nodos afectados</h3><span>${U.n(f.nodos.length)} nodos</span></div>
+        <div class="mb-chips nodos-falla">${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}</div>
+      </div>`}
+      ${zona.grupos ? html`<div class="mb-sec">
+          <div class="mb-sec-cab"><h3>Colonias afectadas</h3>
+            <span>${U.plural(zona.colonias, '1 colonia', U.n(zona.colonias) + ' colonias')} en ${U.plural(zona.grupos.length, '1 municipio', U.n(zona.grupos.length) + ' municipios')}</span></div>
+          <div class="mb-munis">${grupos.map((g) => {
+            const cols = todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO), resto = g.cols.slice(cols.length);
+            return html`<div class="mb-muni" key=${g.dep + '|' + g.muni}>
+              <div class="mb-muni-cab"><b>${L(g.muni) || 'Sin municipio'}${(!unDep || !g.principal) && g.dep ? html`<small>${L(g.dep)}</small>` : ''}</b>
+                <span><b>${U.n(g.n)}</b> ${g.n === 1 ? 'cliente' : 'clientes'}</span></div>
+              <div class="mb-cols">${cols.map(([c, n]) => html`<div class="mb-col" key=${c}><span>${c}</span><i><u style=${'width:' + Math.max(3, Math.round(100 * n / mayor)) + '%'}></u></i><b>${U.n(n)}</b></div>`)}</div>
+              ${resto.length > 0 && html`<div class="mb-resto">y ${U.plural(resto.length, '1 colonia más', U.n(resto.length) + ' colonias más')}, con ${U.n(resto.reduce((a, x) => a + x[1], 0))} clientes</div>`}
+              ${!g.cols.length && html`<div class="mb-resto">Sin colonias registradas en la base</div>`}
+            </div>`;
+          })}</div>
+          ${hayMas && html`<div><button type="button" class="enlace mb-todas" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + U.n(zona.colonias) + ' colonias'}</button></div>`}
+        </div>`
+        : (imp.munis || []).length > 0 && html`<div class="mb-sec">
+          <div class="mb-sec-cab"><h3>Municipios afectados</h3></div>
+          <div class="mb-chips">${imp.munis.map(([m, n]) => html`<span class="chip" key=${m}>${L(m)} · ${U.n(n)}</span>`)}</div>
+        </div>`}
+    </div>
+  </${ModalB}>`;
+}
+
+/* El contenido de un adjunto, pedido al servidor cuando hace falta: { url, error } */
+function useAdjunto(a) {
+  const [e, setE] = useState({ url: '', error: '' });
+  const [intento, setIntento] = useState(0);
+  useEffect(() => {
+    let vivo = true;
+    setE({ url: '', error: '' });
+    if (!a) return undefined;
+    A.abrirAdjunto(a).then((url) => { if (vivo) setE({ url, error: '' }); }, (err) => { if (vivo) setE({ url: '', error: (err && err.message) || 'No se pudo cargar.' }); });
+    return () => { vivo = false; };
+  }, [a && a.id, intento]);
+  return Object.assign({ reintentar: () => setIntento((n) => n + 1) }, e);
+}
+
+/* Las imágenes de un comunicado: una a la vez, con flechas y miniaturas; cada una se pide al servidor cuando se
+   va a ver (no todas de golpe). "Ver en grande" la abre a pantalla completa. */
+function GaleriaAdjuntos({ imagenes }) {
+  const [i, setI] = useState(0);
+  const [grande, setGrande] = useState(false);
+  const [vistas, setVistas] = useState({});
+  const n = imagenes.length, actual = imagenes[Math.min(i, n - 1)];
+  const img = useAdjunto(actual);
+  useEffect(() => { if (img.url) setVistas((v) => (v[actual.id] ? v : Object.assign({}, v, { [actual.id]: img.url }))); }, [img.url]);
+  const mover = (d) => setI((x) => (x + d + n) % n);
+  // Con la imagen en grande: Esc la cierra (sin cerrar el comunicado) y las flechas del teclado pasan de una a otra
+  useEffect(() => {
+    if (!grande) return undefined;
+    const k = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setGrande(false); }
+      else if (e.key === 'ArrowRight' && n > 1) mover(1);
+      else if (e.key === 'ArrowLeft' && n > 1) mover(-1);
+    };
+    document.addEventListener('keydown', k, true);
+    return () => document.removeEventListener('keydown', k, true);
+  }, [grande, n]);
+  const lienzo = (clase) => html`<div class=${clase}>
+    ${img.url ? html`<img src=${img.url} alt=${actual.nombre} />`
+      : img.error ? html`<div class="mb-img-estado"><span>${img.error}</span><button type="button" class="btn btn-borde btn-chico" onClick=${img.reintentar}>Reintentar</button></div>`
+      : html`<div class="mb-img-estado"><span class="punto vivo"></span><span>Cargando la imagen…</span></div>`}
+  </div>`;
+  const flechas = n > 1 && html`<button type="button" class="mb-flecha" data-l="izq" aria-label="Imagen anterior" onClick=${() => mover(-1)}><${Ico} n="izquierda" s=${22} /></button>
+    <button type="button" class="mb-flecha" data-l="der" aria-label="Imagen siguiente" onClick=${() => mover(1)}><${Ico} n="derecha" s=${22} /></button>`;
+  return html`<div class="mb-galeria">
+    <div class="mb-escena">
+      ${lienzo('mb-img')}${flechas}
+      ${n > 1 && html`<span class="mb-cuenta">${i + 1} de ${n}</span>`}
+      <button type="button" class="mb-ampliar" disabled=${!img.url} onClick=${() => setGrande(true)}><${Ico} n="ampliar" s=${17} />Ver en grande</button>
+    </div>
+    ${n > 1 && html`<div class="mb-minis" role="tablist" aria-label="Imágenes del comunicado">
+      ${imagenes.map((a, k) => html`<button type="button" role="tab" class="mb-mini" key=${a.id} aria-selected=${k === i} aria-label=${'Imagen ' + (k + 1) + ' de ' + n} title=${a.nombre} onClick=${() => setI(k)}>
+        ${vistas[a.id] ? html`<img src=${vistas[a.id]} alt="" />` : html`<${Ico} n="imagen" s=${18} />`}<span>${k + 1}</span></button>`)}
+    </div>`}
+    ${grande && html`<div class="mb-luz" role="dialog" aria-modal="true" aria-label=${'Imagen ' + (i + 1) + ' de ' + n + ': ' + actual.nombre} onMouseDown=${(e) => { if (e.target === e.currentTarget) setGrande(false); }}>
+      ${lienzo('mb-luz-img')}${flechas}
+      <span class="mb-luz-pie">${actual.nombre}${n > 1 ? ' · ' + (i + 1) + ' de ' + n : ''}</span>
+      <button type="button" class="mb-x" aria-label="Cerrar la imagen" title="Cerrar (Esc)" onClick=${() => setGrande(false)}><${Ico} n="x" s=${22} /></button>
     </div>`}
   </div>`;
+}
+
+/* Abre un archivo adjunto: un PDF, en una pestaña nueva del navegador; Word, Excel o PowerPoint se descargan.
+   La pestaña se abre en el mismo clic (para que el navegador no la bloquee) y se llena cuando termina de bajar. */
+async function abrirArchivoAdjunto(a) {
+  const def = Model.tipoAdjunto(a.nombre), esPdf = !!def && def.ext === 'pdf';
+  let w = null;
+  if (esPdf) {
+    try { w = window.open('', '_blank'); if (w) { w.document.title = a.nombre; w.document.body.textContent = 'Cargando ' + a.nombre + '…'; w.document.body.style.cssText = 'font: 16px system-ui, sans-serif; padding: 24px; color: #48525f'; } } catch (e) { w = null; }
+  }
+  try {
+    const url = await A.abrirAdjunto(a);
+    if (w && !w.closed) { w.location.replace(url); return; }
+    const enlace = document.createElement('a');
+    enlace.href = url; enlace.download = a.nombre; enlace.rel = 'noopener';
+    document.body.appendChild(enlace); enlace.click(); enlace.remove();
+  } catch (e) {
+    if (w && !w.closed) w.close();
+    throw e;
+  }
+}
+/* Los archivos de un comunicado (PDF, Word, Excel o PowerPoint), con su tipo y su peso */
+function ArchivosAdjuntos({ archivos, titulo }) {
+  const [ocupado, setOcupado] = useState('');
+  const [error, setError] = useState('');
+  async function abrir(a) {
+    if (ocupado) return;
+    setOcupado(a.id); setError('');
+    try { await abrirArchivoAdjunto(a); } catch (e) { setError('No se pudo abrir «' + a.nombre + '». ' + ((e && e.message) || '')); } finally { setOcupado(''); }
+  }
+  return html`<div class="mb-archivos">
+    ${titulo !== false && html`<h3>Archivos adjuntos</h3>`}
+    ${archivos.map((a) => {
+      const def = Model.tipoAdjunto(a.nombre) || { sigla: 'Archivo', ext: '' }, pdf = def.ext === 'pdf';
+      return html`<button type="button" class="mb-archivo" key=${a.id} disabled=${!!ocupado} data-ext=${def.ext} onClick=${() => abrir(a)}
+          title=${pdf ? 'Abrir en una pestaña nueva' : 'Descargar a esta computadora'}>
+        <span class="ico"><${Ico} n="archivo" s=${20} /></span>
+        <span class="txt"><b>${a.nombre}</b><small>${def.sigla} · ${Model.pesoAdjunto(a.bytes)}</small></span>
+        <span class="acc">${ocupado === a.id ? html`<span class="punto vivo"></span>${pdf ? 'Abriendo…' : 'Descargando…'}` : html`<${Ico} n=${pdf ? 'ojo' : 'descargar'} s=${16} />${pdf ? 'Abrir' : 'Descargar'}`}</span>
+      </button>`;
+    })}
+    ${error && html`<div class="nota-linea" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>${error}</span></div>`}
+  </div>`;
+}
+
+/* Un comunicado completo: el texto tal como lo escribió Workforce, sus imágenes y sus archivos */
+function ModalComunicado({ c, now, onCerrar }) {
+  const imagenes = Model.imagenesDe(c), archivos = Model.archivosDe(c);
+  const marca = Model.marcaComunicado(c, now);
+  const por = c.publicadoPor && c.publicadoPor.nombre;
+  const cabeza = html`<div class="mb-fila"><span class="mb-pill"><${Ico} n="megafono" s=${15} />INFORMATIVO</span>
+      ${marca && html`<span class="mb-marca"><i></i>${marca === 'NUEVO' ? 'Nuevo' : 'Actualizado'}</span>`}</div>
+    <h2>${c.titulo}</h2>
+    <div class="mb-sub"><span>${cuandoComunicado('Publicado', c.publicadoEn, now)}${por ? html` · Por <b>${por}</b>` : ''}</span></div>`;
+  return html`<${ModalB} tipo="COMUNICADO" ancho=${760} etiqueta=${'Comunicado informativo: ' + c.titulo} cabeza=${cabeza} onCerrar=${onCerrar}
+      pie=${c.editadoEn ? cuandoComunicado('Actualizado', c.editadoEn, now) : 'Vigente hasta que ' + CONFIG.equipo + ' lo retire'}>
+    ${imagenes.length > 0 && html`<${GaleriaAdjuntos} imagenes=${imagenes} key=${imagenes.map((a) => a.id).join()} />`}
+    <div class="mb-cuerpo">
+      <div class="mb-texto">${c.contexto}</div>
+      ${archivos.length > 0 && html`<${ArchivosAdjuntos} archivos=${archivos} />`}
+    </div>
+  </${ModalB}>`;
 }
 
 
@@ -6828,6 +7357,8 @@ function VistaComunicados() {
   const [semilla, setSemilla] = useState(null);      // texto de un comunicado retirado que se va a publicar de nuevo
   const [nuevos, setNuevos] = useState(0);            // cada vez que cambia, el formulario empieza de cero
   const [retirando, setRetirando] = useState(null);
+  const [viendo, setViendo] = useState(null);         // id del comunicado abierto como lo ve el asesor
+  const visto = viendo && vigentes.find((c) => c.id === viendo);
   // Si otra persona retira el comunicado que se está editando, el formulario vuelve a "nuevo"
   const editando = edicion && vigentes.some((c) => c.id === edicion.id) ? edicion : null;
   const arriba = () => window.scrollTo({ top: 0 });
@@ -6838,7 +7369,7 @@ function VistaComunicados() {
     <h2 class="com-subtitulo">Vigentes<span class="n">${vigentes.length}</span></h2>
     ${vigentes.length
       ? html`<div class="fallas-lista">${vigentes.map((c) => html`<${TarjetaComunicado} c=${c} now=${s.now} key=${c.id} editando=${!!editando && editando.id === c.id}
-          onEditar=${(x) => { setEdicion(x); arriba(); }} onRetirar=${setRetirando} />`)}</div>`
+          onEditar=${(x) => { setEdicion(x); arriba(); }} onRetirar=${setRetirando} onVer=${(x) => setViendo(x.id)} />`)}</div>`
       : html`<div class="panel vacio"><b>Sin comunicados vigentes</b>Lo que publiques aquí lo verán los asesores en su panel, arriba de las fallas, hasta que lo retires.</div>`}
     ${retirados.length > 0 && html`<h2 class="com-subtitulo">Retirados en los últimos 30 días<span class="n">${retirados.length}</span></h2>
       <div class="panel"><div class="tabla-envoltura"><table class="tabla com-retirados">
@@ -6853,6 +7384,7 @@ function VistaComunicados() {
         </tr>`)}</tbody>
       </table></div></div>`}
     ${retirando && html`<${ModalRetirarComunicado} c=${retirando} onCerrar=${() => setRetirando(null)} />`}
+    ${visto && html`<${ModalComunicado} c=${visto} now=${s.now} onCerrar=${() => setViendo(null)} />`}
   </div>`;
 }
 
@@ -6867,19 +7399,56 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const enviando = useRef(false);
+  // Adjuntos: los que ya quedaron subidos (su ficha) y los que están subiendo ahora ({ clave, nombre, avance })
+  const [adjuntos, setAdjuntos] = useState((edicion && edicion.adjuntos) || []);
+  const [subiendo, setSubiendo] = useState([]);
+  const [errorAdj, setErrorAdj] = useState('');
+  const adjRef = useRef(adjuntos); adjRef.current = adjuntos;
+  const cola = useRef(Promise.resolve());
+  const archivoRef = useRef(null);
   // Como lo guarda el servidor: el título en una línea; el contexto conserva los saltos de línea
   const t = Model.tituloComunicado(titulo), x = Model.contextoComunicado(contexto);
-  const sinCambios = !!edicion && t === edicion.titulo && x === edicion.contexto;
+  const sinCambios = !!edicion && t === edicion.titulo && x === edicion.contexto && Model.mismosAdjuntos(adjuntos, edicion.adjuntos);
   const igual = t ? Model.comunicadoIgual(s.comunicados, t, edicion ? edicion.id : null) : null;
-  const listo = !Model.faltaComunicado(t, x) && !sinCambios && !igual;
+  const listo = !Model.faltaComunicado(t, x) && !sinCambios && !igual && !subiendo.length;
+  /* Sube los archivos elegidos (o pegados), uno tras otro. Cada uno se revisa antes: tipo, peso y cuántos van. */
+  function adjuntar(archivos) {
+    const lista = Array.from(archivos || []);
+    if (!lista.length) return;
+    setErrorAdj('');
+    lista.forEach((archivo) => {
+      const clave = U.uid(), nombre = Model.nombreAdjunto(archivo.name);
+      setSubiendo((l) => l.concat({ clave, nombre, avance: 0 }));
+      cola.current = cola.current.then(async () => {
+        try {
+          const a = await A.subirAdjunto(archivo, adjRef.current, (v) => setSubiendo((l) => l.map((y) => (y.clave === clave ? Object.assign({}, y, { avance: v }) : y))));
+          adjRef.current = adjRef.current.concat(a);
+          setAdjuntos(adjRef.current);
+        } catch (e) {
+          // Un servidor de antes de la 4.0 todavía no guarda adjuntos
+          setErrorAdj(/desconocida/i.test(e.message) ? 'El servidor todavía no guarda adjuntos. Pega el Code.gs nuevo (4.0) en Apps Script y publica una versión nueva de la implementación.' : e.message);
+        } finally { setSubiendo((l) => l.filter((y) => y.clave !== clave)); }
+      });
+    });
+  }
+  const quitar = (id) => { adjRef.current = adjRef.current.filter((a) => a.id !== id); setAdjuntos(adjRef.current); setErrorAdj(''); setError(''); };
+  // Pegar una captura de pantalla (Ctrl+V) la adjunta como imagen
+  const alPegar = (e) => {
+    const imgs = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => /^image\//.test(f.type));
+    if (!imgs.length) return;
+    e.preventDefault();
+    adjuntar(imgs.map((f, i) => new File([f], 'captura ' + U.hora(Date.now()).replace(/[^0-9a-z]+/gi, '-').replace(/-$/, '') + (imgs.length > 1 ? ' ' + (i + 1) : '') + '.' + (f.type === 'image/jpeg' ? 'jpg' : 'png'), { type: f.type })));
+  };
+  const imagenes = Model.imagenesDe({ adjuntos }), archivos = Model.archivosDe({ adjuntos }), LA = CONFIG.adjuntos;
   // Así lo verá el asesor: recién publicado o, si se está editando, recién actualizado
   const borrador = { id: edicion ? edicion.id : 'nuevo', titulo: t, contexto: x, publicadoEn: edicion ? edicion.publicadoEn : s.now, editadoEn: edicion ? s.now : null,
-    publicadoPor: edicion ? edicion.publicadoPor : A.quien() };
+    publicadoPor: edicion ? edicion.publicadoPor : A.quien(), adjuntos };
   async function guardar() {
     if (enviando.current) return;   // un doble clic no publica dos veces
     enviando.current = true; setGuardando(true); setError('');
     try {
-      const c = edicion ? await A.editarComunicado(edicion.id, { titulo: t, contexto: x }) : await A.publicarComunicado({ titulo: t, contexto: x });
+      const datos = { titulo: t, contexto: x, adjuntos: adjuntos.map((a) => a.id) };
+      const c = edicion ? await A.editarComunicado(edicion.id, datos) : await A.publicarComunicado(datos);
       setConfirmar(false); onListo(c, !!edicion);
     } catch (e) {
       setConfirmar(false);
@@ -6890,7 +7459,7 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
     } finally { enviando.current = false; setGuardando(false); }
   }
   const accion = edicion ? 'Guardar cambios' : 'Publicar comunicado';
-  return html`<div class="com-form">
+  return html`<div class="com-form" onPaste=${alPegar}>
     <div class="panel">
       <div class="com-form-cab"><span class="ico"><${Ico} n="megafono" s=${17} /></span>
         <div><h3>${edicion ? 'Editar comunicado' : 'Nuevo comunicado'}</h3>
@@ -6903,6 +7472,22 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
           placeholder="Qué está pasando, a quiénes afecta y qué le dice el asesor al cliente."
           onInput=${(e) => { setContexto(e.currentTarget.value); setError(''); }}></textarea>
         <small>Los asesores lo leen tal como lo escribas aquí.</small></label>
+      <div class="campo com-adjuntos">
+        <span class="campo-cab"><span>Imágenes y archivos <small>(opcional)</small></span><span class="cuenta">${imagenes.length} de ${LA.imagenes} imágenes · ${archivos.length} de ${LA.archivos} archivos</span></span>
+        ${(adjuntos.length > 0 || subiendo.length > 0) && html`<div class="adj-lista">
+          ${adjuntos.map((a) => html`<${AdjuntoEnForm} a=${a} key=${a.id} onQuitar=${() => quitar(a.id)} />`)}
+          ${subiendo.map((y) => html`<div class="adj" data-estado="subiendo" key=${y.clave}>
+            <span class="adj-mini"><span class="punto vivo"></span></span>
+            <span class="adj-txt"><b>${y.nombre}</b><small>Subiendo… ${Math.round(y.avance * 100)} %</small><i class="adj-avance"><u style=${'width:' + Math.round(y.avance * 100) + '%'}></u></i></span>
+          </div>`)}
+        </div>`}
+        <input type="file" class="adj-input" ref=${archivoRef} multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.pptx" aria-label="Adjuntar imágenes o archivos"
+          onChange=${(e) => { adjuntar(e.currentTarget.files); e.currentTarget.value = ''; }} />
+        <div class="adj-acc"><button type="button" class="btn btn-borde btn-chico adj-boton" onClick=${() => archivoRef.current && archivoRef.current.click()}><${Ico} n="clip" s=${16} />Adjuntar imagen o archivo</button>
+          <small>JPG o PNG (se reducen solas), PDF, Word, Excel o PowerPoint de hasta ${Model.pesoAdjunto(LA.archivoBytes)}. También puedes pegar una captura con Ctrl+V.</small></div>
+        ${errorAdj && html`<div class="nota-linea com-error-adj" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>${errorAdj}</span></div>`}
+        ${adjuntos.length > 0 && html`<small class="adj-aviso">Lo que adjuntes lo podrán abrir y descargar todos los asesores y las tiendas: no pongas datos de clientes ni documentos que no deban circular.</small>`}
+      </div>
       ${igual && html`<div class="nota-linea com-igual" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>Ya hay un comunicado vigente con ese
         título${igual.publicadoPor && igual.publicadoPor.nombre ? ', que publicó ' + igual.publicadoPor.nombre + ' ' + U.hace(igual.publicadoEn, s.now) : ''}. Edita ese comunicado, o retíralo antes de publicar otro igual.</span></div>`}
       ${error && html`<div class="nota error-acceso com-error" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>`}
@@ -6924,13 +7509,26 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
         sub=${edicion ? 'Los asesores verán el texto nuevo de inmediato, marcado como actualizado.' : 'Todos los asesores lo verán de inmediato en su panel, arriba de las fallas.'}
         pie=${html`<button class="btn btn-borde" onClick=${() => setConfirmar(false)}>Revisar</button>
           <button class="btn btn-primario" disabled=${guardando} onClick=${guardar}>${accion}</button>`}>
-      <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${t}</b><p>${x}</p></div></div>
+      <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${t}</b><p>${x}</p>${adjuntos.length > 0 && html`<small class="com-resumen-adj"><${Ico} n="clip" s=${14} />Con ${Model.resumenAdjuntos(adjuntos)}</small>`}</div></div>
     </${Modal}>`}
   </div>`;
 }
 
+/* Un adjunto ya subido, en el formulario: la miniatura (si es imagen), el nombre, el peso y el botón para quitarlo */
+function AdjuntoEnForm({ a, onQuitar }) {
+  const esImagen = a.clase === 'imagen';
+  const img = useAdjunto(esImagen ? a : null);
+  const def = Model.tipoAdjunto(a.nombre) || { sigla: 'Archivo' };
+  return html`<div class="adj" data-clase=${a.clase}>
+    <span class="adj-mini">${esImagen && img.url ? html`<img src=${img.url} alt="" />` : html`<${Ico} n=${esImagen ? 'imagen' : 'archivo'} s=${20} />`}</span>
+    <span class="adj-txt"><b>${a.nombre}</b><small>${def.sigla} · ${Model.pesoAdjunto(a.bytes)}</small></span>
+    <button type="button" class="adj-quitar" aria-label=${'Quitar ' + a.nombre} title="Quitar" onClick=${onQuitar}><${Ico} n="x" s=${16} /></button>
+  </div>`;
+}
+
 /* Un comunicado vigente, para Workforce: quién lo publicó, desde cuándo se ve y los botones para retirarlo o editarlo */
-function TarjetaComunicado({ c, now, editando, onEditar, onRetirar }) {
+function TarjetaComunicado({ c, now, editando, onEditar, onRetirar, onVer }) {
+  const adjuntos = Model.resumenAdjuntos(c.adjuntos);
   const edicion = c.editadoEn ? (c.historial || []).filter((h) => h.accion === 'EDITADO').slice(-1)[0] : null;
   const detalle = edicion && edicion.detalle ? ' (' + edicion.detalle.charAt(0).toLowerCase() + edicion.detalle.slice(1) + ')' : '';
   return html`<article class="panel com-card">
@@ -6942,11 +7540,13 @@ function TarjetaComunicado({ c, now, editando, onEditar, onRetirar }) {
     <dl class="meta">
       <dt>Publicó</dt><dd>${c.publicadoPor ? c.publicadoPor.nombre : ''}, ${U.cuandoCorto(c.publicadoEn, now)}</dd>
       ${c.editadoEn && html`<dt>Actualizó</dt><dd>${c.editadoPor ? c.editadoPor.nombre : ''}, ${U.cuandoCorto(c.editadoEn, now)}${detalle}</dd>`}
+      ${adjuntos && html`<dt>Adjuntos</dt><dd>${adjuntos}</dd>`}
       <dt>Visible</dt><dd>Desde ${U.hace(c.publicadoEn, now)}, hasta que lo retires</dd>
     </dl>
     <div class="acc">
       <button class="btn btn-primario btn-chico com-retirar" onClick=${() => onRetirar(c)}><${Ico} n="cerrar" s=${16} />Retirar comunicado</button>
       <button class="btn btn-borde btn-chico com-editar" disabled=${editando} onClick=${() => onEditar(c)}><${Ico} n="lapiz" s=${15} />${editando ? 'Editándolo arriba' : 'Editar'}</button>
+      <button class="btn btn-fantasma btn-chico com-ver-asesor" onClick=${() => onVer(c)}><${Ico} n="ojo" s=${16} />Ver como el asesor</button>
     </div>
   </article>`;
 }
@@ -6964,7 +7564,7 @@ function ModalRetirarComunicado({ c, onCerrar }) {
     }
   }
   return html`<${Modal} titulo="Retirar comunicado" onCerrar=${onCerrar}
-      sub="Los asesores dejarán de verlo de inmediato. Queda 30 días en la lista de retirados, por si hay que publicarlo otra vez."
+      sub=${'Los asesores dejarán de verlo de inmediato. Queda 30 días en la lista de retirados, por si hay que publicarlo otra vez.' + ((c.adjuntos || []).length ? ' Sus imágenes y archivos se borran.' : '')}
       pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-primario" disabled=${ocupado} onClick=${ok}>Retirar comunicado</button>`}>
     <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${c.titulo}</b><p>${c.contexto}</p></div></div>
   </${Modal}>`;

@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- *  ALERTAS · Servidor 3.9 (Google Apps Script)
+ *  ALERTAS · Servidor 4.0 (Google Apps Script)
  *  Certificación de fallas de red fija · Workforce HN
  * ============================================================================
  *
@@ -12,6 +12,7 @@
  *    - Base        la base semanal de clientes (se reemplaza completa en cada carga)
  *    - Fallas      las fallas publicadas por Workforce HN y su historial
  *    - Comunicados los avisos informativos de Workforce HN que no son una falla de nodo (se crea sola con el primero)
+ *    - Adjuntos    las imágenes y archivos de los comunicados, en el archivo de consultas (se crea sola con el primero)
  *    - Usuarios    correos de Genesys con acceso Workforce, Jefatura o supervisor de Call Center
  *    - Cargas      quién subió cada base y cuándo
  *    - Catalogo    resumen por nodo (sin datos personales), oculta
@@ -27,7 +28,7 @@
  */
 
 const ALERTAS = {
-  VERSION: '3.9',                // se ve en la pestaña INICIO; al cambiarla, cámbiala también en la primera línea de este archivo
+  VERSION: '4.0',                // se ve en la pestaña INICIO; al cambiarla, cámbiala también en la primera línea de este archivo
   ZONA: 'America/Tegucigalpa',
   HORAS_SESION: 12,
   HORAS_VISIBLE: 72,             // una falla cerrada sigue visible para los asesores (3 días)
@@ -76,9 +77,19 @@ const ALERTAS = {
   COMUNICADOS_MAX: 10,           // vigentes a la vez: son avisos puntuales; si se llega al tope, hay que retirar alguno
   DIAS_COMUNICADOS: 30,          // días que Workforce sigue viendo un comunicado después de retirarlo
   AVISOS_COMUNICADOS: 4,         // comunicados publicados o retirados que guarda "estado" para el aviso de escritorio
+  // Adjuntos de los comunicados (4.0): imágenes y archivos, guardados por pedazos en una hoja privada.
+  ADJ_IMAGENES: 5,               // imágenes por comunicado, como mucho
+  ADJ_ARCHIVOS: 3,               // y archivos (PDF, Word, Excel o PowerPoint)
+  ADJ_IMAGEN_BYTES: 700 * 1024,  // 700 KB por imagen (la página las reduce antes de subirlas)
+  ADJ_ARCHIVO_BYTES: 3145728,    // 3 MB por archivo
+  ADJ_TOTAL_BYTES: 31457280,     // 30 MB entre todos los adjuntos guardados: si se llena, hay que retirar comunicados
+  ADJ_CELDA: 45000,              // letras por celda (Sheets admite 50,000)
+  ADJ_CELDAS_PARTE: 20,          // celdas por envío: cada adjunto sube y baja en partes de 900,000 letras
+  ADJ_HORAS_SUELTO: 6,           // horas que se guarda un adjunto que se subió y no quedó en ningún comunicado
+  ADJ_BAJADAS_HORA: 400,         // partes de adjuntos que una persona puede bajar por hora
   DIAS_ENVIOS_SMS: 40,           // días que se guarda a quién se le mandó cada aviso (para no repetirlo)
   ITERACIONES_CLAVE: 1500,
-  HOJAS: { base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares', accesos: 'Accesos', reporteSms: 'Reporte SMS', comunicados: 'Comunicados' },
+  HOJAS: { adjuntos: 'Adjuntos', base: 'Base', nueva: 'Base_nueva', fallas: 'Fallas', usuarios: 'Usuarios', cargas: 'Cargas', catalogo: 'Catalogo', consultas: 'Consultas', resumen: 'Resumen', resumenAsesores: 'Resumen_asesores', descargas: 'Descargas SMS', envios: 'Envíos SMS', tiendas: 'Tiendas', celulares: 'Celulares', accesos: 'Accesos', reporteSms: 'Reporte SMS', comunicados: 'Comunicados' },
   ROLES: { concentrix: 'Concentrix', tiendas: 'Tiendas', workforce: 'Workforce HN', jefatura: 'Jefatura', supervisor: 'Supervisor' },
   ESCRIBEN: ['workforce', 'jefatura'],
   // Ven las posibles fallas (el aviso de 5 clientes en 60 min) y las pueden reportar; publicar fallas, solo Workforce y Jefatura
@@ -137,7 +148,8 @@ const ACCIONES = {
   config: accionConfig_, login: accionLogin_, estado: accionEstado_, cargar: accionCargar_, buscar: accionBuscar_,
   reportar: accionReportar_, falla: accionFalla_, base: accionBase_, alertas: accionAlertas_, estadisticas: accionEstadisticas_,
   telefonos: accionTelefonos_, contactos: accionContactos_, alerta: accionAlerta_, sms: accionSms_, monitoreo: accionMonitoreo_,
-  uso: accionUso_, conexiones: accionConexiones_, consultasNodo: accionConsultasNodo_, comunicado: accionComunicado_
+  uso: accionUso_, conexiones: accionConexiones_, consultasNodo: accionConsultasNodo_, comunicado: accionComunicado_,
+  adjunto: accionAdjunto_
 };
 const PUBLICAS = { config: true, login: true, monitoreo: true };
 const SOLO_WORKFORCE = { falla: true, base: true, estadisticas: true, telefonos: true, sms: true, conexiones: true, consultasNodo: true, comunicado: true };
@@ -1152,7 +1164,7 @@ function filaAComunicado_(f, n) {
     titulo: d.titulo != null ? String(d.titulo) : String(f[2] || ''), contexto: d.contexto != null ? String(d.contexto) : String(f[3] || ''),
     publicadoEn: d.publicadoEn || fechaMs_(f[4]), publicadoPor: d.publicadoPor || { u: '', nombre: String(f[5] || '') },
     editadoEn: d.editadoEn || null, editadoPor: d.editadoPor || null, retiradoEn: d.retiradoEn || null, retiradoPor: d.retiradoPor || null,
-    historial: d.historial || [], _fila: n
+    adjuntos: Array.isArray(d.adjuntos) ? d.adjuntos : [], historial: d.historial || [], _fila: n
   };
 }
 function comunicadoAFila_(c) {
@@ -1160,7 +1172,7 @@ function comunicadoAFila_(c) {
   return [c.id, c.estado === 'VIGENTE' ? 'Vigente' : 'Retirado', c.titulo, c.contexto, fecha(c.publicadoEn), c.publicadoPor ? c.publicadoPor.nombre : '',
     fecha(c.editadoEn), fecha(c.retiradoEn), c.retiradoPor ? c.retiradoPor.nombre : '',
     JSON.stringify({ estado: c.estado, titulo: c.titulo, contexto: c.contexto, publicadoEn: c.publicadoEn, publicadoPor: c.publicadoPor, editadoEn: c.editadoEn,
-      editadoPor: c.editadoPor, retiradoEn: c.retiradoEn, retiradoPor: c.retiradoPor, historial: c.historial })];
+      editadoPor: c.editadoPor, retiradoEn: c.retiradoEn, retiradoPor: c.retiradoPor, adjuntos: c.adjuntos || [], historial: c.historial })];
 }
 function leerComunicados_(h) {
   h = h || hojaComunicados_(false);
@@ -1183,10 +1195,13 @@ function guardarComunicado_(h, c) {
   h.getRange(n, 1, 1, fila.length).setValues([fila]);
 }
 /* Lo que reciben los asesores (Concentrix, supervisores y Tiendas): título, contexto, cuándo se publicó, si se
-   actualizó y el nombre de quien lo publicó. Sin correos ni historial: esa parte solo la ve Workforce HN. */
+   actualizó, el nombre de quien lo publicó y la lista de sus adjuntos (nombre, tipo y tamaño; el contenido se pide
+   aparte, al abrirlo). Sin correos ni historial: esa parte solo la ve Workforce HN. */
 function comunicadoPublico_(c) {
-  return { id: c.id, titulo: c.titulo, contexto: c.contexto, publicadoEn: c.publicadoEn, publicadoPor: { nombre: (c.publicadoPor && c.publicadoPor.nombre) || '' }, editadoEn: c.editadoEn || null };
+  return { id: c.id, titulo: c.titulo, contexto: c.contexto, publicadoEn: c.publicadoEn, publicadoPor: { nombre: (c.publicadoPor && c.publicadoPor.nombre) || '' }, editadoEn: c.editadoEn || null,
+    adjuntos: (c.adjuntos || []).map(adjuntoPublico_) };
 }
+function adjuntoPublico_(a) { return { id: a.id, nombre: a.nombre, tipo: a.tipo, clase: a.clase, bytes: a.bytes }; }
 const comunicadoMasNuevo_ = (a, b) => b.publicadoEn - a.publicadoEn;
 /* Los vigentes, del más nuevo al más viejo. En caché 10 minutos; cada cambio la borra. */
 function comunicadosVigentes_() {
@@ -1262,14 +1277,17 @@ function accionComunicado_(d, ses) {
           + '. Edita ese comunicado, o retíralo antes de publicar otro igual.');
       }
     };
-    let c, tipo, texto;
+    // Los adjuntos que ya son de otro comunicado no se pueden repetir: al retirar uno se borrarían los del otro
+    const deOtros = (propio) => { const m = {}; todos.forEach((x) => { if (x.id !== propio) (x.adjuntos || []).forEach((a) => { m[a.id] = true; }); }); return m; };
+    let c, tipo, texto, sobran = [];
     if (op === 'publicar') {
       const datos = validarComunicado_(d.comunicado || {});
       exigirTituloLibre(datos.titulo, null);
+      const adjuntos = adjuntosDelComunicado_((d.comunicado || {}).adjuntos || [], [], deOtros(null));
       if (vigentes.length >= ALERTAS.COMUNICADOS_MAX) throw fallo_('DATOS', 'Ya hay ' + ALERTAS.COMUNICADOS_MAX + ' comunicados vigentes. Retira alguno antes de publicar otro.');
       c = {
         id: nuevoIdComunicado_(todos, ahora), estado: 'VIGENTE', titulo: datos.titulo, contexto: datos.contexto, publicadoEn: ahora, publicadoPor: por,
-        editadoEn: null, editadoPor: null, retiradoEn: null, retiradoPor: null, historial: [{ accion: 'PUBLICADO', en: ahora, por: por, detalle: '' }]
+        editadoEn: null, editadoPor: null, retiradoEn: null, retiradoPor: null, adjuntos: adjuntos, historial: [{ accion: 'PUBLICADO', en: ahora, por: por, detalle: '' }]
       };
       tipo = 'COMUNICADO_PUBLICADO';
       texto = 'publicó el comunicado «' + c.titulo + '»';
@@ -1279,16 +1297,24 @@ function accionComunicado_(d, ses) {
       if (c.estado !== 'VIGENTE') throw fallo_('DATOS', 'Otra persona ya retiró este comunicado.');
       if (op === 'editar') {
         const datos = validarComunicado_(Object.assign({ titulo: c.titulo, contexto: c.contexto }, d.comunicado || {}));
-        const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : ''].filter(String);
+        // Sin la lista de adjuntos (una página de antes de la 4.0), se quedan los que tiene
+        const antes = c.adjuntos || [], pedidos = (d.comunicado || {}).adjuntos;
+        const adjuntos = Array.isArray(pedidos) ? adjuntosDelComunicado_(pedidos, antes, deOtros(c.id)) : antes;
+        const ids = (l) => l.map((a) => a.id).join();
+        const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : '', ids(adjuntos) !== ids(antes) ? 'los adjuntos' : ''].filter(String);
         if (!cambios.length) throw fallo_('DATOS', 'No hay cambios que guardar en el comunicado.');
         exigirTituloLibre(datos.titulo, c.id);
-        c.titulo = datos.titulo; c.contexto = datos.contexto; c.editadoEn = ahora; c.editadoPor = por;
-        c.historial.push({ accion: 'EDITADO', en: ahora, por: por, detalle: 'Cambió ' + cambios.join(' y ') });
+        sobran = antes.filter((a) => !adjuntos.some((b) => b.id === a.id)).map((a) => a.id);
+        c.titulo = datos.titulo; c.contexto = datos.contexto; c.adjuntos = adjuntos; c.editadoEn = ahora; c.editadoPor = por;
+        c.historial.push({ accion: 'EDITADO', en: ahora, por: por, detalle: 'Cambió ' + lista_(cambios, 3) });
         tipo = 'COMUNICADO_EDITADO';
         texto = 'actualizó el comunicado «' + c.titulo + '»';
       } else {
+        // Al retirarlo se borran sus imágenes y archivos: ya nadie los puede abrir y dejan libre el espacio
+        sobran = (c.adjuntos || []).map((a) => a.id);
         c.estado = 'RETIRADO'; c.retiradoEn = ahora; c.retiradoPor = por;
-        c.historial.push({ accion: 'RETIRADO', en: ahora, por: por, detalle: '' });
+        c.historial.push({ accion: 'RETIRADO', en: ahora, por: por, detalle: sobran.length ? 'Tenía ' + resumenAdjuntos_(c.adjuntos) : '' });
+        c.adjuntos = [];
         tipo = 'COMUNICADO_RETIRADO';
         texto = 'retiró el comunicado «' + c.titulo + '»';
       }
@@ -1296,9 +1322,222 @@ function accionComunicado_(d, ses) {
     }
     guardarComunicado_(h, c);
     cache_().remove('comunicados');
+    if (sobran.length) { try { borrarAdjuntos_(hojaAdjuntos_(false), sobran); } catch (err) { console.error('No se pudieron borrar los adjuntos: ' + (err && err.message)); } }
     const e = subirVersion_({ tipo: tipo, texto: texto, por: por, en: ahora },
       (est) => { est.avisosComunicados = avisosComunicados_(est.avisosComunicados || [], c, tipo, est.version, ahora, por); });
     return { comunicado: sinFila_(c), version: e.version };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  Adjuntos de los comunicados (4.0)
+ *  Imágenes (JPG o PNG) y archivos (PDF, Word, Excel o PowerPoint) que Workforce HN y Jefatura
+ *  adjuntan a un comunicado. Se guardan en la hoja Adjuntos del archivo de consultas, privada como
+ *  las demás, partidos en pedazos de texto (base64) que caben en una celda: así no hace falta ningún
+ *  permiso nuevo de Google ni compartir nada. La página los sube y los baja por partes, y solo
+ *  los recibe quien ya entró a Alertas: los asesores, únicamente los de comunicados vigentes.
+ *    Cada adjunto: una fila con su ficha (parte 0) y una fila por pedazo (partes 1, 2, 3...).
+ * ========================================================================== */
+
+const COL_ADJUNTOS = ['ID', 'Parte', 'Bytes', 'Datos (no editar)'];
+const ADJ_OOXML = 'application/vnd.openxmlformats-officedocument.';
+const ADJ_TIPOS = {
+  jpg: { tipo: 'image/jpeg', clase: 'imagen', firma: [255, 216, 255] }, jpeg: { tipo: 'image/jpeg', clase: 'imagen', firma: [255, 216, 255] },
+  png: { tipo: 'image/png', clase: 'imagen', firma: [137, 80, 78, 71] },
+  pdf: { tipo: 'application/pdf', clase: 'archivo', firma: [37, 80, 68, 70] },
+  docx: { tipo: ADJ_OOXML + 'wordprocessingml.document', clase: 'archivo', firma: [80, 75, 3, 4] },
+  xlsx: { tipo: ADJ_OOXML + 'spreadsheetml.sheet', clase: 'archivo', firma: [80, 75, 3, 4] },
+  pptx: { tipo: ADJ_OOXML + 'presentationml.presentation', clase: 'archivo', firma: [80, 75, 3, 4] }
+};
+const ADJ_NO_DISPONIBLE = 'Este adjunto ya no está disponible.';
+
+function hojaAdjuntos_(crear) {
+  const libro = libroConsultas_();
+  return crear ? hojaEn_(libro, ALERTAS.HOJAS.adjuntos, COL_ADJUNTOS) : libro.getSheetByName(ALERTAS.HOJAS.adjuntos);
+}
+/* Dónde está cada adjunto: la fila de su ficha, las filas de sus pedazos (en orden) y cuánto pesa.
+   Lee solo las tres primeras columnas, que son cortas: los pedazos no se tocan. */
+function indiceAdjuntos_(h) {
+  const ult = h ? h.getLastRow() : 0, ix = {};
+  if (ult < 2) return ix;
+  h.getRange(2, 1, ult - 1, 3).getValues().forEach((f, i) => {
+    const id = String(f[0]);
+    if (!id) return;
+    const a = ix[id] || (ix[id] = { ficha: 0, filas: [], bytes: 0 });
+    const p = Number(f[1]);
+    if (p === 0) { a.ficha = i + 2; a.bytes = Number(f[2]) || 0; } else if (p > 0) a.filas[p - 1] = i + 2;
+  });
+  return ix;
+}
+function fichaAdjunto_(h, a) {
+  try { return JSON.parse(h.getRange(a.ficha, 4).getValue()); } catch (e) { return null; }
+}
+/* Borra las filas de esos adjuntos, de abajo hacia arriba y por tramos seguidos. Con el candado puesto. */
+function borrarAdjuntos_(h, ids) {
+  if (!h || !ids || !ids.length) return 0;
+  const ix = indiceAdjuntos_(h), filas = [];
+  ids.forEach((id) => { const a = ix[id]; if (a) { if (a.ficha) filas.push(a.ficha); a.filas.forEach((f) => { if (f) filas.push(f); }); } });
+  filas.sort((x, y) => y - x);
+  for (let i = 0; i < filas.length;) {
+    let j = i;
+    while (j + 1 < filas.length && filas[j + 1] === filas[j] - 1) j++;
+    const n = j - i + 1;
+    if (h.getMaxRows() - n < 2) h.insertRowsAfter(h.getMaxRows(), 2);   // Sheets no deja una hoja sin filas libres
+    h.deleteRows(filas[j], n);
+    i = j + 1;
+  }
+  return filas.length;
+}
+function pesoAdjunto_(bytes) { return bytes >= 1048576 ? (Math.round(bytes / 104857.6) / 10) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB'; }
+function resumenAdjuntos_(lista) {
+  const img = (lista || []).filter((a) => a.clase === 'imagen').length, arch = (lista || []).length - img;
+  return [img ? (img === 1 ? '1 imagen' : img + ' imágenes') : '', arch ? (arch === 1 ? '1 archivo' : arch + ' archivos') : ''].filter(String).join(' y ');
+}
+
+/* La ficha de un adjunto nuevo, a partir de su primera parte: el tipo sale del nombre (solo los de la lista),
+   y los primeros bytes tienen que ser los de ese tipo (un .pdf que no empieza como PDF no entra). */
+function fichaNueva_(d, datos, ses, usado) {
+  const nombre = String(d.nombre == null ? '' : d.nombre).replace(/[\u0000-\u001f\u007f\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(-120);
+  const ext = (nombre.match(/\.([A-Za-z0-9]{1,5})$/) || ['', ''])[1].toLowerCase();
+  const def = ADJ_TIPOS[ext];
+  if (!def || nombre.length < ext.length + 2) throw fallo_('DATOS', 'Solo se pueden adjuntar imágenes (JPG o PNG) y archivos PDF, Word, Excel o PowerPoint (.docx, .xlsx o .pptx).');
+  const bytes = Math.floor(Number(d.bytes) || 0);
+  const tope = def.clase === 'imagen' ? ALERTAS.ADJ_IMAGEN_BYTES : ALERTAS.ADJ_ARCHIVO_BYTES;
+  if (bytes < 8) throw fallo_('DATOS', 'El archivo «' + nombre + '» está vacío.');
+  if (bytes > tope) {
+    throw fallo_('DATOS', def.clase === 'imagen' ? 'La imagen «' + nombre + '» pesa más de ' + pesoAdjunto_(tope) + '.'
+      : 'El archivo «' + nombre + '» pesa más de ' + pesoAdjunto_(tope) + '. Si es un manual pesado, pon en el comunicado el enlace a donde está guardado.');
+  }
+  let inicio = [];
+  try { inicio = Utilities.base64Decode(datos.slice(0, 12)).map((b) => b & 255); } catch (e) { inicio = []; }
+  if (!def.firma.every((b, i) => inicio[i] === b)) throw fallo_('DATOS', 'El contenido de «' + nombre + '» no corresponde a un archivo .' + ext + '. Revisa el archivo.');
+  if (usado + bytes > ALERTAS.ADJ_TOTAL_BYTES) throw fallo_('DATOS', 'No queda espacio para más adjuntos. Retira los comunicados con imágenes o archivos que ya no hagan falta.');
+  return { nombre: nombre, tipo: def.tipo, clase: def.clase, bytes: bytes, largo: 4 * Math.ceil(bytes / 3), por: { u: ses.u, nombre: ses.n }, en: Date.now(), completo: false };
+}
+
+/* Subir y bajar adjuntos. Bajar: cualquiera que haya entrado. Subir: solo Workforce HN y Jefatura. */
+function accionAdjunto_(d, ses) {
+  const op = String(d.op || '');
+  if (op === 'bajar') return bajarAdjunto_(d, ses);
+  if (op === 'subir') { exigirWorkforce_(ses); return subirAdjunto_(d, ses); }
+  throw fallo_('DATOS', 'Operación no válida.');
+}
+
+/* Una parte de un adjunto: la primera (parte 0) trae el nombre y el tamaño y devuelve el ID; las demás lo
+   llevan. Las partes llegan en orden y todas, menos la última, del tamaño completo. */
+function subirAdjunto_(d, ses) {
+  const datos = String(d.datos || ''), parte = Math.floor(Number(d.parte) || 0);
+  const CELDA = ALERTAS.ADJ_CELDA, POR_PARTE = ALERTAS.ADJ_CELDAS_PARTE, LLENA = CELDA * POR_PARTE;
+  const interrumpida = () => fallo_('DATOS', 'La subida se interrumpió. Quita el adjunto y vuelve a ponerlo.');
+  if (!datos || datos.length > LLENA || /[^A-Za-z0-9+/=]/.test(datos)) throw fallo_('DATOS', 'El adjunto no llegó completo. Intenta de nuevo.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw fallo_('OCUPADO', 'Otra persona está guardando un cambio. Intenta de nuevo.');
+  try {
+    const h = hojaAdjuntos_(true);
+    const ix = indiceAdjuntos_(h);
+    let id, ficha, van = 0;
+    const filas = [];
+    if (parte === 0) {
+      let usado = 0;
+      Object.keys(ix).forEach((k) => { usado += ix[k].bytes; });
+      ficha = fichaNueva_(d, datos, ses, usado);
+      do { id = 'A' + Utilities.getUuid().replace(/-/g, '').slice(0, 12); } while (ix[id]);
+    } else {
+      id = String(d.id || '');
+      const a = ix[id];
+      ficha = a && a.ficha ? fichaAdjunto_(h, a) : null;
+      // Solo sigue la subida quien la empezó, en orden y sin huecos
+      if (!ficha || ficha.completo || !ficha.por || ficha.por.u !== ses.u) throw interrumpida();
+      van = a.filas.length;
+      for (let i = 0; i < van; i++) if (!a.filas[i]) throw interrumpida();
+      if (van !== parte * POR_PARTE) throw interrumpida();
+    }
+    const total = van * CELDA + datos.length, ultima = total >= ficha.largo;
+    if (total > ficha.largo || (!ultima && datos.length !== LLENA)) {
+      if (parte > 0) borrarAdjuntos_(h, [id]);
+      throw interrumpida();
+    }
+    if (parte === 0) { ficha.completo = ultima; filas.push([id, '0', String(ficha.bytes), JSON.stringify(ficha)]); }
+    for (let p = 0, k = van + 1; p < datos.length; p += CELDA, k++) filas.push([id, String(k), '', datos.slice(p, p + CELDA)]);
+    agregarFilas_(h, filas, [1, 2, 3, 4]);
+    if (parte > 0 && ultima) {
+      ficha.completo = true;
+      h.getRange(ix[id].ficha, 4).setValue(JSON.stringify(ficha));
+    }
+    return { id: id, completo: ultima, adjunto: ultima ? adjuntoPublico_(Object.assign({ id: id }, ficha)) : null };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* Una parte del contenido de un adjunto. Los asesores (Concentrix, supervisores y Tiendas) solo reciben los de
+   comunicados vigentes; Workforce HN y Jefatura, además, los que acaban de subir para ver cómo quedan. */
+function bajarAdjunto_(d, ses) {
+  const id = String(d.id || ''), parte = Math.floor(Number(d.parte) || 0);
+  const escribe = ALERTAS.ESCRIBEN.indexOf(ses.r) >= 0;
+  if (!/^A[0-9a-f]{12}$/.test(id) || parte < 0) throw fallo_('DATOS', ADJ_NO_DISPONIBLE);
+  if (!escribe && !comunicadosVigentes_().some((c) => (c.adjuntos || []).some((a) => a.id === id))) throw fallo_('DATOS', ADJ_NO_DISPONIBLE);
+  const c = cache_(), clave = 'limite-adjuntos:' + ses.u + ':' + Math.floor(Date.now() / 3600000);
+  const van = Number(c.get(clave) || 0) + 1;
+  if (van > ALERTAS.ADJ_BAJADAS_HORA) throw fallo_('LIMITE', 'Abriste demasiados adjuntos en la última hora. Intenta más tarde.');
+  c.put(clave, String(van), 3700);
+  const h = hojaAdjuntos_(false);
+  const a = h ? indiceAdjuntos_(h)[id] : null;
+  const ficha = a && a.ficha ? fichaAdjunto_(h, a) : null;
+  if (!ficha || !ficha.completo) throw fallo_('DATOS', ADJ_NO_DISPONIBLE);
+  const POR_PARTE = ALERTAS.ADJ_CELDAS_PARTE, partes = Math.ceil(a.filas.length / POR_PARTE);
+  const filas = a.filas.slice(parte * POR_PARTE, (parte + 1) * POR_PARTE);
+  if (!filas.length || filas.some((f) => !f)) throw fallo_('DATOS', ADJ_NO_DISPONIBLE);
+  // Casi siempre van en filas seguidas (una sola lectura); si dos personas subieron a la vez, se leen una por una
+  const seguidas = filas.every((f, i) => f === filas[0] + i);
+  const datos = seguidas ? h.getRange(filas[0], 4, filas.length, 1).getValues().map((f) => String(f[0])).join('')
+    : filas.map((f) => String(h.getRange(f, 4).getValue())).join('');
+  return { id: id, nombre: ficha.nombre, tipo: ficha.tipo, clase: ficha.clase, bytes: ficha.bytes, partes: partes, parte: parte, datos: datos };
+}
+
+/* Los adjuntos que quedan en un comunicado, en el orden pedido: los que ya tenía se conservan y los nuevos
+   tienen que haber terminado de subir. Como mucho 5 imágenes y 3 archivos. */
+function adjuntosDelComunicado_(ids, actuales, deOtros) {
+  if (!Array.isArray(ids)) throw fallo_('DATOS', 'Los adjuntos no son válidos.');
+  const vistos = {}, lista = [];
+  let h = null, ix = null;
+  ids.forEach((x) => {
+    const id = String(x || '');
+    if (!id || vistos[id]) return;
+    vistos[id] = true;
+    const ya = actuales.filter((a) => a.id === id)[0];
+    if (ya) { lista.push(ya); return; }
+    if (deOtros[id]) throw fallo_('DATOS', 'Uno de los adjuntos ya es de otro comunicado. Quítalo y vuelve a adjuntarlo.');
+    if (!ix) { h = hojaAdjuntos_(false); ix = h ? indiceAdjuntos_(h) : {}; }
+    const a = ix[id], ficha = a && a.ficha ? fichaAdjunto_(h, a) : null;
+    if (!ficha || !ficha.completo) throw fallo_('DATOS', 'Uno de los adjuntos no terminó de subir. Quítalo y vuelve a adjuntarlo.');
+    lista.push(adjuntoPublico_(Object.assign({ id: id }, ficha)));
+  });
+  const img = lista.filter((a) => a.clase === 'imagen').length, arch = lista.length - img;
+  if (img > ALERTAS.ADJ_IMAGENES) throw fallo_('DATOS', 'Un comunicado lleva como mucho ' + ALERTAS.ADJ_IMAGENES + ' imágenes.');
+  if (arch > ALERTAS.ADJ_ARCHIVOS) throw fallo_('DATOS', 'Un comunicado lleva como mucho ' + ALERTAS.ADJ_ARCHIVOS + ' archivos adjuntos.');
+  return lista;
+}
+
+/* Mantenimiento de cada hora: borra los adjuntos que no son de ningún comunicado (subidas a medias, o que se
+   subieron y al final no se publicaron) cuando llevan más de 6 horas. */
+function limpiarAdjuntos_() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return 0;
+  try {
+    const h = hojaAdjuntos_(false);
+    if (!h || h.getLastRow() < 2) return 0;
+    const enUso = {};
+    leerComunicados_().forEach((c) => (c.adjuntos || []).forEach((a) => { enUso[a.id] = true; }));
+    const ix = indiceAdjuntos_(h), viejo = Date.now() - ALERTAS.ADJ_HORAS_SUELTO * 3600000;
+    const sobran = Object.keys(ix).filter((id) => {
+      if (enUso[id]) return false;
+      const ficha = ix[id].ficha ? fichaAdjunto_(h, ix[id]) : null;
+      return !ficha || !(ficha.en > viejo);
+    });
+    return borrarAdjuntos_(h, sobran);
   } finally {
     lock.releaseLock();
   }
@@ -2971,7 +3210,8 @@ function buscarContratos_(lista) {
  *  Mantenimiento de cada hora (se programa solo al configurar)
  *  1. Resume los días completos que falten.  2. Borra el detalle de más de 30 días
  *  o lo que pase del tope de filas (solo días ya resumidos).  3. Borra resúmenes
- *  de más de 120 días.  4. Limpia cargas de base que quedaron a medias.
+ *  de más de 120 días.  4. Limpia cargas de base que quedaron a medias.  8. Borra los adjuntos
+ *  de comunicados que no quedaron en ninguno.
  * ========================================================================== */
 
 function limpiarConsultas() {
@@ -3049,7 +3289,10 @@ function limpiarConsultas() {
     // 7. Accesos temporales que hayan quedado de antes de la 3.2: se borran (solo Tiendas tiene contraseña)
     let temporales = 0;
     try { temporales = quitarCuentasTemporales_(); } catch (err) { console.error('No se pudieron borrar los accesos temporales: ' + (err && err.message)); }
-    return { resumidoHasta: resumido, borradas: borradas, smsBorrados: smsBorrados, smsHuerfanos: smsHuerfanos, celulares: celulares, temporales: temporales };
+    // 8. Adjuntos de comunicados que no quedaron en ninguno (subidas a medias o sin publicar)
+    let adjuntos = 0;
+    try { adjuntos = limpiarAdjuntos_(); } catch (err) { console.error('No se pudieron limpiar los adjuntos: ' + (err && err.message)); }
+    return { resumidoHasta: resumido, borradas: borradas, smsBorrados: smsBorrados, smsHuerfanos: smsHuerfanos, celulares: celulares, temporales: temporales, adjuntos: adjuntos };
   } finally { lock.releaseLock(); }
 }
 
@@ -3179,8 +3422,8 @@ function mostrarPestanas() {
   if (!esDueno_()) { ui.alert('Mostrar las pestañas', 'Solo la cuenta dueña del archivo puede mostrar u ocultar las pestañas.', ui.ButtonSet.OK); return; }
   let n = 0;
   librosAlertas_().forEach((libro) => libro.getSheets().forEach((h) => {
-    // Catalogo y Celulares son internas: siguen ocultas
-    if (h.getName() !== ALERTAS.HOJAS.catalogo && h.getName() !== ALERTAS.HOJAS.celulares && h.isSheetHidden()) { h.showSheet(); n++; }
+    // Catalogo, Celulares y Adjuntos son internas: siguen ocultas
+    if (h.getName() !== ALERTAS.HOJAS.catalogo && h.getName() !== ALERTAS.HOJAS.celulares && h.getName() !== ALERTAS.HOJAS.adjuntos && h.isSheetHidden()) { h.showSheet(); n++; }
   }));
   SpreadsheetApp.getActiveSpreadsheet().toast((n ? n + ' pestañas a la vista' : 'Las pestañas ya estaban a la vista') + '. Siguen protegidas. Al terminar: Alertas > Ocultar y proteger las pestañas.', 'Alertas', 10);
 }

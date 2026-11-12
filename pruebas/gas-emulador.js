@@ -168,6 +168,7 @@ function crearEntorno(opciones = {}) {
       if (esFecha(v)) return new FechaS(v.getTime());
       if (typeof v === 'number' || typeof v === 'boolean') return v;
       const s = String(v);
+      if (s.length > 50000) throw new Error('Your input contains more than the maximum of 50000 characters in a single cell.');
       if (this.formato(r, c) === '@') return s;
       if (/^=/.test(s)) throw new Error('Emulador: se escribió una fórmula sin querer: ' + s.slice(0, 30));
       if (/^-?\d+(\.\d+)?$/.test(s.trim()) && s.trim().length < 16) return Number(s);

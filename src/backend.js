@@ -32,7 +32,7 @@ function BackendRemoto() {
   async function llamar(accion, datos, espera) {
     for (let intento = 0; ; intento++) {
       try { return await llamarUnaVez(accion, datos, espera); } catch (e) {
-        const lectura = REINTENTABLES[accion] || (accion === 'sms' && datos && datos.op === 'resumen');
+        const lectura = REINTENTABLES[accion] || (accion === 'sms' && datos && datos.op === 'resumen') || (accion === 'adjunto' && datos && datos.op === 'bajar');
         if (!lectura || !e.reintentar || intento >= 2) throw e;
         await esperar((intento ? 2000 : 800) * (1 + Math.random() * 0.5));
       }
@@ -140,6 +140,7 @@ function BackendRemoto() {
     reportar: (rec) => llamar('reportar', { contrato: rec.contrato, nodo: rec.nodo }),
     falla: (op, d) => llamar('falla', Object.assign({ op }, d), 60000),
     comunicado: (op, d) => llamar('comunicado', Object.assign({ op }, d), 60000),
+    adjunto: (op, d) => llamar('adjunto', Object.assign({ op }, d), 90000),
     alertas: () => llamar('alertas', {}),
     alertaDetalle: (nodo) => llamar('alerta', { op: 'detalle', nodo }, 60000),
     marcarAlerta: (nodo, reportada, a, nota) => llamar('alerta', { op: reportada ? 'reportada' : 'quitar', nodo, a, nota }),
@@ -354,7 +355,7 @@ function BackendLocal() {
       const escribe = !!ses && ['workforce', 'jefatura'].includes(ses.usuario.rol), desdeCom = Date.now() - 30 * U.DIA;
       const comunicados = escribe ? d.comunicados.filter((x) => x.estado === 'VIGENTE' || (x.retiradoEn || 0) >= desdeCom)
         : Model.comunicadosVigentes(d.comunicados).map((x) => ({ id: x.id, titulo: x.titulo, contexto: x.contexto, publicadoEn: x.publicadoEn,
-          publicadoPor: { nombre: (x.publicadoPor && x.publicadoPor.nombre) || '' }, editadoEn: x.editadoEn || null }));
+          publicadoPor: { nombre: (x.publicadoPor && x.publicadoPor.nombre) || '' }, editadoEn: x.editadoEn || null, adjuntos: x.adjuntos || [] }));
       const r = { version: d.meta.version || 0, baseVersion: c.bv, cambio: d.meta.cambio || null, demo: !!d.meta.demo, resumen, fallas: d.fallas, cargas: d.baseHist, comunicados };
       if (baseVersion !== c.bv) r.catalogo = c.catJson;
       return r;
@@ -467,10 +468,25 @@ function BackendLocal() {
             + '. Edita ese comunicado, o retíralo antes de publicar otro igual.');
         }
       };
-      let c, tipo, texto;
+      // Adjuntos, como el servidor: los que ya tenía se conservan y los nuevos tienen que haber terminado de subir
+      const adjuntosDe = async (ids, actuales) => {
+        const lista = [];
+        for (const id of [...new Set((ids || []).map(String))]) {
+          const ya = actuales.find((a) => a.id === id);
+          if (ya) { lista.push(ya); continue; }
+          const a = await Store.leerAdjunto(id);
+          if (!a || !a.ficha.completo) throw errorAlertas('DATOS', 'Uno de los adjuntos no terminó de subir. Quítalo y vuelve a adjuntarlo.');
+          lista.push({ id, nombre: a.ficha.nombre, tipo: a.ficha.tipo, clase: a.ficha.clase, bytes: a.ficha.bytes });
+        }
+        if (Model.imagenesDe({ adjuntos: lista }).length > CONFIG.adjuntos.imagenes) throw errorAlertas('DATOS', 'Un comunicado lleva como mucho ' + CONFIG.adjuntos.imagenes + ' imágenes.');
+        if (Model.archivosDe({ adjuntos: lista }).length > CONFIG.adjuntos.archivos) throw errorAlertas('DATOS', 'Un comunicado lleva como mucho ' + CONFIG.adjuntos.archivos + ' archivos adjuntos.');
+        return lista;
+      };
+      let c, tipo, texto, sobran = [];
       if (op === 'publicar') {
         const datos = validar(d.comunicado || {});
         libre(datos.titulo, null);
+        datos.adjuntos = await adjuntosDe((d.comunicado || {}).adjuntos, []);
         if (Model.comunicadosVigentes(lista).length >= 10) throw errorAlertas('DATOS', 'Ya hay 10 comunicados vigentes. Retira alguno antes de publicar otro.');
         c = Object.assign(datos, { id: Model.nuevoIdComunicado(lista, ahora), estado: 'VIGENTE', publicadoEn: ahora, publicadoPor: por, editadoEn: null, editadoPor: null,
           retiradoEn: null, retiradoPor: null, historial: [{ accion: 'PUBLICADO', en: ahora, por, detalle: '' }] });
@@ -482,15 +498,19 @@ function BackendLocal() {
         if (c.estado !== 'VIGENTE') throw errorAlertas('DATOS', 'Otra persona ya retiró este comunicado.');
         if (op === 'editar') {
           const datos = validar(Object.assign({ titulo: c.titulo, contexto: c.contexto }, d.comunicado || {}));
-          const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : ''].filter(Boolean);
+          const antes = c.adjuntos || [], pedidos = (d.comunicado || {}).adjuntos;
+          datos.adjuntos = Array.isArray(pedidos) ? await adjuntosDe(pedidos, antes) : antes;
+          const cambios = [datos.titulo !== c.titulo ? 'el título' : '', datos.contexto !== c.contexto ? 'el contexto' : '', Model.mismosAdjuntos(datos.adjuntos, antes) ? '' : 'los adjuntos'].filter(Boolean);
           if (!cambios.length) throw errorAlertas('DATOS', 'No hay cambios que guardar en el comunicado.');
           libre(datos.titulo, c.id);
+          sobran = antes.filter((a) => !datos.adjuntos.some((b) => b.id === a.id)).map((a) => a.id);
           Object.assign(c, datos, { editadoEn: ahora, editadoPor: por });
-          c.historial.push({ accion: 'EDITADO', en: ahora, por, detalle: 'Cambió ' + cambios.join(' y ') });
+          c.historial.push({ accion: 'EDITADO', en: ahora, por, detalle: 'Cambió ' + (cambios.length > 2 ? cambios.slice(0, -1).join(', ') + ' y ' + cambios[cambios.length - 1] : cambios.join(' y ')) });
           tipo = 'COMUNICADO_EDITADO'; texto = 'actualizó el comunicado «' + c.titulo + '»';
         } else if (op === 'retirar') {
-          Object.assign(c, { estado: 'RETIRADO', retiradoEn: ahora, retiradoPor: por });
-          c.historial.push({ accion: 'RETIRADO', en: ahora, por, detalle: '' });
+          sobran = (c.adjuntos || []).map((a) => a.id);
+          c.historial.push({ accion: 'RETIRADO', en: ahora, por, detalle: sobran.length ? 'Tenía ' + Model.resumenAdjuntos(c.adjuntos) : '' });
+          Object.assign(c, { estado: 'RETIRADO', retiradoEn: ahora, retiradoPor: por, adjuntos: [] });
           tipo = 'COMUNICADO_RETIRADO'; texto = 'retiró el comunicado «' + c.titulo + '»';
         } else throw errorAlertas('DATOS', 'Operación no válida.');
       }
@@ -503,7 +523,38 @@ function BackendLocal() {
         : antes.filter((x) => x.id !== c.id).concat(tipo === 'COMUNICADO_RETIRADO' ? { v, id: c.id, tipo: 'RETIRADO', titulo: c.titulo, en: ahora, por: por.nombre }
           : { v, id: c.id, tipo: 'PUBLICADO', titulo: c.titulo, resumen, en: ahora, por: por.nombre }).slice(-4);
       const version = await confirmar(tipo, texto, { comunicados: lista, meta: { avisosComunicados } });
+      if (sobran.length) await Store.borrarAdjuntos(sobran).catch(() => {});
       return { comunicado: c, version };
+    },
+    /* Adjuntos en la demostración: igual que el servidor, por partes, pero guardados en este navegador */
+    async adjunto(op, d) {
+      const P = CONFIG.adjuntos.parte;
+      if (op === 'subir') {
+        let a;
+        if (!d.parte) {
+          const def = Model.tipoAdjunto(d.nombre), falta = Model.faltaAdjunto(d.nombre, d.bytes, []);
+          if (falta) throw errorAlertas('DATOS', falta);
+          const azar = crypto.getRandomValues(new Uint8Array(6));
+          a = { id: 'A' + Array.from(azar, (b) => b.toString(16).padStart(2, '0')).join(''), datos: '',
+            ficha: { nombre: Model.nombreAdjunto(d.nombre), tipo: def.tipo, clase: def.clase, bytes: d.bytes, largo: 4 * Math.ceil(d.bytes / 3), en: Date.now(), completo: false } };
+        } else {
+          a = await Store.leerAdjunto(d.id);
+          if (!a || a.ficha.completo || a.datos.length !== d.parte * P) throw errorAlertas('DATOS', 'La subida se interrumpió. Quita el adjunto y vuelve a ponerlo.');
+        }
+        a.datos += d.datos;
+        if (a.datos.length > a.ficha.largo) throw errorAlertas('DATOS', 'La subida se interrumpió. Quita el adjunto y vuelve a ponerlo.');
+        a.ficha.completo = a.datos.length === a.ficha.largo;
+        await Store.guardarAdjunto(a.id, a);
+        const f = a.ficha;
+        return { id: a.id, completo: f.completo, adjunto: f.completo ? { id: a.id, nombre: f.nombre, tipo: f.tipo, clase: f.clase, bytes: f.bytes } : null };
+      }
+      if (op === 'bajar') {
+        const a = await Store.leerAdjunto(d.id), k = d.parte || 0;
+        if (!a || !a.ficha.completo || k * P >= a.datos.length) throw errorAlertas('DATOS', 'Este adjunto ya no está disponible.');
+        const f = a.ficha;
+        return { id: a.id, nombre: f.nombre, tipo: f.tipo, clase: f.clase, bytes: f.bytes, partes: Math.ceil(a.datos.length / P), parte: k, datos: a.datos.slice(k * P, (k + 1) * P) };
+      }
+      throw errorAlertas('DATOS', 'Operación no válida.');
     },
 
     async alertas() {

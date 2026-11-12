@@ -850,6 +850,8 @@ function VistaComunicados() {
   const [semilla, setSemilla] = useState(null);      // texto de un comunicado retirado que se va a publicar de nuevo
   const [nuevos, setNuevos] = useState(0);            // cada vez que cambia, el formulario empieza de cero
   const [retirando, setRetirando] = useState(null);
+  const [viendo, setViendo] = useState(null);         // id del comunicado abierto como lo ve el asesor
+  const visto = viendo && vigentes.find((c) => c.id === viendo);
   // Si otra persona retira el comunicado que se está editando, el formulario vuelve a "nuevo"
   const editando = edicion && vigentes.some((c) => c.id === edicion.id) ? edicion : null;
   const arriba = () => window.scrollTo({ top: 0 });
@@ -860,7 +862,7 @@ function VistaComunicados() {
     <h2 class="com-subtitulo">Vigentes<span class="n">${vigentes.length}</span></h2>
     ${vigentes.length
       ? html`<div class="fallas-lista">${vigentes.map((c) => html`<${TarjetaComunicado} c=${c} now=${s.now} key=${c.id} editando=${!!editando && editando.id === c.id}
-          onEditar=${(x) => { setEdicion(x); arriba(); }} onRetirar=${setRetirando} />`)}</div>`
+          onEditar=${(x) => { setEdicion(x); arriba(); }} onRetirar=${setRetirando} onVer=${(x) => setViendo(x.id)} />`)}</div>`
       : html`<div class="panel vacio"><b>Sin comunicados vigentes</b>Lo que publiques aquí lo verán los asesores en su panel, arriba de las fallas, hasta que lo retires.</div>`}
     ${retirados.length > 0 && html`<h2 class="com-subtitulo">Retirados en los últimos 30 días<span class="n">${retirados.length}</span></h2>
       <div class="panel"><div class="tabla-envoltura"><table class="tabla com-retirados">
@@ -875,6 +877,7 @@ function VistaComunicados() {
         </tr>`)}</tbody>
       </table></div></div>`}
     ${retirando && html`<${ModalRetirarComunicado} c=${retirando} onCerrar=${() => setRetirando(null)} />`}
+    ${visto && html`<${ModalComunicado} c=${visto} now=${s.now} onCerrar=${() => setViendo(null)} />`}
   </div>`;
 }
 
@@ -889,19 +892,56 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const enviando = useRef(false);
+  // Adjuntos: los que ya quedaron subidos (su ficha) y los que están subiendo ahora ({ clave, nombre, avance })
+  const [adjuntos, setAdjuntos] = useState((edicion && edicion.adjuntos) || []);
+  const [subiendo, setSubiendo] = useState([]);
+  const [errorAdj, setErrorAdj] = useState('');
+  const adjRef = useRef(adjuntos); adjRef.current = adjuntos;
+  const cola = useRef(Promise.resolve());
+  const archivoRef = useRef(null);
   // Como lo guarda el servidor: el título en una línea; el contexto conserva los saltos de línea
   const t = Model.tituloComunicado(titulo), x = Model.contextoComunicado(contexto);
-  const sinCambios = !!edicion && t === edicion.titulo && x === edicion.contexto;
+  const sinCambios = !!edicion && t === edicion.titulo && x === edicion.contexto && Model.mismosAdjuntos(adjuntos, edicion.adjuntos);
   const igual = t ? Model.comunicadoIgual(s.comunicados, t, edicion ? edicion.id : null) : null;
-  const listo = !Model.faltaComunicado(t, x) && !sinCambios && !igual;
+  const listo = !Model.faltaComunicado(t, x) && !sinCambios && !igual && !subiendo.length;
+  /* Sube los archivos elegidos (o pegados), uno tras otro. Cada uno se revisa antes: tipo, peso y cuántos van. */
+  function adjuntar(archivos) {
+    const lista = Array.from(archivos || []);
+    if (!lista.length) return;
+    setErrorAdj('');
+    lista.forEach((archivo) => {
+      const clave = U.uid(), nombre = Model.nombreAdjunto(archivo.name);
+      setSubiendo((l) => l.concat({ clave, nombre, avance: 0 }));
+      cola.current = cola.current.then(async () => {
+        try {
+          const a = await A.subirAdjunto(archivo, adjRef.current, (v) => setSubiendo((l) => l.map((y) => (y.clave === clave ? Object.assign({}, y, { avance: v }) : y))));
+          adjRef.current = adjRef.current.concat(a);
+          setAdjuntos(adjRef.current);
+        } catch (e) {
+          // Un servidor de antes de la 4.0 todavía no guarda adjuntos
+          setErrorAdj(/desconocida/i.test(e.message) ? 'El servidor todavía no guarda adjuntos. Pega el Code.gs nuevo (4.0) en Apps Script y publica una versión nueva de la implementación.' : e.message);
+        } finally { setSubiendo((l) => l.filter((y) => y.clave !== clave)); }
+      });
+    });
+  }
+  const quitar = (id) => { adjRef.current = adjRef.current.filter((a) => a.id !== id); setAdjuntos(adjRef.current); setErrorAdj(''); setError(''); };
+  // Pegar una captura de pantalla (Ctrl+V) la adjunta como imagen
+  const alPegar = (e) => {
+    const imgs = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => /^image\//.test(f.type));
+    if (!imgs.length) return;
+    e.preventDefault();
+    adjuntar(imgs.map((f, i) => new File([f], 'captura ' + U.hora(Date.now()).replace(/[^0-9a-z]+/gi, '-').replace(/-$/, '') + (imgs.length > 1 ? ' ' + (i + 1) : '') + '.' + (f.type === 'image/jpeg' ? 'jpg' : 'png'), { type: f.type })));
+  };
+  const imagenes = Model.imagenesDe({ adjuntos }), archivos = Model.archivosDe({ adjuntos }), LA = CONFIG.adjuntos;
   // Así lo verá el asesor: recién publicado o, si se está editando, recién actualizado
   const borrador = { id: edicion ? edicion.id : 'nuevo', titulo: t, contexto: x, publicadoEn: edicion ? edicion.publicadoEn : s.now, editadoEn: edicion ? s.now : null,
-    publicadoPor: edicion ? edicion.publicadoPor : A.quien() };
+    publicadoPor: edicion ? edicion.publicadoPor : A.quien(), adjuntos };
   async function guardar() {
     if (enviando.current) return;   // un doble clic no publica dos veces
     enviando.current = true; setGuardando(true); setError('');
     try {
-      const c = edicion ? await A.editarComunicado(edicion.id, { titulo: t, contexto: x }) : await A.publicarComunicado({ titulo: t, contexto: x });
+      const datos = { titulo: t, contexto: x, adjuntos: adjuntos.map((a) => a.id) };
+      const c = edicion ? await A.editarComunicado(edicion.id, datos) : await A.publicarComunicado(datos);
       setConfirmar(false); onListo(c, !!edicion);
     } catch (e) {
       setConfirmar(false);
@@ -912,7 +952,7 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
     } finally { enviando.current = false; setGuardando(false); }
   }
   const accion = edicion ? 'Guardar cambios' : 'Publicar comunicado';
-  return html`<div class="com-form">
+  return html`<div class="com-form" onPaste=${alPegar}>
     <div class="panel">
       <div class="com-form-cab"><span class="ico"><${Ico} n="megafono" s=${17} /></span>
         <div><h3>${edicion ? 'Editar comunicado' : 'Nuevo comunicado'}</h3>
@@ -925,6 +965,22 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
           placeholder="Qué está pasando, a quiénes afecta y qué le dice el asesor al cliente."
           onInput=${(e) => { setContexto(e.currentTarget.value); setError(''); }}></textarea>
         <small>Los asesores lo leen tal como lo escribas aquí.</small></label>
+      <div class="campo com-adjuntos">
+        <span class="campo-cab"><span>Imágenes y archivos <small>(opcional)</small></span><span class="cuenta">${imagenes.length} de ${LA.imagenes} imágenes · ${archivos.length} de ${LA.archivos} archivos</span></span>
+        ${(adjuntos.length > 0 || subiendo.length > 0) && html`<div class="adj-lista">
+          ${adjuntos.map((a) => html`<${AdjuntoEnForm} a=${a} key=${a.id} onQuitar=${() => quitar(a.id)} />`)}
+          ${subiendo.map((y) => html`<div class="adj" data-estado="subiendo" key=${y.clave}>
+            <span class="adj-mini"><span class="punto vivo"></span></span>
+            <span class="adj-txt"><b>${y.nombre}</b><small>Subiendo… ${Math.round(y.avance * 100)} %</small><i class="adj-avance"><u style=${'width:' + Math.round(y.avance * 100) + '%'}></u></i></span>
+          </div>`)}
+        </div>`}
+        <input type="file" class="adj-input" ref=${archivoRef} multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.pptx" aria-label="Adjuntar imágenes o archivos"
+          onChange=${(e) => { adjuntar(e.currentTarget.files); e.currentTarget.value = ''; }} />
+        <div class="adj-acc"><button type="button" class="btn btn-borde btn-chico adj-boton" onClick=${() => archivoRef.current && archivoRef.current.click()}><${Ico} n="clip" s=${16} />Adjuntar imagen o archivo</button>
+          <small>JPG o PNG (se reducen solas), PDF, Word, Excel o PowerPoint de hasta ${Model.pesoAdjunto(LA.archivoBytes)}. También puedes pegar una captura con Ctrl+V.</small></div>
+        ${errorAdj && html`<div class="nota-linea com-error-adj" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>${errorAdj}</span></div>`}
+        ${adjuntos.length > 0 && html`<small class="adj-aviso">Lo que adjuntes lo podrán abrir y descargar todos los asesores y las tiendas: no pongas datos de clientes ni documentos que no deban circular.</small>`}
+      </div>
       ${igual && html`<div class="nota-linea com-igual" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>Ya hay un comunicado vigente con ese
         título${igual.publicadoPor && igual.publicadoPor.nombre ? ', que publicó ' + igual.publicadoPor.nombre + ' ' + U.hace(igual.publicadoEn, s.now) : ''}. Edita ese comunicado, o retíralo antes de publicar otro igual.</span></div>`}
       ${error && html`<div class="nota error-acceso com-error" role="alert"><${Ico} n="alerta" s=${18} /><span>${error}</span></div>`}
@@ -946,13 +1002,26 @@ function FormComunicado({ edicion, semilla, onListo, onCancelar }) {
         sub=${edicion ? 'Los asesores verán el texto nuevo de inmediato, marcado como actualizado.' : 'Todos los asesores lo verán de inmediato en su panel, arriba de las fallas.'}
         pie=${html`<button class="btn btn-borde" onClick=${() => setConfirmar(false)}>Revisar</button>
           <button class="btn btn-primario" disabled=${guardando} onClick=${guardar}>${accion}</button>`}>
-      <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${t}</b><p>${x}</p></div></div>
+      <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${t}</b><p>${x}</p>${adjuntos.length > 0 && html`<small class="com-resumen-adj"><${Ico} n="clip" s=${14} />Con ${Model.resumenAdjuntos(adjuntos)}</small>`}</div></div>
     </${Modal}>`}
   </div>`;
 }
 
+/* Un adjunto ya subido, en el formulario: la miniatura (si es imagen), el nombre, el peso y el botón para quitarlo */
+function AdjuntoEnForm({ a, onQuitar }) {
+  const esImagen = a.clase === 'imagen';
+  const img = useAdjunto(esImagen ? a : null);
+  const def = Model.tipoAdjunto(a.nombre) || { sigla: 'Archivo' };
+  return html`<div class="adj" data-clase=${a.clase}>
+    <span class="adj-mini">${esImagen && img.url ? html`<img src=${img.url} alt="" />` : html`<${Ico} n=${esImagen ? 'imagen' : 'archivo'} s=${20} />`}</span>
+    <span class="adj-txt"><b>${a.nombre}</b><small>${def.sigla} · ${Model.pesoAdjunto(a.bytes)}</small></span>
+    <button type="button" class="adj-quitar" aria-label=${'Quitar ' + a.nombre} title="Quitar" onClick=${onQuitar}><${Ico} n="x" s=${16} /></button>
+  </div>`;
+}
+
 /* Un comunicado vigente, para Workforce: quién lo publicó, desde cuándo se ve y los botones para retirarlo o editarlo */
-function TarjetaComunicado({ c, now, editando, onEditar, onRetirar }) {
+function TarjetaComunicado({ c, now, editando, onEditar, onRetirar, onVer }) {
+  const adjuntos = Model.resumenAdjuntos(c.adjuntos);
   const edicion = c.editadoEn ? (c.historial || []).filter((h) => h.accion === 'EDITADO').slice(-1)[0] : null;
   const detalle = edicion && edicion.detalle ? ' (' + edicion.detalle.charAt(0).toLowerCase() + edicion.detalle.slice(1) + ')' : '';
   return html`<article class="panel com-card">
@@ -964,11 +1033,13 @@ function TarjetaComunicado({ c, now, editando, onEditar, onRetirar }) {
     <dl class="meta">
       <dt>Publicó</dt><dd>${c.publicadoPor ? c.publicadoPor.nombre : ''}, ${U.cuandoCorto(c.publicadoEn, now)}</dd>
       ${c.editadoEn && html`<dt>Actualizó</dt><dd>${c.editadoPor ? c.editadoPor.nombre : ''}, ${U.cuandoCorto(c.editadoEn, now)}${detalle}</dd>`}
+      ${adjuntos && html`<dt>Adjuntos</dt><dd>${adjuntos}</dd>`}
       <dt>Visible</dt><dd>Desde ${U.hace(c.publicadoEn, now)}, hasta que lo retires</dd>
     </dl>
     <div class="acc">
       <button class="btn btn-primario btn-chico com-retirar" onClick=${() => onRetirar(c)}><${Ico} n="cerrar" s=${16} />Retirar comunicado</button>
       <button class="btn btn-borde btn-chico com-editar" disabled=${editando} onClick=${() => onEditar(c)}><${Ico} n="lapiz" s=${15} />${editando ? 'Editándolo arriba' : 'Editar'}</button>
+      <button class="btn btn-fantasma btn-chico com-ver-asesor" onClick=${() => onVer(c)}><${Ico} n="ojo" s=${16} />Ver como el asesor</button>
     </div>
   </article>`;
 }
@@ -986,7 +1057,7 @@ function ModalRetirarComunicado({ c, onCerrar }) {
     }
   }
   return html`<${Modal} titulo="Retirar comunicado" onCerrar=${onCerrar}
-      sub="Los asesores dejarán de verlo de inmediato. Queda 30 días en la lista de retirados, por si hay que publicarlo otra vez."
+      sub=${'Los asesores dejarán de verlo de inmediato. Queda 30 días en la lista de retirados, por si hay que publicarlo otra vez.' + ((c.adjuntos || []).length ? ' Sus imágenes y archivos se borran.' : '')}
       pie=${html`<button class="btn btn-borde" onClick=${onCerrar}>Cancelar</button><button class="btn btn-primario" disabled=${ocupado} onClick=${ok}>Retirar comunicado</button>`}>
     <div class="nota com-resumen"><${Ico} n="megafono" s=${18} /><div><b>${c.titulo}</b><p>${c.contexto}</p></div></div>
   </${Modal}>`;

@@ -147,8 +147,20 @@ const Store = (() => {
     } catch (e) { /* nada */ }
   }
 
+  /* Adjuntos de los comunicados en la demostración: su contenido (base64) queda en este navegador */
+  const leerAdjunto = (id) => leer('adj:' + id);
+  const guardarAdjunto = (id, a) => guardar({ ['adj:' + id]: a });
+  async function borrarAdjuntos(ids) {
+    if (memoria) { ids.forEach((id) => { delete memoria.kv['adj:' + id]; }); return; }
+    await new Promise((ok, mal) => {
+      const tx = db.transaction('kv', 'readwrite'); const s = tx.objectStore('kv');
+      ids.forEach((id) => s.delete('adj:' + id));
+      tx.oncomplete = ok; tx.onerror = () => mal(tx.error); tx.onabort = () => mal(tx.error || new Error('Guardado cancelado'));
+    });
+  }
+
   return {
-    init, leerTodo, leerMeta, leerFallas, leerComunicados, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
+    init, leerTodo, leerMeta, leerFallas, leerComunicados, leerAdjunto, guardarAdjunto, borrarAdjuntos, guardarFallas, confirmar, agregarLog, agregarLogs, leerLogs, borrarLogs, borrarTodo,
     alCambiar: (fn) => { alCambiarFns.add(fn); return () => alCambiarFns.delete(fn); },
     alLog: (fn) => { alLogFns.add(fn); return () => alLogFns.delete(fn); },
     get version() { return version; },

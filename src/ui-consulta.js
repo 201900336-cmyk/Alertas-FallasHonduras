@@ -14,6 +14,12 @@ function VistaConsulta() {
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
+  // La falla o el comunicado que está abierto en el modal: { tipo, id }. Se busca en la lista de cada momento, así
+  // lo que Workforce cambie se ve al instante; si la falla sale del panel o retiran el comunicado, el modal se cierra.
+  const [detalle, setDetalle] = useState(null);
+  const abrir = (tipo, id) => setDetalle({ tipo, id });
+  const fallaAbierta = detalle && detalle.tipo === 'falla' ? mf.activas.concat(mf.resueltas).find((f) => f.id === detalle.id) : null;
+  const comunicadoAbierto = detalle && detalle.tipo === 'comunicado' ? comunicados.find((c) => c.id === detalle.id) : null;
   const ultima = useRef({ q: '', t: 0, res: null });
   // Aquí las fallas se cargan solas: un cambio que quedó pendiente estando en otra vista se trae al entrar
   const pendiente = s.remoto && A.cargaSola(s.remoto) ? s.remoto.version : 0;
@@ -22,7 +28,7 @@ function VistaConsulta() {
   useEffect(() => {
     const k = (e) => {
       const tag = (e.target.tagName || '').toLowerCase();
-      if (e.key === '/' && tag !== 'input' && tag !== 'textarea' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); inputRef.current && inputRef.current.focus(); inputRef.current && inputRef.current.select(); }
+      if (e.key === '/' && tag !== 'input' && tag !== 'textarea' && !e.ctrlKey && !e.metaKey && !document.querySelector('.fondo-modal')) { e.preventDefault(); inputRef.current && inputRef.current.focus(); inputRef.current && inputRef.current.select(); }
     };
     document.addEventListener('keydown', k);
     setTimeout(() => inputRef.current && inputRef.current.focus(), 50);
@@ -77,7 +83,7 @@ function VistaConsulta() {
 
   return html`<div class="consulta">
     <section aria-label="Consulta de cliente">
-      ${comunicados.length > 0 && html`<${ComunicadosArriba} lista=${comunicados} now=${s.now} />`}
+      ${comunicados.length > 0 && html`<${ComunicadosArriba} lista=${comunicados} now=${s.now} onAbrir=${abrir} />`}
       ${veAlertas() && !esWorkforce() && html`<${PosiblesFallas} mf=${mf} />`}
       <form class="buscador" role="search" onSubmit=${(e) => { e.preventDefault(); consultar(q); }}>
         <label class="buscador-caja">
@@ -105,7 +111,9 @@ function VistaConsulta() {
         : buscando ? html`<div class="resultado"><div class="panel buscando"><span class="punto vivo"></span>Buscando en la base de clientes…</div></div>`
         : html`<${InicioAsesor} mf=${mf} onAbrir=${(c) => { setQ(String(c)); consultar(String(c)); }} />`}
     </section>
-    <${RielFallas} mf=${mf} now=${s.now} comunicados=${comunicados} />
+    <${RielFallas} mf=${mf} now=${s.now} comunicados=${comunicados} onAbrir=${abrir} />
+    ${fallaAbierta && html`<${ModalFalla} f=${fallaAbierta} now=${s.now} onCerrar=${() => setDetalle(null)} />`}
+    ${comunicadoAbierto && html`<${ModalComunicado} c=${comunicadoAbierto} now=${s.now} onCerrar=${() => setDetalle(null)} />`}
   </div>`;
 }
 
@@ -588,16 +596,14 @@ function MapaVivo({ mf }) {
 }
 
 /* ---------- Comunicados: avisos informativos de Workforce que no son una falla de nodo ----------
-   Solo título y contexto (por ejemplo, una falla general de DTH o de canales). Van arriba de las fallas, en violeta
-   y con la etiqueta "Informativo", hasta que Workforce los retira. No cambian el resultado de ninguna consulta. */
+   Título y contexto (por ejemplo, una falla general de DTH o de canales), y a veces imágenes o archivos. Van arriba
+   de las fallas, en violeta y con la etiqueta "Informativo", hasta que Workforce los retira. No cambian el resultado
+   de ninguna consulta. */
 const cuandoComunicado = (verbo, ts, now) => (U.esHoy(ts, now)
   ? verbo + ' a ' + U.las(ts) + ', ' + (now - ts < U.MIN ? 'ahora' : U.hace(ts, now)) : verbo + ' ' + U.cuando(ts, now));
-/* Un comunicado en el panel. El contexto se corta a 4 líneas con "Ver todo"; al tocarlo se abre completo (ahí el
-   texto se puede seleccionar y copiar) y dice quién lo publicó. donde: el panel o la parte de arriba de la consulta
-   (el mismo comunicado sale en los dos sitios y cada uno necesita su propio id). previa: la vista previa de
-   Workforce, que no se abre. */
-function ComunicadoItem({ c, now, donde, previa }) {
-  const [abierto, setAbierto] = useState(false);
+/* Un comunicado en el panel. El contexto se corta a 4 líneas con "Ver todo" y, si trae imágenes o archivos, dice
+   cuántos; al tocarlo se abre completo en un modal. previa: la vista previa de Workforce, que no se abre. */
+function ComunicadoItem({ c, now, previa, onAbrir }) {
   const [cortado, setCortado] = useState(false);
   const ref = useRef(null);
   // ¿El contexto no cabe en las líneas que se ven? Se mide en pantalla y se vuelve a medir si cambia el ancho
@@ -610,42 +616,32 @@ function ComunicadoItem({ c, now, donde, previa }) {
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [c.contexto, abierto]);
+  }, [c.contexto]);
   const marca = Model.marcaComunicado(c, now);
-  const idDet = 'com-det-' + (donde || 'panel') + '-' + c.id;
-  const cabeza = html`<div class="com-cab"><span class="com-etiqueta"><${Ico} n="megafono" s=${15} />Informativo</span>
+  const adjuntos = Model.resumenAdjuntos(c.adjuntos);
+  const dentro = html`<div class="com-cab"><span class="com-etiqueta"><${Ico} n="megafono" s=${15} />Informativo</span>
       ${marca && html`<span class="com-marca"><i></i>${marca === 'NUEVO' ? 'Nuevo' : 'Actualizado'}</span>`}</div>
-    <div class="com-titulo">${c.titulo}</div>`;
-  const resumen = html`<div class="com-contexto" ref=${ref}>${c.contexto}</div>
+    <div class="com-titulo">${c.titulo}</div>
+    <div class="com-contexto" ref=${ref}>${c.contexto}</div>
     ${cortado && html`<span class="com-ver">Ver todo</span>`}
+    ${adjuntos && html`<div class="com-adj"><${Ico} n="clip" s=${14} />${adjuntos}</div>`}
     <div class="com-meta">${c.editadoEn ? cuandoComunicado('Actualizado', c.editadoEn, now) : cuandoComunicado('Publicado', c.publicadoEn, now)}</div>`;
-  if (previa) return html`<div class="com-item"><div class="com-item-cab">${cabeza}${resumen}</div></div>`;
-  return html`<div class="com-item" data-abierto=${abierto}>
-    <button type="button" class="com-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
-      ${cabeza}${!abierto && resumen}
-    </button>
-    ${abierto && html`<div class="com-det" id=${idDet}>
-      <div class="com-contexto completo">${c.contexto}</div>
-      <div><button type="button" class="enlace com-menos" onClick=${() => setAbierto(false)}>Ver menos</button></div>
-      <div class="com-pie">
-        <span>${cuandoComunicado('Publicado', c.publicadoEn, now)}</span>
-        ${c.editadoEn && html`<span>${cuandoComunicado('Actualizado', c.editadoEn, now)}</span>`}
-        ${c.publicadoPor && c.publicadoPor.nombre && html`<span>Por ${c.publicadoPor.nombre}</span>`}
-      </div>
-    </div>`}
+  if (previa) return html`<div class="com-item"><div class="com-item-cab">${dentro}</div></div>`;
+  return html`<div class="com-item">
+    <button type="button" class="com-item-cab" aria-haspopup="dialog" title="Abrir el comunicado" onClick=${() => onAbrir && onAbrir('comunicado', c.id)}>${dentro}</button>
   </div>`;
 }
 /* En una pantalla angosta el panel de fallas queda debajo de la consulta: ahí los comunicados suben al principio
    (con el contexto a 2 líneas), para que nadie tenga que bajar a buscarlos. En pantallas anchas esto no se ve. */
-function ComunicadosArriba({ lista, now }) {
+function ComunicadosArriba({ lista, now, onAbrir }) {
   return html`<div class="com-arriba" role="region" aria-label="Comunicados">
     <h4><span>Comunicados</span><span>${lista.length}</span></h4>
-    ${lista.map((c) => html`<${ComunicadoItem} c=${c} now=${now} donde="arriba" key=${c.id} />`)}
+    ${lista.map((c) => html`<${ComunicadoItem} c=${c} now=${now} onAbrir=${onAbrir} key=${c.id} />`)}
   </div>`;
 }
 
 /* ---------- Riel con los comunicados y las fallas activas y recientes ---------- */
-function RielFallas({ mf, now, comunicados }) {
+function RielFallas({ mf, now, comunicados, onAbrir }) {
   const s = useG();
   // A quien publica la base: las colonias salen cuando se vuelve a publicar una base de antes de que se guardaran
   const faltanColonias = s.cat && !s.cat.conColonias && puede('base') && mf.activas.length + mf.resueltas.length > 0;
@@ -654,29 +650,26 @@ function RielFallas({ mf, now, comunicados }) {
     ${faltanColonias && html`<div class="nota atencion riel-nota falta-colonias"><${Ico} n="info" s=${16} /><span>Las colonias salen al volver a publicar la base en <a href="#base" onClick=${() => ir('base')}>Base</a>: sirve el mismo Excel de esta semana.</span></div>`}
     ${comunicados && comunicados.length > 0 && html`<div class="riel-seccion com-seccion">
       <h4><span>Comunicados</span><span>${comunicados.length}</span></h4>
-      ${comunicados.map((c) => html`<${ComunicadoItem} c=${c} now=${now} key=${c.id} />`)}
+      ${comunicados.map((c) => html`<${ComunicadoItem} c=${c} now=${now} onAbrir=${onAbrir} key=${c.id} />`)}
     </div>`}
     <div class="riel-seccion">
       <h4><span>Activas</span><span>${mf.activas.length}</span></h4>
-      ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)
+      ${mf.activas.length ? mf.activas.map((f) => html`<${FallaItem} f=${f} now=${now} onAbrir=${onAbrir} key=${f.id} />`)
         : html`<div class="vacio" style="padding:14px 8px"><b>Sin fallas activas</b>Workforce HN no ha publicado fallas en este momento.</div>`}
     </div>
     <div class="riel-seccion">
       <h4><span>Resueltas, visibles ${CONFIG.horasVisibleTrasCierre} h</span><span>${mf.resueltas.length}</span></h4>
-      ${mf.resueltas.length ? mf.resueltas.map((f) => html`<${FallaItem} f=${f} now=${now} key=${f.id} />`)
+      ${mf.resueltas.length ? mf.resueltas.map((f) => html`<${FallaItem} f=${f} now=${now} onAbrir=${onAbrir} key=${f.id} />`)
         : html`<div class="vacio" style="padding:10px 8px">Ninguna en las últimas ${CONFIG.horasVisibleTrasCierre} h.</div>`}
     </div>
   </aside>`;
 }
 
 /* Una falla en el panel: el departamento con sus nodos (los primeros 3 y cuántos más) y, debajo, las colonias con
-   más clientes. Al tocarla se ven sus colonias por municipio y, si son más de 3 nodos, todos los nodos. */
+   más clientes. Al tocarla se abre su detalle en un modal: colonias por municipio, todos los nodos y los tiempos. */
 const COLONIAS_POR_MUNICIPIO = 6, NODOS_A_LA_VISTA = 3;
-function FallaItem({ f, now }) {
+function FallaItem({ f, now, onAbrir }) {
   const s = useG();
-  const [abierto, setAbierto] = useState(false);
-  const [todas, setTodas] = useState(false);
-  const [verNodos, setVerNodos] = useState(false);
   const zona = useMemo(() => Model.zonaFalla(s.cat, f), [s.cat, f]);
   const activa = f.estado === 'ACTIVA';
   const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
@@ -691,12 +684,8 @@ function FallaItem({ f, now }) {
   const debajo = zona.top.length
     ? (masColonias > 0 ? zona.top.join(', ') + ' y ' + U.plural(masColonias, '1 colonia más', U.n(masColonias) + ' colonias más') : U.listaNatural(zona.top, 3))
     : U.listaNatural(munis.map(L), 3);
-  const grupos = zona.grupos ? zona.grupos.filter((g) => todas || g.principal) : [];
-  const hayMas = !!zona.grupos && zona.grupos.some((g) => !g.principal || g.cols.length > COLONIAS_POR_MUNICIPIO);
-  const muchosNodos = f.nodos.length > NODOS_A_LA_VISTA;
-  const idDet = 'falla-det-' + f.id;
   return html`<div class="falla-item" data-s=${f.estado}>
-    <button type="button" class="falla-item-cab" aria-expanded=${abierto} aria-controls=${idDet} onClick=${() => setAbierto(!abierto)}>
+    <button type="button" class="falla-item-cab" aria-haspopup="dialog" title="Ver el detalle de la falla" onClick=${() => onAbrir && onAbrir('falla', f.id)}>
       <div class="t"><span>${cortoMotivo(f)}</span><span class="id">${U.numeroFalla(f)}</span></div>
       ${zona.deps.length
         ? html`<div class="zona"><${Ico} n="pin" s=${15} /><span><b>${U.listaNatural(zona.deps.map(L), 3)}</b> · <span class="nodos-zona">${nodos}</span></span></div>`
@@ -710,23 +699,221 @@ function FallaItem({ f, now }) {
           ${imp.gpon > 0 && html`<span class="tec" data-t="GPON">GPON${imp.hfc > 0 ? ' ' + U.n(imp.gpon) : ''}</span>`}</span>
       </div>
     </button>
-    ${abierto && html`<div class="det" id=${idDet}>
-      ${zona.grupos
-        ? grupos.map((g) => html`<div class="zona-grupo" key=${g.dep + '|' + g.muni}>
-            <div class="zona-muni"><b>${L(g.muni) || 'Sin municipio'}</b>${(!unDep || !g.principal) && g.dep ? html`<span>${L(g.dep)}</span>` : ''}
-              <span class="cuantos">${U.plural(g.n, '1 cliente', U.n(g.n) + ' clientes')}</span></div>
-            <div class="zona-cols">
-              ${(todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO)).map(([c]) => html`<span class="chip" key=${c}>${c}</span>`)}
-              ${!todas && g.cols.length > COLONIAS_POR_MUNICIPIO && html`<button type="button" class="chip mas" title="Ver todas las colonias" onClick=${() => setTodas(true)}>+${U.n(g.cols.length - COLONIAS_POR_MUNICIPIO)}</button>`}
-            </div>
-          </div>`)
-        : (imp.munis || []).length > 0 && html`<div class="zona-cols">${imp.munis.map(([m, n]) => html`<span class="chip" key=${m}>${L(m)} · ${U.n(n)}</span>`)}</div>`}
-      ${(hayMas || muchosNodos) && html`<div class="det-acc">
-        ${hayMas && html`<button type="button" class="enlace" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + U.n(zona.colonias) + ' colonias'}</button>`}
-        ${muchosNodos && html`<button type="button" class="enlace" aria-expanded=${verNodos} onClick=${() => setVerNodos(!verNodos)}>${verNodos ? 'Ocultar los nodos' : 'Ver los ' + U.n(f.nodos.length) + ' nodos'}</button>`}
+  </div>`;
+}
+
+/* ---------- Modal de detalle (estilo monitoreo) ----------
+   Encabezado oscuro, como el mapa en vivo, con la X roja en la esquina. Se cierra con la X, con Esc o tocando
+   afuera. tipo: FALLA, RESUELTA o COMUNICADO (cambia el color del encabezado). */
+function ModalB({ tipo, etiqueta, cabeza, pie, onCerrar, ancho, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    // Con una imagen abierta en grande, Esc cierra primero la imagen (la atiende ella)
+    const k = (e) => { if (e.key === 'Escape' && !document.querySelector('.mb-luz')) onCerrar(); };
+    document.addEventListener('keydown', k);
+    const antes = document.activeElement;
+    const t = setTimeout(() => { const x = ref.current && ref.current.querySelector('.mb-x'); if (x) x.focus(); }, 30);
+    return () => { document.removeEventListener('keydown', k); clearTimeout(t); if (antes && antes.focus && document.contains(antes)) antes.focus(); };
+  }, []);
+  return html`<div class="fondo-modal mb-fondo" onMouseDown=${(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
+    <div class="mb" role="dialog" aria-modal="true" aria-label=${etiqueta} data-t=${tipo} ref=${ref} style=${'width:min(' + (ancho || 820) + 'px,100%)'}>
+      <div class="mb-cab">
+        <div class="mb-cab-txt">${cabeza}</div>
+        <button type="button" class="mb-x" aria-label="Cerrar" title="Cerrar (Esc)" onClick=${onCerrar}><${Ico} n="x" s=${22} /></button>
+      </div>
+      ${children}
+      <div class="mb-pie"><span>${pie}</span><span class="mb-esc"><span class="tecla">Esc</span>o la X para cerrar</span></div>
+    </div>
+  </div>`;
+}
+
+/* El detalle de una falla: clientes afectados, cuánto lleva y la hora estimada (con el avance), los nodos y las
+   colonias por municipio, de más a menos clientes. */
+function ModalFalla({ f, now, onCerrar }) {
+  const s = useG();
+  const [todas, setTodas] = useState(false);
+  const zona = useMemo(() => Model.zonaFalla(s.cat, f), [s.cat, f]);
+  const activa = f.estado === 'ACTIVA';
+  const imp = f.impacto || { total: 0, hfc: 0, gpon: 0, munis: [] };
+  const L = U.lugar;
+  const unDep = zona.deps.length <= 1;
+  const grupos = zona.grupos ? zona.grupos.filter((g) => todas || g.principal) : [];
+  const hayMas = !!zona.grupos && zona.grupos.some((g) => !g.principal || g.cols.length > COLONIAS_POR_MUNICIPIO);
+  const mayor = zona.grupos ? Math.max(1, ...zona.grupos.map((g) => (g.cols[0] ? g.cols[0][1] : 0))) : 1;
+  const conEta = activa && !!f.eta && f.eta > f.inicio;
+  const pasada = conEta && now >= f.eta;
+  const pct = conEta ? Math.max(0, Math.min(100, Math.round(100 * (now - f.inicio) / (f.eta - f.inicio)))) : 0;
+  const estado = activa ? (f.motivo === 'VALIDACION' ? 'EN VALIDACIÓN' : 'FALLA ACTIVA') : 'RESUELTA';
+  const restante = activa ? 0 : CONFIG.horasVisibleTrasCierre * U.HORA - (now - f.cerradaEn);
+  const tec = html`<span class="mb-tecs">
+    ${imp.hfc > 0 && html`<span><i data-t="HFC"></i><b>${U.n(imp.hfc)}</b> HFC</span>`}${imp.gpon > 0 && html`<span><i data-t="GPON"></i><b>${U.n(imp.gpon)}</b> GPON</span>`}</span>`;
+  const cabeza = html`<div class="mb-fila"><span class="mb-pill"><i></i>${estado}</span><span class="mb-num">${U.numeroFalla(f)}</span></div>
+    <h2>${nombreMotivo(f)}</h2>
+    <div class="mb-sub"><${Ico} n="pin" s=${17} /><span>${zona.deps.length > 0 && html`<b>${U.listaNatural(zona.deps.map(L), 3)}</b> · `}${U.listaNatural(f.nodos, NODOS_A_LA_VISTA)}</span></div>`;
+  return html`<${ModalB} tipo=${activa ? 'FALLA' : 'RESUELTA'} etiqueta=${'Falla ' + U.numeroFalla(f) + ', ' + nombreMotivo(f)} cabeza=${cabeza} onCerrar=${onCerrar}
+      pie=${html`Publicó <b>${f.publicadaPor.nombre}</b>, ${U.cuandoCorto(f.publicadaEn, now)}${!activa && restante > 0 ? ' · Se oculta del panel en ' + U.dur(restante) : ''}`}>
+    <div class="mb-datos">
+      <div class="mb-cifras">
+        <div class="mb-grande"><span>Clientes afectados</span><b class="num">${U.n(imp.total)}</b>${tec}</div>
+        ${activa ? html`<div class="mb-dato"><b>${U.dur(now - f.inicio)}</b><span>lleva sin servicio</span></div>
+            <div class="mb-dato" data-d="eta"><b>${f.eta ? U.cuandoCorto(f.eta, now) : 'Por confirmar'}</b><span>solución estimada</span></div>`
+          : html`<div class="mb-dato"><b>${U.dur(f.cerradaEn - f.inicio)}</b><span>duró la falla</span></div>
+            <div class="mb-dato" data-d="ok"><b>${U.cuandoCorto(f.cerradaEn, now)}</b><span>se restableció el servicio</span></div>`}
+      </div>
+      ${conEta && html`<div class="mb-linea">
+        <div class="mb-barra" role="img" aria-label=${pasada ? 'Ya pasó la hora estimada de solución' : 'Va el ' + pct + ' % del tiempo estimado'} style=${'--p:' + Math.max(2, pct) + '%'}><i></i><u></u></div>
+        <div class="mb-linea-txt"><span>Inició ${U.cuandoCorto(f.inicio, now)}</span>
+          <b>${pasada ? 'Ya pasó la hora estimada' : 'Ahora, ' + U.hora(now) + ' · va el ' + pct + ' % del tiempo estimado'}</b>
+          <span>Estimada ${U.cuandoCorto(f.eta, now)}</span></div>
       </div>`}
-      ${verNodos && html`<div class="zona-cols nodos-falla">${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}</div>`}
-      <div class="sub">${U.conPunto('Publicada por ' + f.publicadaPor.nombre + ', ' + U.cuandoCorto(f.publicadaEn, now))}</div>
+      ${activa && !conEta && html`<div class="mb-linea-txt sola"><span>Inició ${U.cuandoCorto(f.inicio, now)}, ${U.hace(f.inicio, now)}</span><span>Todavía sin hora estimada de solución</span></div>`}
+    </div>
+    <div class="mb-cuerpo">
+      ${f.nodos.length > NODOS_A_LA_VISTA && html`<div class="mb-sec">
+        <div class="mb-sec-cab"><h3>Nodos afectados</h3><span>${U.n(f.nodos.length)} nodos</span></div>
+        <div class="mb-chips nodos-falla">${f.nodos.map((n) => html`<span class="chip codigo" key=${n}>${n}</span>`)}</div>
+      </div>`}
+      ${zona.grupos ? html`<div class="mb-sec">
+          <div class="mb-sec-cab"><h3>Colonias afectadas</h3>
+            <span>${U.plural(zona.colonias, '1 colonia', U.n(zona.colonias) + ' colonias')} en ${U.plural(zona.grupos.length, '1 municipio', U.n(zona.grupos.length) + ' municipios')}</span></div>
+          <div class="mb-munis">${grupos.map((g) => {
+            const cols = todas ? g.cols : g.cols.slice(0, COLONIAS_POR_MUNICIPIO), resto = g.cols.slice(cols.length);
+            return html`<div class="mb-muni" key=${g.dep + '|' + g.muni}>
+              <div class="mb-muni-cab"><b>${L(g.muni) || 'Sin municipio'}${(!unDep || !g.principal) && g.dep ? html`<small>${L(g.dep)}</small>` : ''}</b>
+                <span><b>${U.n(g.n)}</b> ${g.n === 1 ? 'cliente' : 'clientes'}</span></div>
+              <div class="mb-cols">${cols.map(([c, n]) => html`<div class="mb-col" key=${c}><span>${c}</span><i><u style=${'width:' + Math.max(3, Math.round(100 * n / mayor)) + '%'}></u></i><b>${U.n(n)}</b></div>`)}</div>
+              ${resto.length > 0 && html`<div class="mb-resto">y ${U.plural(resto.length, '1 colonia más', U.n(resto.length) + ' colonias más')}, con ${U.n(resto.reduce((a, x) => a + x[1], 0))} clientes</div>`}
+              ${!g.cols.length && html`<div class="mb-resto">Sin colonias registradas en la base</div>`}
+            </div>`;
+          })}</div>
+          ${hayMas && html`<div><button type="button" class="enlace mb-todas" onClick=${() => setTodas(!todas)}>${todas ? 'Ver menos' : 'Ver las ' + U.n(zona.colonias) + ' colonias'}</button></div>`}
+        </div>`
+        : (imp.munis || []).length > 0 && html`<div class="mb-sec">
+          <div class="mb-sec-cab"><h3>Municipios afectados</h3></div>
+          <div class="mb-chips">${imp.munis.map(([m, n]) => html`<span class="chip" key=${m}>${L(m)} · ${U.n(n)}</span>`)}</div>
+        </div>`}
+    </div>
+  </${ModalB}>`;
+}
+
+/* El contenido de un adjunto, pedido al servidor cuando hace falta: { url, error } */
+function useAdjunto(a) {
+  const [e, setE] = useState({ url: '', error: '' });
+  const [intento, setIntento] = useState(0);
+  useEffect(() => {
+    let vivo = true;
+    setE({ url: '', error: '' });
+    if (!a) return undefined;
+    A.abrirAdjunto(a).then((url) => { if (vivo) setE({ url, error: '' }); }, (err) => { if (vivo) setE({ url: '', error: (err && err.message) || 'No se pudo cargar.' }); });
+    return () => { vivo = false; };
+  }, [a && a.id, intento]);
+  return Object.assign({ reintentar: () => setIntento((n) => n + 1) }, e);
+}
+
+/* Las imágenes de un comunicado: una a la vez, con flechas y miniaturas; cada una se pide al servidor cuando se
+   va a ver (no todas de golpe). "Ver en grande" la abre a pantalla completa. */
+function GaleriaAdjuntos({ imagenes }) {
+  const [i, setI] = useState(0);
+  const [grande, setGrande] = useState(false);
+  const [vistas, setVistas] = useState({});
+  const n = imagenes.length, actual = imagenes[Math.min(i, n - 1)];
+  const img = useAdjunto(actual);
+  useEffect(() => { if (img.url) setVistas((v) => (v[actual.id] ? v : Object.assign({}, v, { [actual.id]: img.url }))); }, [img.url]);
+  const mover = (d) => setI((x) => (x + d + n) % n);
+  // Con la imagen en grande: Esc la cierra (sin cerrar el comunicado) y las flechas del teclado pasan de una a otra
+  useEffect(() => {
+    if (!grande) return undefined;
+    const k = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setGrande(false); }
+      else if (e.key === 'ArrowRight' && n > 1) mover(1);
+      else if (e.key === 'ArrowLeft' && n > 1) mover(-1);
+    };
+    document.addEventListener('keydown', k, true);
+    return () => document.removeEventListener('keydown', k, true);
+  }, [grande, n]);
+  const lienzo = (clase) => html`<div class=${clase}>
+    ${img.url ? html`<img src=${img.url} alt=${actual.nombre} />`
+      : img.error ? html`<div class="mb-img-estado"><span>${img.error}</span><button type="button" class="btn btn-borde btn-chico" onClick=${img.reintentar}>Reintentar</button></div>`
+      : html`<div class="mb-img-estado"><span class="punto vivo"></span><span>Cargando la imagen…</span></div>`}
+  </div>`;
+  const flechas = n > 1 && html`<button type="button" class="mb-flecha" data-l="izq" aria-label="Imagen anterior" onClick=${() => mover(-1)}><${Ico} n="izquierda" s=${22} /></button>
+    <button type="button" class="mb-flecha" data-l="der" aria-label="Imagen siguiente" onClick=${() => mover(1)}><${Ico} n="derecha" s=${22} /></button>`;
+  return html`<div class="mb-galeria">
+    <div class="mb-escena">
+      ${lienzo('mb-img')}${flechas}
+      ${n > 1 && html`<span class="mb-cuenta">${i + 1} de ${n}</span>`}
+      <button type="button" class="mb-ampliar" disabled=${!img.url} onClick=${() => setGrande(true)}><${Ico} n="ampliar" s=${17} />Ver en grande</button>
+    </div>
+    ${n > 1 && html`<div class="mb-minis" role="tablist" aria-label="Imágenes del comunicado">
+      ${imagenes.map((a, k) => html`<button type="button" role="tab" class="mb-mini" key=${a.id} aria-selected=${k === i} aria-label=${'Imagen ' + (k + 1) + ' de ' + n} title=${a.nombre} onClick=${() => setI(k)}>
+        ${vistas[a.id] ? html`<img src=${vistas[a.id]} alt="" />` : html`<${Ico} n="imagen" s=${18} />`}<span>${k + 1}</span></button>`)}
+    </div>`}
+    ${grande && html`<div class="mb-luz" role="dialog" aria-modal="true" aria-label=${'Imagen ' + (i + 1) + ' de ' + n + ': ' + actual.nombre} onMouseDown=${(e) => { if (e.target === e.currentTarget) setGrande(false); }}>
+      ${lienzo('mb-luz-img')}${flechas}
+      <span class="mb-luz-pie">${actual.nombre}${n > 1 ? ' · ' + (i + 1) + ' de ' + n : ''}</span>
+      <button type="button" class="mb-x" aria-label="Cerrar la imagen" title="Cerrar (Esc)" onClick=${() => setGrande(false)}><${Ico} n="x" s=${22} /></button>
     </div>`}
   </div>`;
+}
+
+/* Abre un archivo adjunto: un PDF, en una pestaña nueva del navegador; Word, Excel o PowerPoint se descargan.
+   La pestaña se abre en el mismo clic (para que el navegador no la bloquee) y se llena cuando termina de bajar. */
+async function abrirArchivoAdjunto(a) {
+  const def = Model.tipoAdjunto(a.nombre), esPdf = !!def && def.ext === 'pdf';
+  let w = null;
+  if (esPdf) {
+    try { w = window.open('', '_blank'); if (w) { w.document.title = a.nombre; w.document.body.textContent = 'Cargando ' + a.nombre + '…'; w.document.body.style.cssText = 'font: 16px system-ui, sans-serif; padding: 24px; color: #48525f'; } } catch (e) { w = null; }
+  }
+  try {
+    const url = await A.abrirAdjunto(a);
+    if (w && !w.closed) { w.location.replace(url); return; }
+    const enlace = document.createElement('a');
+    enlace.href = url; enlace.download = a.nombre; enlace.rel = 'noopener';
+    document.body.appendChild(enlace); enlace.click(); enlace.remove();
+  } catch (e) {
+    if (w && !w.closed) w.close();
+    throw e;
+  }
+}
+/* Los archivos de un comunicado (PDF, Word, Excel o PowerPoint), con su tipo y su peso */
+function ArchivosAdjuntos({ archivos, titulo }) {
+  const [ocupado, setOcupado] = useState('');
+  const [error, setError] = useState('');
+  async function abrir(a) {
+    if (ocupado) return;
+    setOcupado(a.id); setError('');
+    try { await abrirArchivoAdjunto(a); } catch (e) { setError('No se pudo abrir «' + a.nombre + '». ' + ((e && e.message) || '')); } finally { setOcupado(''); }
+  }
+  return html`<div class="mb-archivos">
+    ${titulo !== false && html`<h3>Archivos adjuntos</h3>`}
+    ${archivos.map((a) => {
+      const def = Model.tipoAdjunto(a.nombre) || { sigla: 'Archivo', ext: '' }, pdf = def.ext === 'pdf';
+      return html`<button type="button" class="mb-archivo" key=${a.id} disabled=${!!ocupado} data-ext=${def.ext} onClick=${() => abrir(a)}
+          title=${pdf ? 'Abrir en una pestaña nueva' : 'Descargar a esta computadora'}>
+        <span class="ico"><${Ico} n="archivo" s=${20} /></span>
+        <span class="txt"><b>${a.nombre}</b><small>${def.sigla} · ${Model.pesoAdjunto(a.bytes)}</small></span>
+        <span class="acc">${ocupado === a.id ? html`<span class="punto vivo"></span>${pdf ? 'Abriendo…' : 'Descargando…'}` : html`<${Ico} n=${pdf ? 'ojo' : 'descargar'} s=${16} />${pdf ? 'Abrir' : 'Descargar'}`}</span>
+      </button>`;
+    })}
+    ${error && html`<div class="nota-linea" data-tipo="alerta" role="alert"><${Ico} n="alerta" s=${16} /><span>${error}</span></div>`}
+  </div>`;
+}
+
+/* Un comunicado completo: el texto tal como lo escribió Workforce, sus imágenes y sus archivos */
+function ModalComunicado({ c, now, onCerrar }) {
+  const imagenes = Model.imagenesDe(c), archivos = Model.archivosDe(c);
+  const marca = Model.marcaComunicado(c, now);
+  const por = c.publicadoPor && c.publicadoPor.nombre;
+  const cabeza = html`<div class="mb-fila"><span class="mb-pill"><${Ico} n="megafono" s=${15} />INFORMATIVO</span>
+      ${marca && html`<span class="mb-marca"><i></i>${marca === 'NUEVO' ? 'Nuevo' : 'Actualizado'}</span>`}</div>
+    <h2>${c.titulo}</h2>
+    <div class="mb-sub"><span>${cuandoComunicado('Publicado', c.publicadoEn, now)}${por ? html` · Por <b>${por}</b>` : ''}</span></div>`;
+  return html`<${ModalB} tipo="COMUNICADO" ancho=${760} etiqueta=${'Comunicado informativo: ' + c.titulo} cabeza=${cabeza} onCerrar=${onCerrar}
+      pie=${c.editadoEn ? cuandoComunicado('Actualizado', c.editadoEn, now) : 'Vigente hasta que ' + CONFIG.equipo + ' lo retire'}>
+    ${imagenes.length > 0 && html`<${GaleriaAdjuntos} imagenes=${imagenes} key=${imagenes.map((a) => a.id).join()} />`}
+    <div class="mb-cuerpo">
+      <div class="mb-texto">${c.contexto}</div>
+      ${archivos.length > 0 && html`<${ArchivosAdjuntos} archivos=${archivos} />`}
+    </div>
+  </${ModalB}>`;
 }

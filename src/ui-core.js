@@ -308,6 +308,49 @@ const A = {
   editarComunicado: (id, c) => A.comunicado('editar', { id, comunicado: c }),
   retirarComunicado: (id) => A.comunicado('retirar', { id }),
 
+  /* Adjuntos de los comunicados (imágenes y archivos). El contenido no viaja con el comunicado: se pide al abrirlo,
+     por partes, y lo que ya se bajó queda en esta página (id → promesa con su dirección local). */
+  adjuntos: new Map(),
+  /* Sube un archivo y devuelve su ficha (id, nombre, tipo, clase y bytes). Las imágenes se reducen antes de subir.
+     lista: los adjuntos que ya lleva el comunicado, para respetar los topes. alAvanzar(0..1). */
+  async subirAdjunto(archivo, lista, alAvanzar) {
+    const listo = await Adjuntos.preparar(archivo);
+    const falta = Model.faltaAdjunto(listo.nombre, listo.blob.size, lista);
+    if (falta) throw Object.assign(new Error(falta), { codigo: 'DATOS' });
+    const b64 = await Adjuntos.aBase64(listo.blob), P = CONFIG.adjuntos.parte, n = Math.max(1, Math.ceil(b64.length / P));
+    let id = null, r = null;
+    for (let k = 0; k < n; k++) {
+      r = await Backend.adjunto('subir', { nombre: listo.nombre, bytes: listo.blob.size, parte: k, id, datos: b64.slice(k * P, (k + 1) * P) });
+      id = r.id;
+      if (alAvanzar) alAvanzar((k + 1) / n);
+    }
+    if (!r || !r.completo || !r.adjunto) throw Object.assign(new Error('La subida se interrumpió. Quita el adjunto y vuelve a ponerlo.'), { codigo: 'DATOS' });
+    A.adjuntos.set(id, Promise.resolve(URL.createObjectURL(listo.blob)));
+    return r.adjunto;
+  },
+  /* La dirección local (blob:) de un adjunto, bajándolo si hace falta. El tipo sale de la extensión del nombre y
+     solo de la lista permitida: lo que diga el servidor nunca hace que el navegador lo trate como una página. */
+  abrirAdjunto(a) {
+    let p = A.adjuntos.get(a.id);
+    if (!p) {
+      p = (async () => {
+        const def = Model.tipoAdjunto(a.nombre);
+        if (!def) throw new Error('Este adjunto no se puede abrir.');
+        const primera = await Backend.adjunto('bajar', { id: a.id, parte: 0 });
+        const partes = [primera.datos], n = primera.partes || 1;
+        // Las demás partes, de 3 en 3
+        for (let k = 1; k < n; k += 3) {
+          const tanda = await Promise.all([k, k + 1, k + 2].filter((x) => x < n).map((x) => Backend.adjunto('bajar', { id: a.id, parte: x })));
+          tanda.forEach((t) => partes.push(t.datos));
+        }
+        return URL.createObjectURL(new Blob([Adjuntos.deBase64(partes.join(''))], { type: def.tipo }));
+      })();
+      A.adjuntos.set(a.id, p);
+      p.catch(() => A.adjuntos.delete(a.id));
+    }
+    return p;
+  },
+
   async subirBase(base, alProgreso) {
     alProgreso({ fase: 'preparando' });
     await new Promise((r) => setTimeout(r, 20));
@@ -350,6 +393,53 @@ const motivoConocido = (f) => (f.motivo !== 'OTRO' && MOTIVO[f.motivo]) || null;
 function nombreMotivo(f) { const m = motivoConocido(f); return m ? m.nombre : f.motivoTexto || 'Otro motivo'; }
 function cortoMotivo(f) { const m = motivoConocido(f); return m ? m.corto : f.motivoTexto || 'Otro motivo'; }
 function clienteMotivo(f) { const m = motivoConocido(f); return m ? m.cliente : f.clienteTexto || 'una afectación en la red de su zona'; }
+/* Preparar un archivo para adjuntarlo: las imágenes se reducen (lado mayor de 1,600 px y JPG) hasta que pesen
+   menos del tope; los demás archivos van tal cual. */
+const Adjuntos = {
+  async preparar(archivo) {
+    const def = Model.tipoAdjunto(archivo.name), nombre = Model.nombreAdjunto(archivo.name);
+    if (!def || def.clase !== 'imagen') return { nombre, blob: archivo };
+    const L = CONFIG.adjuntos;
+    let img;
+    try { img = await Adjuntos.imagen(archivo); } catch (e) { throw Object.assign(new Error('No se pudo leer la imagen «' + nombre + '». Revisa que sea un JPG o un PNG.'), { codigo: 'DATOS' }); }
+    const lado = Math.max(img.width, img.height);
+    if (lado <= L.ladoImagen && archivo.size <= L.imagenBytes) return { nombre, blob: archivo };
+    // Se va bajando el tamaño y la calidad hasta que quepa
+    let blob = null;
+    for (const [tope, calidad] of [[L.ladoImagen, 0.86], [L.ladoImagen, 0.72], [1280, 0.72], [1024, 0.66], [800, 0.6]]) {
+      const f = Math.min(1, tope / lado), w = Math.max(1, Math.round(img.width * f)), h = Math.max(1, Math.round(img.height * f));
+      const lienzo = document.createElement('canvas');
+      lienzo.width = w; lienzo.height = h;
+      const ctx = lienzo.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);   // un PNG con transparencia queda sobre blanco
+      ctx.drawImage(img, 0, 0, w, h);
+      blob = await new Promise((ok) => lienzo.toBlob(ok, 'image/jpeg', calidad));
+      if (blob && blob.size <= L.imagenBytes) break;
+    }
+    if (!blob) throw Object.assign(new Error('No se pudo preparar la imagen «' + nombre + '».'), { codigo: 'DATOS' });
+    return { nombre: nombre.replace(/\.[A-Za-z0-9]+$/, '') + '.jpg', blob };
+  },
+  imagen(archivo) {
+    return new Promise((ok, mal) => {
+      const url = URL.createObjectURL(archivo), img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); ok(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('imagen')); };
+      img.src = url;
+    });
+  },
+  async aBase64(blob) {
+    const b = new Uint8Array(await blob.arrayBuffer());
+    let t = '';
+    for (let i = 0; i < b.length; i += 0x6000) t += String.fromCharCode.apply(null, b.subarray(i, i + 0x6000));   // múltiplo de 3: se puede partir
+    return btoa(t);
+  },
+  deBase64(texto) {
+    const t = atob(texto), b = new Uint8Array(t.length);
+    for (let i = 0; i < t.length; i++) b[i] = t.charCodeAt(i);
+    return b;
+  }
+};
+
 function puede(vista) { const u = G.s.user; return !!u && CONFIG.roles[u.rol].vistas.includes(vista); }
 const esWorkforce = () => { const u = G.s.user; return !!u && (u.rol === 'workforce' || u.rol === 'jefatura'); };
 /* Workforce, Jefatura y los supervisores de Call Center ven las posibles fallas (el aviso de 5 clientes en 60 min) */
@@ -501,6 +591,12 @@ const ICONOS = {
   reporte: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>',
   campana: '<path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
   // Megáfono: los comunicados informativos (avisos que no son una falla de nodo)
+  // Adjuntos y modales
+  clip: '<path d="M20 11.5l-8 8a5 5 0 0 1-7.1-7.1l8.4-8.4a3.4 3.4 0 0 1 4.8 4.8l-8.3 8.3a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/>',
+  imagen: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="m4 17 4.6-4.4a1.6 1.6 0 0 1 2.2 0l2.4 2.3 1.6-1.5a1.6 1.6 0 0 1 2.2 0L20 16"/>',
+  archivo: '<path d="M13.5 3.5H7.8A1.8 1.8 0 0 0 6 5.3v13.4a1.8 1.8 0 0 0 1.8 1.8h8.4a1.8 1.8 0 0 0 1.8-1.8V8z"/><path d="M13.5 3.5V8H18"/><path d="M9 12.5h6M9 16h4"/>',
+  ampliar: '<path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/>',
+  izquierda: '<path d="m14.5 5.5-6.5 6.5 6.5 6.5"/>',
   megafono: '<path d="M3.5 10.2v3.6l3.6 1 8.4 3.9V5.3L7.1 9.2l-3.6 1z"/><path d="M8 15.2l.7 3.3a1.6 1.6 0 0 0 3.1-.7l-.4-1.3"/><path d="M18.3 9.3a4 4 0 0 1 0 5.4"/><path d="M20.6 6.9a7.4 7.4 0 0 1 0 10.2"/>',
   correo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   derecha: '<path d="m9 6 6 6-6 6"/>',

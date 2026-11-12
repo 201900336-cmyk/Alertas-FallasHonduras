@@ -181,10 +181,26 @@ with sync_playwright() as p:
     zona = tarjeta.locator('.zona').inner_text()
     ok(z['con'] and z['dep'] and z['col'] and z['dep'] in zona and all(n in zona for n in z['nodos']) and z['col'] in tarjeta.locator('.colonias').inner_text(),
        f'el panel dice el departamento con sus nodos ({zona}) y, debajo, las colonias afectadas', tarjeta.inner_text())
-    tarjeta.locator('.falla-item-cab').click(); t.wait_for_selector('.riel .zona-muni', timeout=5000)
-    ok(tarjeta.locator('.zona-muni').count() >= 1 and tarjeta.locator('.zona-cols .chip').count() >= 1, 'al tocarla salen sus colonias por municipio')
-    ok(tarjeta.locator('.det-acc button', has_text='nodos').count() == 0, 'con 3 nodos o menos ya están todos a la vista: no hace falta Ver los nodos')
     t.locator('.riel').screenshot(path=OUT + 'e04b_panel_colonias.png')
+    # Al tocarla se abre su detalle en un modal (encabezado oscuro, X roja), que se cierra con Esc, con la X o tocando afuera
+    tarjeta.locator('.falla-item-cab').click(); t.wait_for_selector('.mb[data-t="FALLA"]', timeout=5000); t.wait_for_timeout(300)
+    mb = t.locator('.mb')
+    cli = t.evaluate("() => U.n(G.s.fallas.find((x) => x.numero === 'F1254585').impacto.total)")
+    ok(mb.locator('.mb-muni').count() >= 1 and mb.locator('.mb-col').count() >= 1 and mb.locator('.mb-num').inner_text() == 'F1254585' and z['dep'] in mb.locator('.mb-sub').inner_text()
+       and all(n in mb.locator('.mb-sub').inner_text() for n in z['nodos']) and mb.locator('.mb-grande > b').inner_text().strip() == cli and z['col'] in mb.inner_text(),
+       'al tocarla se abre su detalle en un modal: número, departamento y nodos, clientes afectados (' + cli + ') y colonias por municipio', mb.inner_text()[:300])
+    ok(mb.locator('.mb-pill').inner_text().strip() == 'FALLA ACTIVA' and 'lleva sin servicio' in mb.inner_text() and 'solución estimada' in mb.inner_text() and 'Publicó' in mb.locator('.mb-pie').inner_text()
+       and 'NOC #9150' not in mb.inner_text() and '@' not in mb.inner_text(), 'con cuánto lleva, la solución estimada y quién la publicó, sin la referencia ni correos', mb.locator('.mb-datos').inner_text())
+    ok(mb.locator('.nodos-falla').count() == 0, 'con 3 nodos o menos ya están todos en el encabezado: no hace falta la lista de nodos')
+    ok(t.evaluate("() => { const x = document.querySelector('.mb-x'); const c = getComputedStyle(x); return c.backgroundColor === 'rgb(226, 68, 79)' && x.offsetWidth >= 44 && document.activeElement === x; }"),
+       'la X para cerrar es roja, grande y queda con el foco')
+    t.screenshot(path=OUT + 'e04c_modal_falla.png')
+    t.keyboard.press('Escape'); t.wait_for_timeout(250)
+    ok(t.locator('.mb').count() == 0, 'Esc cierra el modal')
+    tarjeta.locator('.falla-item-cab').click(); t.wait_for_selector('.mb'); t.mouse.click(12, 450); t.wait_for_timeout(250)
+    cerro_afuera = t.locator('.mb').count() == 0
+    tarjeta.locator('.falla-item-cab').click(); t.wait_for_selector('.mb'); t.click('.mb-x'); t.wait_for_timeout(250)
+    ok(cerro_afuera and t.locator('.mb').count() == 0, 'tocar afuera y la X también lo cierran')
     mv = t.evaluate("""() => { const v = Model.mapaVivo(G.s.cat, Model.mapaFallas(G.s.fallas, Date.now()), Date.now(), []); const d = v.deps.find((x) => x.principal);
       return { dep: d.k, nombre: HN_MAPA.deps[d.k].name, clientes: U.n(d.clientes), total: U.n(v.clientes), marcas: v.deps.filter((x) => x.principal).length, fallas: v.fallas }; }""")
     etq = t.locator(f'.vivo-etq[data-dep="{mv["dep"]}"]')
@@ -840,7 +856,7 @@ with sync_playwright() as p:
        'Workforce tiene la pestaña Comunicados: el formulario pide solo título y contexto, y sin ellos no deja publicar')
     x.fill('.com-titulo-in', '  Falla   general de DTH '); x.fill('.com-contexto-in', C1); x.wait_for_timeout(250)
     previa = x.locator('.com-previa .com-item').inner_text()
-    ok(x.locator('.campo-cab .cuenta').all_inner_texts() == ['20 de 80', f'{len(C1)} de 600'] and T1 in previa and 'Informativo' in previa and 'Nuevo' in previa
+    ok(x.locator('.campo-cab .cuenta').all_inner_texts() == ['20 de 80', f'{len(C1)} de 600', '0 de 5 imágenes · 0 de 3 archivos'] and T1 in previa and 'Informativo' in previa and 'Nuevo' in previa
        and 'Publicado a ' in previa and x.locator('.com-publicar').is_enabled(), 'al escribir cuenta los caracteres y muestra cómo lo verá el asesor', [x.locator('.campo-cab .cuenta').all_inner_texts(), previa])
     x.screenshot(path=OUT + 'e15_comunicado_nuevo.png')
     x.click('.com-publicar'); x.wait_for_selector('.modal')
@@ -867,12 +883,13 @@ with sync_playwright() as p:
     ok(len(av) == 1 and av[0]['t'] == 'Comunicado: ' + T1 and av[0]['b'] == 'Clientes de TV satelital (DTH) de todo el país pueden estar sin señal. Infórmale al cliente que es una falla general. Lo publicó Mario Rivera. Clic para verlo.',
        'a la supervisora, con Alertas a un lado, le llega el aviso de escritorio: ' + (av[0]['t'] + ' · ' + av[0]['b'] if av else ''), av)
     ok(not x.evaluate(de_com) if x.evaluate('() => Array.isArray(window.__avisos)') else True, 'a quien lo publicó no le llega su propio aviso')
-    en_panel(a).first.locator('.com-item-cab').click(); a.wait_for_selector('.riel .com-det', timeout=5000)
-    det = a.locator('.riel .com-det').inner_text()
-    ok('Infórmale al cliente que es una falla general.' in det and 'Por Mario Rivera' in det and 'Ver menos' in det and en_panel(a).first.locator('.com-item-cab').get_attribute('aria-expanded') == 'true'
-       and '@' not in det, 'al tocarlo se abre completo y dice quién lo publicó (sin su correo)', det)
-    a.click('.riel .com-menos'); a.wait_for_timeout(200)
-    ok(a.locator('.riel .com-det').count() == 0, 'y Ver menos lo cierra')
+    en_panel(a).first.locator('.com-item-cab').click(); a.wait_for_selector('.mb[data-t="COMUNICADO"]', timeout=5000); a.wait_for_timeout(250)
+    det = a.locator('.mb').inner_text()
+    ok('Infórmale al cliente que es una falla general.' in a.locator('.mb-texto').inner_text() and 'Por Mario Rivera' in det and T1 in a.locator('.mb h2').inner_text() and 'INFORMATIVO' in det
+       and '@' not in det and a.locator('.mb-galeria').count() == 0 and a.locator('.mb-archivos').count() == 0,
+       'al tocarlo se abre completo en un modal y dice quién lo publicó (sin su correo); sin adjuntos, solo el texto', det)
+    a.click('.mb-x'); a.wait_for_timeout(250)
+    ok(a.locator('.mb').count() == 0, 'y la X roja lo cierra')
     # Otro más largo: el más nuevo va primero y el contexto se corta con "Ver todo"
     x.fill('.com-titulo-in', T2); x.fill('.com-contexto-in', C2); x.click('.com-publicar'); x.click('.modal .btn-primario')
     x.wait_for_function("() => document.querySelectorAll('.com-card').length === 2", timeout=15000)
@@ -913,9 +930,9 @@ with sync_playwright() as p:
     ok(editado.locator('.com-marca').inner_text().strip() == 'Actualizado' and 'Actualizado a ' in editado.locator('.com-meta').inner_text()
        and 'Mario Rivera' in x.locator('.com-card', has_text=T1).locator('.meta').inner_text() and 'cambió el contexto' in x.locator('.com-card', has_text=T1).locator('.meta').inner_text(),
        'al editarlo, a la asesora le llega el texto nuevo marcado como Actualizado, y Workforce ve quién lo cambió', editado.inner_text())
-    editado.locator('.com-item-cab').click()
-    ok('hora estimada, 3:00 p. m.' in a.locator('.riel .com-det').inner_text(), 'con el texto nuevo completo al abrirlo')
-    a.click('.riel .com-menos')
+    editado.locator('.com-item-cab').click(); a.wait_for_selector('.mb')
+    ok('hora estimada, 3:00 p. m.' in a.locator('.mb-texto').inner_text() and 'Actualizado a ' in a.locator('.mb-pie').inner_text(), 'con el texto nuevo completo al abrirlo')
+    a.keyboard.press('Escape'); a.wait_for_timeout(250)
     a.wait_for_timeout(2500)
     ok(not s.evaluate(de_com), 'editarlo no manda otro aviso de escritorio', s.evaluate(de_com))
     # Retirar: se quita solo de los asesores y queda en los retirados de Workforce
@@ -949,6 +966,101 @@ with sync_playwright() as p:
     x.evaluate("async () => { for (const c of Model.comunicadosVigentes(G.s.comunicados)) await A.retirarComunicado(c.id); }")
     a.wait_for_function("() => document.querySelectorAll('.com-item').length === 0", timeout=20000)
     ok(a.locator('.riel-seccion h4', has_text='Comunicados').count() == 0 and a.locator('.com-arriba').count() == 0, 'sin comunicados vigentes, la sección se quita del panel')
+
+    print('12. Comunicados con imágenes y archivos adjuntos')
+    import zlib, struct, zipfile
+    ADJ = OUT + 'adjuntos-de-prueba/'
+    os.makedirs(ADJ, exist_ok=True)
+    def png(ruta, w, h, tono):
+        trozo = lambda tipo, datos: struct.pack('>I', len(datos)) + tipo + datos + struct.pack('>I', zlib.crc32(tipo + datos) & 0xffffffff)
+        filas = b''.join(b'\x00' + bytes(((y * 5 + tono) & 255, (y * 3) & 255, (255 - y) & 255)) * w for y in range(h))
+        open(ruta, 'wb').write(b'\x89PNG\r\n\x1a\n' + trozo(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + trozo(b'IDAT', zlib.compress(filas, 6)) + trozo(b'IEND', b''))
+    png(ADJ + 'pantalla grande.png', 2400, 1300, 40); png(ADJ + 'captura chica.png', 640, 360, 150)
+    open(ADJ + 'Manual de canales.pdf', 'wb').write(b'%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n' + b'% relleno\n' * 150000)
+    with zipfile.ZipFile(ADJ + 'Guion de atencion.docx', 'w') as zf:
+        zf.writestr('[Content_Types].xml', '<Types/>'); zf.writestr('relleno.bin', bytes(range(256)) * 300)
+    open(ADJ + 'nota.txt', 'w').write('esto no se puede adjuntar')
+    peso = lambda n: os.path.getsize(ADJ + n)
+    listos = "() => document.querySelectorAll('.adj[data-clase]').length === %d && !document.querySelector('.adj[data-estado]')"
+    T3, C3 = 'Guía de canales afectados', 'Estos son los canales afectados y qué decirle al cliente.\nRevisa el manual adjunto.'
+    x.evaluate('() => window.scrollTo(0, 0)')
+    x.fill('.com-titulo-in', T3); x.fill('.com-contexto-in', C3)
+    x.set_input_files('.adj-input', [ADJ + 'pantalla grande.png', ADJ + 'captura chica.png', ADJ + 'Manual de canales.pdf', ADJ + 'Guion de atencion.docx'])
+    x.wait_for_function(listos % 4, timeout=60000); x.wait_for_timeout(300)
+    en_form = x.locator('.adj[data-clase] .adj-txt').all_inner_texts()
+    ok([f.split('\n')[0] for f in en_form] == ['pantalla grande.jpg', 'captura chica.png', 'Manual de canales.pdf', 'Guion de atencion.docx'] and 'JPG' in en_form[0] and 'PDF · 1.4 MB' in en_form[2] and 'Word' in en_form[3]
+       and '2 de 5 imágenes · 2 de 3 archivos' in x.locator('.com-adjuntos .cuenta').inner_text() and x.locator('.adj[data-clase="imagen"] .adj-mini img').count() == 2,
+       'Workforce adjunta dos imágenes y dos archivos: la imagen grande se reduce sola (queda en JPG) y el PDF de 1.4 MB sube por partes', en_form)
+    ok('2 imágenes y 2 archivos' in x.locator('.com-previa .com-adj').inner_text(), 'la vista previa dice cuántos adjuntos lleva')
+    x.set_input_files('.adj-input', [ADJ + 'nota.txt']); x.wait_for_selector('.com-error-adj', timeout=10000)
+    ok('Solo se pueden adjuntar imágenes (JPG o PNG) y archivos PDF, Word, Excel o PowerPoint' in x.locator('.com-error-adj').inner_text() and x.locator('.adj[data-clase]').count() == 4,
+       'un archivo de otro tipo no entra, y lo dice', x.locator('.com-error-adj').inner_text())
+    x.locator('.adj', has_text='captura chica.png').locator('.adj-quitar').click(); x.wait_for_function(listos % 3)
+    ok('1 de 5 imágenes' in x.locator('.com-adjuntos .cuenta').inner_text() and x.locator('.com-error-adj').count() == 0, 'se puede quitar un adjunto antes de publicar')
+    x.set_input_files('.adj-input', [ADJ + 'captura chica.png']); x.wait_for_function(listos % 4, timeout=30000)
+    x.screenshot(path=OUT + 'e16_formulario_adjuntos.png')
+    x.click('.com-publicar'); x.wait_for_selector('.modal')
+    ok('Con 2 imágenes y 2 archivos' in x.locator('.modal').inner_text(), 'la confirmación dice con cuántos adjuntos se publica')
+    x.click('.modal .btn-primario'); x.wait_for_selector('.com-card', timeout=20000)
+    ok('2 imágenes y 2 archivos' in x.locator('.com-card', has_text=T3).locator('.meta').inner_text() and x.locator('.adj[data-clase]').count() == 0, 'publicado: la tarjeta de Workforce dice sus adjuntos y el formulario queda limpio')
+    a.wait_for_function("() => document.querySelectorAll('.riel .com-item').length === 1", timeout=20000); a.wait_for_timeout(300)
+    ok('2 imágenes y 2 archivos' in en_panel(a).first.locator('.com-adj').inner_text(), 'a la asesora le llega solo, y la tarjeta dice que trae 2 imágenes y 2 archivos')
+    pedidos = []
+    a.on('request', lambda r: pedidos.append(r.post_data or '') if '/exec' in r.url and '"adjunto"' in (r.post_data or '') else None)
+    en_panel(a).first.locator('.com-item-cab').click(); a.wait_for_selector('.mb[data-t="COMUNICADO"]'); a.wait_for_selector('.mb-img img', timeout=30000); a.wait_for_timeout(400)
+    img1 = a.evaluate("() => { const i = document.querySelector('.mb-img img'); return { w: i.naturalWidth, h: i.naturalHeight, blob: i.src.startsWith('blob:') }; }")
+    ok(img1['blob'] and img1['w'] == 1600 and 860 <= img1['h'] <= 870 and a.locator('.mb-cuenta').inner_text() == '1 de 2' and a.locator('.mb-mini').count() == 2 and a.locator('.mb-archivo').count() == 2
+       and len(pedidos) == 1, 'al abrirlo carga la primera imagen (reducida a 1,600 px de ancho) y solo esa: las demás se piden al verlas', [img1, len(pedidos)])
+    a.screenshot(path=OUT + 'e16b_modal_comunicado.png')
+    a.click('.mb-flecha[data-l="der"]'); a.wait_for_function("() => document.querySelector('.mb-cuenta').innerText === '2 de 2' && !!document.querySelector('.mb-img img')", timeout=30000); a.wait_for_timeout(300)
+    img2 = a.evaluate("() => { const i = document.querySelector('.mb-img img'); return [i.naturalWidth, i.naturalHeight]; }")
+    ok(img2 == [640, 360] and a.locator('.mb-mini img').count() == 2 and len(pedidos) == 2, 'la flecha pasa a la segunda imagen (chica: va tal cual) y las miniaturas se van llenando', [img2, len(pedidos)])
+    a.click('.mb-ampliar'); a.wait_for_selector('.mb-luz img'); a.wait_for_timeout(250)
+    a.screenshot(path=OUT + 'e16c_imagen_en_grande.png')
+    a.keyboard.press('Escape'); a.wait_for_timeout(250)
+    ok(a.locator('.mb-luz').count() == 0 and a.locator('.mb').count() == 1, 'Ver en grande la abre a pantalla completa; Esc cierra la imagen y deja el comunicado abierto')
+    a.click('.mb-flecha[data-l="izq"]'); a.wait_for_timeout(300)
+    ok(a.locator('.mb-cuenta').inner_text() == '1 de 2' and len(pedidos) == 2, 'una imagen que ya se vio no se vuelve a pedir')
+    with ctx.expect_page() as nueva:
+        a.locator('.mb-archivo', has_text='Manual de canales.pdf').click()
+    pdf = nueva.value
+    a.wait_for_function("() => !document.querySelector('.mb-archivo:disabled')", timeout=30000)
+    ok('PDF · 1.4 MB' in a.locator('.mb-archivo', has_text='Manual').inner_text() and len(pedidos) == 2 + 3, 'el PDF se abre en una pestaña nueva y baja en 3 partes', len(pedidos))
+    pdf.close()
+    with a.expect_download(timeout=30000) as bajada:
+        a.locator('.mb-archivo', has_text='Guion de atencion.docx').click()
+    ok(bajada.value.suggested_filename == 'Guion de atencion.docx' and os.path.getsize(bajada.value.path()) == peso('Guion de atencion.docx'), 'el Word se descarga con su nombre y llega idéntico al original', bajada.value.suggested_filename)
+    iguales = a.evaluate("""async () => { const c = G.s.comunicados[0]; const p = c.adjuntos.find((x) => x.nombre.endsWith('.pdf'));
+      const b = await (await fetch(await A.abrirAdjunto(p))).arrayBuffer(); return [b.byteLength, new TextDecoder().decode(b.slice(0, 8)), JSON.stringify(c.adjuntos).includes('@')]; }""")
+    ok(iguales == [peso('Manual de canales.pdf'), '%PDF-1.4', False], 'el PDF también llega completo, y la lista de adjuntos no trae correos', iguales)
+    pdf_id = a.evaluate("() => G.s.comunicados[0].adjuntos.find((x) => x.nombre.endsWith('.pdf')).id")
+    # Tiendas también lo abre
+    t.wait_for_function("() => document.querySelectorAll('.riel .com-item').length === 1", timeout=20000)
+    t.locator('.riel .com-item-cab').click(); t.wait_for_selector('.mb-img img', timeout=30000)
+    ok(t.evaluate("() => document.querySelector('.mb-img img').naturalWidth") == 1600, 'en Tiendas también se abre con su imagen')
+    t.keyboard.press('Escape')
+    # Workforce lo ve como el asesor, y al editar quita el PDF
+    x.locator('.com-card', has_text=T3).locator('.com-ver-asesor').click(); x.wait_for_selector('.mb-img img', timeout=30000)
+    ok(x.locator('.mb-archivo').count() == 2 and T3 in x.locator('.mb h2').inner_text(), 'Workforce puede verlo como el asesor')
+    x.screenshot(path=OUT + 'e16d_workforce_ver_como_asesor.png')
+    x.keyboard.press('Escape'); x.wait_for_timeout(200)
+    x.locator('.com-card', has_text=T3).locator('.com-editar').click(); x.wait_for_function(listos % 4, timeout=20000)
+    ok(x.locator('.com-publicar').is_disabled(), 'al editar, el formulario trae sus adjuntos; sin cambios no deja guardar')
+    x.locator('.adj', has_text='Manual de canales.pdf').locator('.adj-quitar').click(); x.wait_for_function(listos % 3)
+    x.click('.com-publicar'); x.click('.modal .btn-primario')
+    x.wait_for_function("() => /cambió los adjuntos/.test(document.querySelector('.comunicados').innerText)", timeout=20000)
+    a.wait_for_function("() => document.querySelectorAll('.mb-archivo').length === 1", timeout=20000)
+    ok('2 imágenes y 1 archivo' in en_panel(a).first.locator('.com-adj').inner_text() and a.locator('.mb-archivo').inner_text().startswith('Guion') and 'Actualizado' in a.locator('.mb-marca').inner_text(),
+       'al quitar el PDF, a la asesora (con el comunicado abierto) se le actualiza solo: queda un archivo')
+    viejo = a.evaluate("async (id) => { try { await Backend.adjunto('bajar', { id, parte: 0 }); return 'bajó'; } catch (e) { return e.message; } }", pdf_id)
+    ok(viejo == 'Este adjunto ya no está disponible.', 'y el PDF que se quitó ya no se puede pedir al servidor', viejo)
+    # Al retirarlo, el modal abierto se cierra solo
+    x.locator('.com-card', has_text=T3).locator('.com-retirar').click(); x.wait_for_selector('.modal')
+    ok('Sus imágenes y archivos se borran' in x.locator('.modal').inner_text(), 'al retirar avisa que sus imágenes y archivos se borran')
+    x.click('.modal .btn-primario')
+    a.wait_for_function("() => !document.querySelector('.mb') && document.querySelectorAll('.com-item').length === 0", timeout=20000)
+    ok(True, 'al retirarlo, el comunicado abierto en la pantalla de la asesora se cierra solo')
+    ok(not [e for e in errores if 'ERR_' not in e and 'status of 503' not in e], 'sin errores con los adjuntos', errores[:5])
 
     ok(not [e for e in errores if 'ERR_' not in e and 'status of 503' not in e], 'sin errores de JavaScript en las páginas', errores[:5])   # los 503 son los que simula la prueba
     b.close()

@@ -18,6 +18,9 @@ const CONFIG = {
   // de DTH o de canales). Solo llevan título y contexto, con estos largos como mucho (los mismos que revisa el
   // servidor). Recién publicado o recién actualizado, la tarjeta lleva su marca durante estos minutos.
   comunicado: { titulo: 80, contexto: 600, minutosNuevo: 30 },
+  // Adjuntos de un comunicado (los mismos topes que el servidor): imágenes y archivos PDF, Word, Excel o PowerPoint.
+  // parte: letras (base64) por envío. ladoImagen: la página reduce las imágenes a ese lado mayor antes de subirlas.
+  adjuntos: { imagenes: 5, archivos: 3, imagenBytes: 700 * 1024, archivoBytes: 3145728, parte: 900000, ladoImagen: 1600 },
 
   // Posible falla: un nodo sin falla publicada al que en los últimos 60 minutos le consultaron
   // 5 o más clientes distintos (Concentrix y Tiendas; las búsquedas de Workforce no cuentan),

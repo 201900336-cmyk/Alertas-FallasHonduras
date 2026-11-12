@@ -508,6 +508,44 @@ const Model = (() => {
     const corte = s.slice(0, 159), esp = corte.lastIndexOf(' ');
     return (esp > 100 ? corte.slice(0, esp) : corte).replace(/[\s,;:.]+$/, '') + '…';
   }
+  /* Adjuntos de un comunicado: las mismas reglas que el servidor (ADJ_TIPOS, fichaNueva_, pesoAdjunto_ y
+     resumenAdjuntos_). El tipo sale de la extensión del nombre y solo valen los de la lista. */
+  const OOXML = 'application/vnd.openxmlformats-officedocument.';
+  const TIPOS_ADJUNTO = {
+    jpg: { tipo: 'image/jpeg', clase: 'imagen', sigla: 'JPG' }, jpeg: { tipo: 'image/jpeg', clase: 'imagen', sigla: 'JPG' }, png: { tipo: 'image/png', clase: 'imagen', sigla: 'PNG' },
+    pdf: { tipo: 'application/pdf', clase: 'archivo', sigla: 'PDF' }, docx: { tipo: OOXML + 'wordprocessingml.document', clase: 'archivo', sigla: 'Word' },
+    xlsx: { tipo: OOXML + 'spreadsheetml.sheet', clase: 'archivo', sigla: 'Excel' }, pptx: { tipo: OOXML + 'presentationml.presentation', clase: 'archivo', sigla: 'PowerPoint' }
+  };
+  const TIPOS_ADJUNTO_TEXTO = 'Solo se pueden adjuntar imágenes (JPG o PNG) y archivos PDF, Word, Excel o PowerPoint (.docx, .xlsx o .pptx).';
+  const nombreAdjunto = (n) => String(n == null ? '' : n).replace(/[\u0000-\u001f\u007f\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(-120);
+  function tipoAdjunto(nombre) {
+    const n = nombreAdjunto(nombre), ext = (n.match(/\.([A-Za-z0-9]{1,5})$/) || ['', ''])[1].toLowerCase();
+    const def = TIPOS_ADJUNTO[ext];
+    return def && n.length >= ext.length + 2 ? Object.assign({ ext }, def) : null;
+  }
+  const pesoAdjunto = (bytes) => (bytes >= 1048576 ? (Math.round(bytes / 104857.6) / 10) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB');
+  function resumenAdjuntos(lista) {
+    const img = (lista || []).filter((a) => a.clase === 'imagen').length, arch = (lista || []).length - img;
+    return [img ? (img === 1 ? '1 imagen' : img + ' imágenes') : '', arch ? (arch === 1 ? '1 archivo' : arch + ' archivos') : ''].filter(String).join(' y ');
+  }
+  const imagenesDe = (c) => ((c && c.adjuntos) || []).filter((a) => a.clase === 'imagen');
+  const archivosDe = (c) => ((c && c.adjuntos) || []).filter((a) => a.clase !== 'imagen');
+  /* Por qué no se puede adjuntar (con las mismas palabras del servidor), o '' si se puede. bytes: lo que pesa ya
+     listo para subir (una imagen, después de reducirla). */
+  function faltaAdjunto(nombre, bytes, lista) {
+    const def = tipoAdjunto(nombre), n = nombreAdjunto(nombre), L = CONFIG.adjuntos;
+    if (!def) return TIPOS_ADJUNTO_TEXTO;
+    if (bytes < 8) return 'El archivo «' + n + '» está vacío.';
+    if (def.clase === 'imagen') {
+      if (imagenesDe({ adjuntos: lista }).length >= L.imagenes) return 'Un comunicado lleva como mucho ' + L.imagenes + ' imágenes.';
+      if (bytes > L.imagenBytes) return 'La imagen «' + n + '» pesa más de ' + pesoAdjunto(L.imagenBytes) + '.';
+    } else {
+      if (archivosDe({ adjuntos: lista }).length >= L.archivos) return 'Un comunicado lleva como mucho ' + L.archivos + ' archivos adjuntos.';
+      if (bytes > L.archivoBytes) return 'El archivo «' + n + '» pesa más de ' + pesoAdjunto(L.archivoBytes) + '. Si es un manual pesado, pon en el comunicado el enlace a donde está guardado.';
+    }
+    return '';
+  }
+  const mismosAdjuntos = (a, b) => (a || []).map((x) => x.id).join() === (b || []).map((x) => x.id).join();
   /* Igual que nuevoIdComunicado_ del servidor: C + aammdd + número del día (C26111201) */
   function nuevoIdComunicado(lista, now) {
     const d = new Date(now);
@@ -1094,5 +1132,6 @@ const Model = (() => {
   return { indexar, registro, ejemplos, tipoConsulta, buscar, infoNodo, filasDeNodos, impacto, zonaFalla, leerNodos, sugerir, visible, mapaFallas,
     veredictoNodo, peor, nuevoId, alertas, cierresPorNodo, esInterno, resumenNodo, esPosible, descartada, deteccion, llamadasEn, notaQflow, nombrePersona, correoPosibleFalla, canalCliente, comparar, PRIORIDAD, catalogo, cargarCatalogo, monitoreo, columnasCarga, filasCarga, huellaFila, planCambios, registroRemoto, historialCliente, reincidente, historialNodos, choquesNodos, textoChoque, buscarOlt, periodoAfectacion, textoPeriodo, resumenAfectacion, isoDia, deIsoDia, DIAS_HISTORIAL,
     mapaVivo, colocarEtiquetas, escenaVivo, fijosVivo, radioVivo, VIVO, claveDep, dniNormal, diasAIso, isoADias,
-    tituloComunicado, contextoComunicado, faltaComunicado, comunicadosVigentes, comunicadosRetirados, marcaComunicado, comunicadoIgual, nuevoIdComunicado, resumenComunicado };
+    tituloComunicado, contextoComunicado, faltaComunicado, comunicadosVigentes, comunicadosRetirados, marcaComunicado, comunicadoIgual, nuevoIdComunicado, resumenComunicado,
+    tipoAdjunto, nombreAdjunto, pesoAdjunto, resumenAdjuntos, imagenesDe, archivosDe, faltaAdjunto, mismosAdjuntos };
 })();

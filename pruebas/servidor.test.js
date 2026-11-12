@@ -1773,7 +1773,7 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
       && fila1[1][1] === 'Vigente' && fila1[1][2] === T1 && fila1[1][5] === 'Ana López' && Object.prototype.toString.call(fila1[1][4]) === '[object Date]',
       'la hoja Comunicados se crea sola con el primero, oculta y protegida como las demás, y se lee bien a simple vista', fila1[1] && fila1[1].slice(0, 9));
     const pubA = cargar(ta).comunicados, pubT = cargar(tt).comunicados, pubS = cargar(ts).comunicados;
-    ok(pubA.length === 1 && Object.keys(pubA[0]).sort().join() === 'contexto,editadoEn,id,publicadoEn,publicadoPor,titulo' && pubA[0].titulo === T1 && pubA[0].contexto === X1
+    ok(pubA.length === 1 && Object.keys(pubA[0]).sort().join() === 'adjuntos,contexto,editadoEn,id,publicadoEn,publicadoPor,titulo' && !pubA[0].adjuntos.length && pubA[0].titulo === T1 && pubA[0].contexto === X1
       && JSON.stringify(pubA[0].publicadoPor) === '{"nombre":"Ana López"}' && JSON.stringify(pubT) === JSON.stringify(pubA) && JSON.stringify(pubS) === JSON.stringify(pubA),
       'Concentrix, Tiendas y los supervisores lo reciben al cargar: título, contexto, cuándo y el nombre de quien lo publicó', pubA);
     ok(!/@|historial|"u"|estado/.test(JSON.stringify(pubA)), 'sin correos ni historial');
@@ -1927,6 +1927,185 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     ok(Model.comunicadosVigentes(escDemo.comunicados).length === 1 && Model.comunicadosRetirados(escDemo.comunicados).length === 1 && new Set(escDemo.comunicados.map((x) => x.id)).size === 2
       && escDemo.comunicados.every((x) => /^C\d{8}$/.test(x.id) && x.titulo && x.contexto && !Model.faltaComunicado(x.titulo, x.contexto) && x.historial.length),
       'la demostración trae un comunicado vigente y uno retirado de ejemplo', escDemo.comunicados.map((x) => x.id + ':' + x.estado));
+  }
+
+  /* ---------- Adjuntos de los comunicados: imágenes y archivos ---------- */
+  console.log('\n19. Adjuntos de los comunicados (imágenes y archivos)');
+  {
+    g2.E.ahora = null; g2.E.usuario = null;
+    const CFG = vm.runInContext('CONFIG', lib);
+    // La sección anterior dejó dañada la hoja Comunicados a propósito: se empieza con una nueva
+    g2.E.activo.deleteSheet(g2.E.activo.getSheetByName('Comunicados')); g2.cache.remove('comunicados');
+    const tw = entrar2('w'), tj = entrar2('jefe'), ta = entrar2('a1'), ts = entrar2('sup');
+    const tt = g2.post({ accion: 'login', datos: { tipo: 'clave', usuario: 'tiendas', clave: 'ClaroTiendas2026', nombre: 'Pedro Mejía', tienda: 'CAC Castaños' } }).datos.token;
+    const com = (token, op, extra) => g2.post({ accion: 'comunicado', token, datos: Object.assign({ op }, extra || {}) });
+    const adj = (token, datos) => g2.post({ accion: 'adjunto', token, datos });
+    const cargar = (token) => g2.post({ accion: 'cargar', token, datos: { baseVersion: -1 } }).datos;
+    const libroC = () => g2.SpreadsheetApp.openById(g2.E.props.get('CONSULTAS_ID'));
+    const hojaAdj = () => libroC().getSheetByName('Adjuntos');
+    const filasAdj = () => { const h = hojaAdj(); return h && h.getLastRow() > 1 ? h.getRange(2, 1, h.getLastRow() - 1, 4).getValues() : []; };
+    const PNG = [137, 80, 78, 71, 13, 10, 26, 10], JPG = [255, 216, 255, 224], PDF = [37, 80, 68, 70, 45, 49, 46, 55], ZIP = [80, 75, 3, 4, 20, 0, 6, 0];
+    const archivo = (firma, bytes) => { const b = Buffer.alloc(bytes); for (let i = 0; i < bytes; i++) b[i] = (i * 131 + (i >> 8) * 17 + 7) & 255; Buffer.from(firma).copy(b); return b; };
+    const LL = CFG.adjuntos.parte;
+    const subir = (token, nombre, buf, otro) => {
+      const t = buf.toString('base64'); let id = null, r;
+      for (let p = 0, k = 0; p < t.length; p += LL, k++) {
+        r = adj(k > 0 && otro ? otro : token, { op: 'subir', nombre, bytes: buf.length, parte: k, id, datos: t.slice(p, p + LL) });
+        if (!r.ok) return r;
+        id = r.datos.id;
+      }
+      return r;
+    };
+    const bajar = (token, id) => {
+      const r = adj(token, { op: 'bajar', id, parte: 0 });
+      if (!r.ok) return r;
+      let t = r.datos.datos;
+      for (let k = 1; k < r.datos.partes; k++) { const x = adj(token, { op: 'bajar', id, parte: k }); if (!x.ok) return x; t += x.datos.datos; }
+      return Object.assign({}, r, { buf: Buffer.from(t, 'base64') });
+    };
+    const T = 'Falla general de canales', X = 'Algunos canales de TV se ven en negro.';
+
+    ok(CFG.adjuntos.imagenes === g2.ejecutar('ALERTAS.ADJ_IMAGENES') && CFG.adjuntos.archivos === g2.ejecutar('ALERTAS.ADJ_ARCHIVOS') && CFG.adjuntos.imagenBytes === g2.ejecutar('ALERTAS.ADJ_IMAGEN_BYTES')
+      && CFG.adjuntos.archivoBytes === g2.ejecutar('ALERTAS.ADJ_ARCHIVO_BYTES') && LL === g2.ejecutar('ALERTAS.ADJ_CELDA * ALERTAS.ADJ_CELDAS_PARTE') && g2.ejecutar('ALERTAS.ADJ_CELDA') < 50000,
+      'la página y el servidor usan los mismos topes de adjuntos, y cada pedazo cabe en una celda', CFG.adjuntos);
+    const img1 = archivo(PNG, 20000), pdf1 = archivo(PDF, 2500000);
+    const sinPermiso = [ta, ts, tt].map((t) => subir(t, 'foto.png', img1));
+    ok(sinPermiso.every((x) => !x.ok && x.codigo === 'PERMISO') && !hojaAdj(), 'un asesor, una supervisora y Tiendas no pueden subir adjuntos (y la hoja todavía no existe)', sinPermiso);
+
+    // Subir: una imagen chica (una parte) y un PDF de 2.5 MB (varias partes)
+    r = subir(tw, ' captura: canales/sin señal?.PNG ', img1);
+    const aImg = r.ok ? r.datos.adjunto : {};
+    ok(r.ok && r.datos.completo && /^A[0-9a-f]{12}$/.test(aImg.id) && aImg.nombre === 'captura canales sin señal .PNG' && aImg.tipo === 'image/png' && aImg.clase === 'imagen' && aImg.bytes === 20000
+      && Object.keys(aImg).sort().join() === 'bytes,clase,id,nombre,tipo', 'Workforce sube una imagen: queda con su nombre (sin signos que no van en un nombre de archivo), tipo y tamaño', r);
+    const h = hojaAdj();
+    ok(h && h.isSheetHidden() && deAlertas(h).length === 1 && h.getRange(1, 1, 1, 4).getValues()[0].join('|') === 'ID|Parte|Bytes|Datos (no editar)' && !g2.E.activo.getSheetByName('Adjuntos'),
+      'la hoja Adjuntos se crea sola en el archivo de consultas, oculta y protegida como las demás');
+    r = subir(tj, 'Manual de canales.pdf', pdf1);
+    const aPdf = r.ok ? r.datos.adjunto : {};
+    const partesPdf = Math.ceil(pdf1.toString('base64').length / LL);
+    ok(r.ok && r.datos.completo && aPdf.tipo === 'application/pdf' && aPdf.clase === 'archivo' && aPdf.bytes === 2500000 && partesPdf === 4, 'Jefatura sube un PDF de 2.5 MB en ' + partesPdf + ' partes', r.ok || r);
+    const fs0 = filasAdj();
+    ok(fs0.every((f) => String(f[3]).length <= 45000) && fs0.filter((f) => f[0] === aPdf.id).length === 1 + Math.ceil(pdf1.toString('base64').length / 45000)
+      && !/@|claro\.com/.test(fs0.filter((f) => f[1] !== '0').map((f) => f[3].slice(0, 50)).join()), 'cada adjunto queda en una fila con su ficha y una fila por pedazo, de 45,000 letras como mucho', fs0.length);
+    let b = bajar(tw, aPdf.id);
+    ok(b.ok && b.datos.partes === partesPdf && b.datos.nombre === 'Manual de canales.pdf' && b.datos.tipo === 'application/pdf' && b.buf.equals(pdf1), 'Workforce lo puede abrir antes de publicarlo, y baja idéntico al original', b.ok || b);
+    ok([ta, tt, ts].every((t) => { const x = bajar(t, aPdf.id); return !x.ok && x.error === 'Este adjunto ya no está disponible.'; }), 'los asesores no pueden bajar un adjunto que no está en un comunicado vigente');
+
+    // Publicar con adjuntos
+    r = com(tw, 'publicar', { comunicado: { titulo: T, contexto: X, adjuntos: [aImg.id, aPdf.id, aImg.id] } });
+    const c1 = r.ok ? r.datos.comunicado : {};
+    ok(r.ok && c1.adjuntos.length === 2 && c1.adjuntos[0].id === aImg.id && c1.adjuntos[1].id === aPdf.id && JSON.stringify(c1.adjuntos[1]) === JSON.stringify(aPdf),
+      'el comunicado se publica con sus adjuntos, en el orden en que se pusieron y sin repetidos', r.ok ? c1.adjuntos : r);
+    const pub = cargar(ta).comunicados[0];
+    ok(pub.adjuntos.length === 2 && Object.keys(pub.adjuntos[0]).sort().join() === 'bytes,clase,id,nombre,tipo' && !/@|"u"|"por"/.test(JSON.stringify(pub.adjuntos))
+      && JSON.stringify(cargar(tt).comunicados[0].adjuntos) === JSON.stringify(pub.adjuntos) && JSON.stringify(pub).length < 1500,
+      'los asesores reciben la lista de adjuntos (nombre, tipo y tamaño), sin el contenido ni quién lo subió', pub.adjuntos);
+    ok([ta, tt, ts].every((t) => { const x = bajar(t, aPdf.id), y = bajar(t, aImg.id); return x.ok && x.buf.equals(pdf1) && y.ok && y.buf.equals(img1) && y.datos.partes === 1; }),
+      'Concentrix, Tiendas y los supervisores abren la imagen y el PDF de un comunicado vigente, idénticos a los originales');
+
+    // Lo que no entra
+    const malos = [
+      ['virus.exe', archivo(ZIP, 5000), /Solo se pueden adjuntar/], ['pagina.html', archivo(PDF, 5000), /Solo se pueden adjuntar/], ['macro.docm', archivo(ZIP, 5000), /Solo se pueden adjuntar/],
+      ['dibujo.svg', archivo(PNG, 5000), /Solo se pueden adjuntar/], ['sin-extension', archivo(PDF, 5000), /Solo se pueden adjuntar/], ['.pdf', archivo(PDF, 5000), /Solo se pueden adjuntar/],
+      ['falso.pdf', archivo(ZIP, 5000), /no corresponde a un archivo \.pdf/], ['falso.docx', archivo(PDF, 5000), /no corresponde a un archivo \.docx/], ['falso.jpg', archivo(PNG, 5000), /no corresponde a un archivo \.jpg/],
+      ['grande.png', archivo(PNG, CFG.adjuntos.imagenBytes + 1), /pesa más de 700 KB/], ['grande.pdf', archivo(PDF, CFG.adjuntos.archivoBytes + 1), /pesa más de 3 MB.*enlace/], ['vacio.pdf', archivo(PDF, 4), /está vacío/]
+    ].map(([n, buf, re]) => { const y = subir(tw, n, buf); const f = Model.faltaAdjunto(n, buf.length, []); return !y.ok && y.codigo === 'DATOS' && re.test(y.error) && (/no corresponde/.test(y.error) || f === y.error); });
+    ok(malos.every(Boolean), 'otros tipos (.exe, .html, .docm, .svg), un contenido que no es del tipo que dice el nombre, o más pesados de la cuenta no entran; la página lo dice con las mismas palabras', malos);
+    ok(!adj(tw, { op: 'subir', nombre: 'x.pdf', bytes: 5000, parte: 0, datos: '<script>alert(1)</script>' }).ok && !adj(tw, { op: 'subir', nombre: 'x.pdf', bytes: 5000, parte: 0, datos: '' }).ok
+      && adj(tw, { op: 'borrar', id: aImg.id }).codigo === 'DATOS' && adj(ta, { op: 'bajar', id: 'Azzzzzzzzzzzz', parte: 0 }).error === 'Este adjunto ya no está disponible.'
+      && adj(ta, { op: 'bajar', id: aImg.id, parte: 9 }).error === 'Este adjunto ya no está disponible.', 'un contenido que no es base64, una operación o un adjunto que no existe se rechazan');
+    const justos = [subir(tw, 'justa.jpg', archivo(JPG, CFG.adjuntos.imagenBytes)), subir(tw, 'justo.xlsx', archivo(ZIP, CFG.adjuntos.archivoBytes)), subir(tw, 'presentacion.pptx', archivo(ZIP, 9000)), subir(tw, 'carta.docx', archivo(ZIP, 9000))];
+    ok(justos.every((x) => x.ok && x.datos.completo) && justos[1].datos.adjunto.tipo.endsWith('spreadsheetml.sheet') && justos[2].datos.adjunto.tipo.endsWith('presentationml.presentation')
+      && justos[3].datos.adjunto.tipo.endsWith('wordprocessingml.document') && bajar(tw, justos[1].datos.id).buf.length === CFG.adjuntos.archivoBytes,
+      'con 700 KB y 3 MB justos sí; Word, Excel y PowerPoint (.docx, .xlsx, .pptx) entran', justos.map((x) => x.ok || x.error));
+
+    // Una subida a medias no se puede publicar, ni la sigue otra persona, ni fuera de orden
+    const t3 = pdf1.toString('base64');
+    const p0 = adj(tw, { op: 'subir', nombre: 'a-medias.pdf', bytes: pdf1.length, parte: 0, datos: t3.slice(0, LL) });
+    ok(p0.ok && !p0.datos.completo && p0.datos.adjunto === null && !bajar(tw, p0.datos.id).ok
+      && com(tw, 'publicar', { comunicado: { titulo: 'Otro', contexto: 'x', adjuntos: [p0.datos.id] } }).error === 'Uno de los adjuntos no terminó de subir. Quítalo y vuelve a adjuntarlo.',
+      'un adjunto que no terminó de subir no se puede abrir ni publicar', p0);
+    ok(/La subida se interrumpió/.test(adj(tj, { op: 'subir', id: p0.datos.id, bytes: pdf1.length, parte: 1, datos: t3.slice(LL, 2 * LL) }).error)
+      && /La subida se interrumpió/.test(adj(tw, { op: 'subir', id: p0.datos.id, bytes: pdf1.length, parte: 2, datos: t3.slice(2 * LL, 3 * LL) }).error)
+      && filasAdj().some((f) => f[0] === p0.datos.id), 'solo la sigue quien la empezó y en orden');
+    const p1 = adj(tw, { op: 'subir', id: p0.datos.id, parte: 1, datos: t3.slice(LL, 2 * LL) });
+    const p2 = adj(tw, { op: 'subir', id: p0.datos.id, parte: 2, datos: t3.slice(2 * LL, 3 * LL) });
+    const sobra = adj(tw, { op: 'subir', id: p0.datos.id, parte: 3, datos: t3.slice(3 * LL) + 'AAAA' + t3.slice(0, 2000) });
+    ok(p1.ok && !p1.datos.completo && p2.ok && !sobra.ok && /La subida se interrumpió/.test(sobra.error) && !filasAdj().some((f) => f[0] === p0.datos.id), 'si llega más contenido del que dijo que pesaba, el adjunto se descarta entero', sobra);
+
+    const q0 = adj(tw, { op: 'subir', nombre: 'corta.pdf', bytes: pdf1.length, parte: 0, datos: t3.slice(0, LL) });
+    const corta = adj(tw, { op: 'subir', id: q0.datos.id, parte: 1, datos: t3.slice(LL, 2 * LL - 4) });
+    ok(q0.ok && !corta.ok && /La subida se interrumpió/.test(corta.error) && !filasAdj().some((f) => f[0] === q0.datos.id), 'y si una parte llega incompleta, también');
+
+    // Dos personas subiendo a la vez: sus pedazos quedan intercalados en la hoja y cada uno baja completo
+    const pdf2 = archivo(PDF, 1500000), pdf3 = archivo(ZIP, 1400000), u2 = pdf2.toString('base64'), u3 = pdf3.toString('base64');
+    const x0 = adj(tw, { op: 'subir', nombre: 'uno.pdf', bytes: pdf2.length, parte: 0, datos: u2.slice(0, LL) }), y0 = adj(tj, { op: 'subir', nombre: 'dos.docx', bytes: pdf3.length, parte: 0, datos: u3.slice(0, LL) });
+    const x1 = adj(tw, { op: 'subir', id: x0.datos.id, parte: 1, datos: u2.slice(LL, 2 * LL) }), y1 = adj(tj, { op: 'subir', id: y0.datos.id, parte: 1, datos: u3.slice(LL, 2 * LL) });
+    const x2 = adj(tw, { op: 'subir', id: x0.datos.id, parte: 2, datos: u2.slice(2 * LL) }), y2 = adj(tj, { op: 'subir', id: y0.datos.id, parte: 2, datos: u3.slice(2 * LL) });
+    ok(x2.ok && x2.datos.completo && y2.ok && y2.datos.completo && bajar(tw, x0.datos.id).buf.equals(pdf2) && bajar(tj, y0.datos.id).buf.equals(pdf3), 'dos personas subiendo a la vez no se mezclan', [x1.ok, y1.ok, x2.ok || x2, y2.ok || y2]);
+
+    // Topes por comunicado y adjuntos de otro comunicado
+    const imgs = []; for (let i = 0; i < 6; i++) imgs.push(subir(tw, 'foto' + i + '.jpg', archivo(JPG, 3000 + i)).datos.id);
+    r = com(tw, 'publicar', { comunicado: { titulo: 'Muchas fotos', contexto: 'x', adjuntos: imgs } });
+    const r4 = com(tw, 'publicar', { comunicado: { titulo: 'Muchos archivos', contexto: 'x', adjuntos: [x0.datos.id, y0.datos.id, justos[1].datos.id, justos[2].datos.id] } });
+    ok(!r.ok && r.error === 'Un comunicado lleva como mucho 5 imágenes.' && !r4.ok && r4.error === 'Un comunicado lleva como mucho 3 archivos adjuntos.'
+      && Model.faltaAdjunto('otra.jpg', 3000, imgs.slice(0, 5).map((id) => ({ id, clase: 'imagen' }))) === r.error && Model.faltaAdjunto('otro.pdf', 3000, [1, 2, 3].map((id) => ({ id, clase: 'archivo' }))) === r4.error,
+      'como mucho 5 imágenes y 3 archivos por comunicado', [r.error, r4.error]);
+    r = com(tj, 'publicar', { comunicado: { titulo: 'Con lo ajeno', contexto: 'x', adjuntos: [aPdf.id] } });
+    ok(!r.ok && /ya es de otro comunicado/.test(r.error), 'un adjunto que ya es de otro comunicado no se puede repetir en uno nuevo', r);
+    r = com(tw, 'publicar', { comunicado: { titulo: 'Cinco fotos y tres archivos', contexto: 'x', adjuntos: imgs.slice(0, 5).concat([x0.datos.id, y0.datos.id, justos[2].datos.id]) } });
+    const c2 = r.ok ? r.datos.comunicado : {};
+    ok(r.ok && c2.adjuntos.length === 8 && Model.resumenAdjuntos(c2.adjuntos) === '5 imágenes y 3 archivos' && g2.ejecutar('resumenAdjuntos_(' + JSON.stringify(c2.adjuntos) + ')') === '5 imágenes y 3 archivos'
+      && Model.imagenesDe(c2).length === 5 && Model.archivosDe(c2).length === 3, 'con 5 imágenes y 3 archivos justos sí', r.ok || r);
+
+    // Editar: se quitan unos, se agregan otros
+    r = com(tj, 'editar', { id: c1.id, comunicado: { adjuntos: [justos[3].datos.id, aImg.id] } });
+    const c1e = r.ok ? r.datos.comunicado : {};
+    ok(r.ok && c1e.adjuntos.map((a) => a.id).join() === justos[3].datos.id + ',' + aImg.id && c1e.titulo === T && c1e.historial.slice(-1)[0].detalle === 'Cambió los adjuntos'
+      && !filasAdj().some((f) => f[0] === aPdf.id) && bajar(ta, aPdf.id).error === 'Este adjunto ya no está disponible.' && bajar(tw, aPdf.id).error === 'Este adjunto ya no está disponible.'
+      && bajar(ta, justos[3].datos.id).ok && bajar(ta, aImg.id).buf.equals(img1),
+      'al editar se quita el PDF (se borra de la hoja y ya nadie lo abre) y se agrega un Word; la imagen sigue', r.ok ? c1e.adjuntos.map((a) => a.nombre) : r);
+    r = com(tw, 'editar', { id: c1.id, comunicado: { contexto: X + ' Ya hay hora estimada.' } });
+    ok(r.ok && r.datos.comunicado.adjuntos.length === 2 && r.datos.comunicado.historial.slice(-1)[0].detalle === 'Cambió el contexto',
+      'una página de antes, que edita el texto sin mandar la lista de adjuntos, no los quita', r.ok || r);
+    r = com(tw, 'editar', { id: c1.id, comunicado: { adjuntos: [justos[3].datos.id, aImg.id] } });
+    ok(!r.ok && /No hay cambios/.test(r.error) && com(tw, 'editar', { id: c1.id, comunicado: { titulo: T + ' y DTH', contexto: X, adjuntos: [aImg.id] } }).datos.comunicado.historial.slice(-1)[0].detalle === 'Cambió el título, el contexto y los adjuntos',
+      'guardar la misma lista no es un cambio; cambiar todo queda anotado');
+
+    // Retirar: se borran sus adjuntos
+    const antesRetirar = filasAdj().length;
+    r = com(tw, 'retirar', { id: c2.id });
+    ok(r.ok && r.datos.comunicado.adjuntos.length === 0 && r.datos.comunicado.historial.slice(-1)[0].detalle === 'Tenía 5 imágenes y 3 archivos' && filasAdj().length < antesRetirar
+      && !filasAdj().some((f) => c2.adjuntos.some((a) => a.id === f[0])) && bajar(ta, imgs[0]).error === 'Este adjunto ya no está disponible.' && bajar(ta, aImg.id).buf.equals(img1),
+      'al retirar un comunicado se borran sus imágenes y archivos (queda anotado cuántos tenía); los de los demás siguen', r.ok || r);
+
+    // Mantenimiento: lo que se subió y no quedó en ningún comunicado se borra a las 6 horas
+    const sueltos = () => new Set(filasAdj().map((f) => f[0]));
+    const antes6 = sueltos();
+    ok(antes6.has(imgs[5]) && antes6.has(justos[0].datos.id) && antes6.has(aImg.id) && g2.ejecutar('limpiarAdjuntos_()') === 0 && sueltos().size === antes6.size, 'lo recién subido que todavía no se publica no se borra');
+    g2.E.ahora = Date.now() + 7 * U.HORA;
+    const borradas = g2.ejecutar('limpiarAdjuntos_()'), queda = sueltos();
+    g2.E.ahora = null;
+    ok(borradas > 0 && queda.size === 1 && queda.has(aImg.id) && bajar(ta, aImg.id).buf.equals(img1), 'a las 7 horas, el mantenimiento borra los adjuntos que no son de ningún comunicado; los que sí, se quedan', [borradas, [...queda]]);
+
+    // Espacio total y bajadas por hora
+    g2.ejecutar('ALERTAS.ADJ_TOTAL_BYTES = 30000');
+    r = subir(tw, 'no-cabe.png', archivo(PNG, 15000));
+    g2.ejecutar('ALERTAS.ADJ_TOTAL_BYTES = 31457280');
+    ok(!r.ok && /No queda espacio para más adjuntos/.test(r.error) && subir(tw, 'ahora-si.png', archivo(PNG, 15000)).ok, 'si se llena el espacio de adjuntos, pide retirar comunicados', r);
+    g2.ejecutar('ALERTAS.ADJ_BAJADAS_HORA = 2');
+    const tb = entrar2('a2') || ta, veces = [1, 2, 3].map(() => adj(tb, { op: 'bajar', id: aImg.id, parte: 0 }));
+    g2.ejecutar('ALERTAS.ADJ_BAJADAS_HORA = 400');
+    ok(veces[0].ok && veces[1].ok && !veces[2].ok && veces[2].codigo === 'LIMITE' && adj(ta, { op: 'bajar', id: aImg.id, parte: 0 }).ok, 'hay un tope de bajadas por persona y por hora, que no afecta a los demás', veces.map((x) => x.ok || x.codigo));
+
+    // La página: las mismas reglas
+    ok(Model.tipoAdjunto('Manual.PDF').tipo === 'application/pdf' && Model.tipoAdjunto('a.jpeg').clase === 'imagen' && Model.tipoAdjunto('a.docm') === null && Model.tipoAdjunto('.pdf') === null
+      && Model.pesoAdjunto(2500000) === '2.4 MB' && Model.pesoAdjunto(20000) === '20 KB' && Model.pesoAdjunto(300) === '1 KB' && g2.ejecutar('pesoAdjunto_(2500000)') === '2.4 MB'
+      && Model.nombreAdjunto(' captura: canales/sin señal?.PNG ') === 'captura canales sin señal .PNG' && Model.resumenAdjuntos([{ clase: 'imagen' }]) === '1 imagen' && Model.resumenAdjuntos([]) === ''
+      && Model.mismosAdjuntos([{ id: 'a' }, { id: 'b' }], [{ id: 'a' }, { id: 'b' }]) && !Model.mismosAdjuntos([{ id: 'a' }], [{ id: 'b' }]) && Model.mismosAdjuntos(undefined, []),
+      'la página reconoce los tipos, limpia el nombre y muestra el peso igual que el servidor');
+    const man = g2.ejecutar('limpiarConsultas()');
+    ok(man && man.adjuntos === 0, 'el mantenimiento de cada hora incluye la limpieza de adjuntos', man);
   }
 
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
