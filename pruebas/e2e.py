@@ -214,6 +214,28 @@ with sync_playwright() as p:
     t.fill('.buscador-caja input', c_falla); t.keyboard.press('Enter'); t.wait_for_selector('.veredicto', timeout=15000)
     ok(t.locator('.veredicto').get_attribute('data-s') == 'FALLA', 'el cliente ' + c_falla + ' del nodo ' + ejemplos[0] + ' sale con Falla general')
     ok('Le comento' in t.locator('.guion-texto').inner_text(), 'Tiendas recibe el guion')
+    # Trato al cliente: Sr. o Srta. según su primer nombre; el asesor lo puede cambiar
+    t.evaluate("() => document.querySelector('.guion').scrollIntoView({ block: 'center' })"); t.wait_for_timeout(200)
+    t.locator('.guion').screenshot(path=OUT + 'e04d_guion_y_nota.png')
+    tr = t.evaluate("() => { const n = document.querySelector('.cliente-nombre').innerText; return { auto: U.trato(n), pila: U.primerNombre(n), empresa: U.esEmpresa(n, '') }; }")
+    if not tr['empresa']:
+        marcado = t.locator('.seg-trato button[aria-pressed="true"]')
+        guion = t.locator('.guion-texto').inner_text()
+        if tr['auto']:
+            ok(marcado.count() == 1 and marcado.inner_text() == tr['auto'] and ('Le comento, ' + tr['auto'] + ' ' + tr['pila'] + ',') in guion, 'el guion le dice al cliente ' + tr['auto'] + ' y su nombre, y el botón de trato queda marcado', guion[:80])
+        else:
+            ok(marcado.count() == 0 and t.locator('.guion-trato-falta').count() == 1 and ('Le comento, ' + tr['pila'] + ',') in guion, 'con un nombre que no deja saber el trato, pide elegir Sr. o Srta.', guion[:80])
+        otro = 'Srta.' if tr['auto'] == 'Sr.' else 'Sr.'
+        t.locator('.seg-trato button').nth(0 if otro == 'Sr.' else 1).click()
+        t.wait_for_timeout(200)
+        ok(('Le comento, ' + otro + ' ' + tr['pila'] + ',') in t.locator('.guion-texto').inner_text() and t.locator('.guion-trato-falta').count() == 0, 'el asesor puede cambiarlo a ' + otro + ' y el guion cambia', t.locator('.guion-texto').inner_text()[:80])
+        t.locator('.seg button', has_text='Chat').click(); t.wait_for_timeout(200)
+        ok(('Hola, ' + otro + ' ' + tr['pila'] + '.') in t.locator('.guion-texto').inner_text(), 'también en el guion de chat')
+        t.locator('.seg button', has_text='Llamada').click()
+    nota_t = t.locator('.nota-qflow-texto').inner_text()
+    ok(nota_t.startswith('Nombre: ') and all(x in nota_t for x in ['\nDNI: ', '\nContrato: ' + c_falla, '\nNodo: ' + ejemplos[0], '\nTecnología: ', '\nDepartamento: ', '\nMunicipio: ', '\nColonia: ', '\nMotivo de Falla: Energía comercial',
+       '\nTicket de Falla: F1254585', '\nObservaciones: Se le informó al cliente de la falla general en su zona. Publicada a las ']) and ' activa' in nota_t,
+       'la nota para Qflow trae los datos del cliente línea por línea, el motivo, el ticket y las observaciones', nota_t)
     t.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)
     hist = t.locator('.historial-cliente').inner_text()
     ok('Falla de energía comercial' in hist and 'sigue activa' in hist and 'F1254585' in hist, 'Tiendas ve el historial de fallas del cliente, con el número de falla')
@@ -395,10 +417,10 @@ with sync_playwright() as p:
     a.fill('.buscador-caja input', contratosPF[1]); a.keyboard.press('Enter'); a.wait_for_selector(f'.cliente-ids:has-text("{contratosPF[1]}")', timeout=20000)
     ok(a.locator('.veredicto').get_attribute('data-s') == 'FALLA' and 'Posible falla general' in a.locator('.veredicto').inner_text(), 'Concentrix ve "Posible falla general" en ese nodo')
     a.wait_for_selector('.nota-qflow', timeout=5000)
-    nota = a.locator('.nota-qflow p').inner_text()
-    ok(nota.startswith('Cliente en posible falla general, nodo ' + nodoPF) and 'en validación con el VOC' in nota, 'con la nota para Qflow: ' + nota)
+    nota = a.locator('.nota-qflow-texto').inner_text()
+    ok(('\nNodo: ' + nodoPF + '\n') in nota and 'Motivo de Falla: Posible falla general, en validación con el VOC' in nota and 'lleva ' in nota and 'en validación.' in nota, 'con la nota para Qflow de una posible falla', nota)
     a.click('.nota-qflow button'); a.wait_for_timeout(300)
-    ok(a.evaluate('() => navigator.clipboard.readText()') == nota and 'Nota copiada' in a.locator('.nota-qflow button').inner_text(), 'Copiar nota del caso la deja en el portapapeles')
+    ok(a.evaluate('() => navigator.clipboard.readText()').replace('\r', '') == nota and 'Nota copiada' in a.locator('.nota-qflow button').inner_text(), 'Copiar nota del caso la deja en el portapapeles')
     a.locator('.guion').screenshot(path=OUT + 'e06d_nota_qflow.png')
     # Descartarla: el VOC no encontró falla
     tarjeta_pf.locator('button:has-text("Descartar")').click(); x.wait_for_selector('.modal:has-text("Descartar la posible falla")', timeout=5000)
@@ -427,8 +449,8 @@ with sync_playwright() as p:
     a.fill('.buscador-caja input', c_falla); a.keyboard.press('Enter'); a.wait_for_selector('.historial-cliente .hist-lista li', timeout=15000)
     a.wait_for_selector('.hist-etiquetas .llamo', timeout=15000)
     ok(a.locator('.hist-etiquetas .llamo').first.inner_text().strip() == 'Llamó 1 vez', 'el historial marca que el cliente llamó durante esa falla (sin contar las búsquedas de Workforce)', a.locator('.hist-etiquetas .llamo').all_inner_texts())
-    nota = a.locator('.nota-qflow p').inner_text()
-    ok(nota.startswith('Cliente en falla general F1254585 (energía comercial), nodo ') and 'solucionada hoy a' in nota, 'nota para Qflow de una falla resuelta: ' + nota)
+    nota = a.locator('.nota-qflow-texto').inner_text()
+    ok('Ticket de Falla: F1254585' in nota and 'Motivo de Falla: Energía comercial' in nota and 'La falla general ya fue solucionada hoy a' in nota and 'duró ' in nota and 'reiniciar su equipo' in nota, 'nota para Qflow de una falla resuelta', nota)
     a.locator('.historial-cliente').screenshot(path=OUT + 'e06e_llamo.png')
     x.goto(APP + '#stats'); x.wait_for_selector('.deteccion', timeout=60000); x.wait_for_timeout(800)
     det_txt = x.locator('.deteccion').inner_text()

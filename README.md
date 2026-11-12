@@ -150,7 +150,12 @@ Cada carga deja la base interna igual al Excel nuevo, y la hoja **Cargas** regis
 ## Día a día
 
 - **Asesores y tiendas**: escriben el contrato (6 a 8 dígitos) o el DNI (con o sin guiones). Alertas responde **Falla general** con el guion o **Sin falla general** para seguir el flujo normal. Si sospechan una falla que no está publicada, la reportan desde ahí. **Limpiar** (o la tecla Esc) borra la búsqueda.
-- **Nota del caso para Qflow**: debajo del guion sale un texto corto para la descripción del caso, según lo que encontró Alertas. Por ejemplo: «Cliente en falla general F1254585 (energía comercial), nodo GRA21, desde las 9:40 a. m.; solución estimada 3:00 p. m. Se le informó al cliente.» **Copiar nota del caso** lo deja listo para pegarlo en Qflow, así todos documentan igual. Los textos están en `src/config.js` (`notaQflow`).
+- **Trato al cliente en el guion**: al cliente se le dice **Sr.** o **Srta.** y su primer nombre («Le comento, Sr. Kevin…», «Hola, Srta. Raquel»). Alertas lo saca del primer nombre y lo deja marcado junto a **Llamada / Chat**; el asesor lo cambia con un clic si no corresponde (por ejemplo, si quien llama no es el titular). Con un nombre que no deja saberlo (Guadalupe, Alexis, Cruz…), el guion sale solo con el nombre y pide elegir. A una empresa se le sigue diciendo «estimado cliente». Las listas de nombres están en `src/util.js` (`trato`).
+- **Nota del caso para Qflow**: debajo del guion sale la nota para la descripción del caso, con los datos del cliente línea por línea (nombre, DNI, contrato, nodo, tecnología, departamento, municipio y colonia) y lo que encontró Alertas:
+  - **Con falla**: «Motivo de Falla», «Ticket de Falla» y «Observaciones», que dice que se le informó al cliente, a qué hora se publicó la falla, cuánto lleva activa y la hora estimada de solución (o que aún no hay). Por ejemplo: «Se le informó al cliente de la falla general en su zona. Publicada a las 11:29 a. m.; lleva 23 min activa y aún no tiene hora estimada de solución.»
+  - **Falla ya resuelta**: cuándo se solucionó, cuánto duró y que se le indicó reiniciar su equipo. **Posible falla general**: que está en validación con el VOC.
+  - **Sin falla**: «Motivo de Falla: Cliente no se encuentra en falla general.» y, en blanco para que el asesor los llene en Qflow, «Soporte Realizado» y «Número de Avería».
+  - **Copiar nota del caso** la deja lista para pegarla en Qflow, así todos documentan igual. Los textos están en `src/config.js` (`notaQflow`).
 - **Mapa en vivo** (inicio de Consulta): un panel oscuro, como una pantalla de monitoreo, con las fallas activas del país.
   - Cada departamento afectado lleva un círculo que late, del tamaño de sus clientes afectados, con su nombre, los clientes y un numerito con las fallas que tiene. Al pasar el cursor dice también desde hace cuánto.
   - Arriba, el total de clientes afectados, las fallas, los nodos y los departamentos; lo publicado y lo resuelto en la última hora, y cuánto lleva la falla más antigua. Abajo, los **Últimos movimientos** (lo último de cada falla: publicada, reabierta o resuelta, con lo que duró).
@@ -440,7 +445,7 @@ pruebas/              emulador de Apps Script y pruebas
 
 ```bash
 node build.js                      # arma index.html
-npm test                           # 472 pruebas del servidor y del modelo en un emulador de Apps Script
+npm test                           # 480 pruebas del servidor y del modelo en un emulador de Apps Script
 npm test -- ruta/a/la/base.xlsx    # las mismas pruebas con una base real (no la subas al repositorio)
 npm test -- base.xlsx siguiente.xlsx
                                    # además, la carga por cambios de una base real a la de la semana siguiente

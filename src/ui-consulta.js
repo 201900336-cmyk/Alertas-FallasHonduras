@@ -351,10 +351,12 @@ function TarjetaCliente({ rec, v, now }) {
 }
 
 /* ---------- Guion ---------- */
-function partesGuion(v, rec, modo, now, rein) {
+/* trato: 'Sr.' o 'Srta.' (o '' si el asesor todavía no lo elige): al cliente se le dice "Sr. Kevin" o "Srta. Raquel" */
+function partesGuion(v, rec, modo, now, rein, trato) {
   const f = v.falla;
   const empresa = U.esEmpresa(rec.nombre, rec.categoria);
-  const nombre = empresa ? '' : U.primerNombre(rec.nombre);
+  const pila = empresa ? '' : U.primerNombre(rec.nombre);
+  const nombre = pila && trato ? trato + ' ' + pila : pila;
   const M = (x) => ({ v: x });
   const motivo = f ? clienteMotivo(f) : '';
   if (v.tipo === 'FALLA' && Model.esPosible(f)) {
@@ -412,7 +414,12 @@ function Guion({ rec, v, now, rein }) {
   const nota = Model.notaQflow(v, rec, now);
   const [notaCopiada, setNotaCopiada] = useState('');
   const conGuion = v.tipo === 'FALLA' || v.tipo === 'RESUELTA';
-  const partes = conGuion ? partesGuion(v, rec, modo, now, rein) : [];
+  // Trato al cliente: sale del primer nombre (Sr. Kevin, Srta. Raquel) y el asesor lo puede cambiar; cuando el nombre
+  // no deja saberlo, lo elige. La elección vale solo para este cliente.
+  const conNombre = conGuion && !U.esEmpresa(rec.nombre, rec.categoria) && !!U.primerNombre(rec.nombre);
+  const [eleccion, setEleccion] = useState(null);
+  const trato = !conNombre ? '' : eleccion && eleccion.c === rec.contrato ? eleccion.v : U.trato(rec.nombre);
+  const partes = conGuion ? partesGuion(v, rec, modo, now, rein, trato) : [];
   const texto = partes.map((p) => (typeof p === 'string' ? p : p.v)).join('');
   async function reportar() {
     setReportado(true);
@@ -421,11 +428,18 @@ function Guion({ rec, v, now, rein }) {
   return html`<aside class="panel guion" aria-label="Guion para el cliente">
     <div class="guion-cab">
       <h3>${conGuion ? 'Qué decirle al cliente' : 'Siguiente paso'}</h3>
-      ${conGuion && html`<div class="seg" role="group" aria-label="Canal">
-        <button type="button" aria-pressed=${modo === 'llamada'} onClick=${() => setModo('llamada')}>Llamada</button>
-        <button type="button" aria-pressed=${modo === 'chat'} onClick=${() => setModo('chat')}>Chat</button>
+      ${conGuion && html`<div class="guion-opciones">
+        ${conNombre && html`<div class="seg seg-trato" role="group" aria-label="Trato al cliente" data-falta=${trato ? null : ''}>
+          <button type="button" aria-pressed=${trato === 'Sr.'} onClick=${() => setEleccion({ c: rec.contrato, v: 'Sr.' })}>Sr.</button>
+          <button type="button" aria-pressed=${trato === 'Srta.'} onClick=${() => setEleccion({ c: rec.contrato, v: 'Srta.' })}>Srta.</button>
+        </div>`}
+        <div class="seg" role="group" aria-label="Canal">
+          <button type="button" aria-pressed=${modo === 'llamada'} onClick=${() => setModo('llamada')}>Llamada</button>
+          <button type="button" aria-pressed=${modo === 'chat'} onClick=${() => setModo('chat')}>Chat</button>
+        </div>
       </div>`}
     </div>
+    ${conNombre && !trato && html`<div class="guion-trato-falta"><${Ico} n="info" s=${15} />Elige <b>Sr.</b> o <b>Srta.</b> para dirigirte al cliente.</div>`}
     ${conGuion
       ? html`<div class="guion-texto"><${Resaltado} partes=${partes} /></div>
         <div class="guion-acciones">
@@ -442,7 +456,7 @@ function Guion({ rec, v, now, rein }) {
       <div class="nota-qflow-cab"><span>Nota del caso para Qflow</span>
         <button class="btn btn-borde btn-chico" onClick=${async () => { if (await U.copiar(nota)) { setNotaCopiada(nota); tostada('Nota copiada: pégala en la descripción del caso en Qflow'); } }}>
           <${Ico} n=${notaCopiada === nota ? 'check' : 'copiar'} s=${15} />${notaCopiada === nota ? 'Nota copiada' : 'Copiar nota del caso'}</button></div>
-      <p>${nota}</p>
+      <div class="nota-qflow-texto">${nota.split('\n').map((l, i) => { const p = l.indexOf(':'); return html`<div key=${i}><b>${l.slice(0, p + 1)}</b>${l.slice(p + 1)}</div>`; })}</div>
     </div>`}
   </aside>`;
 }

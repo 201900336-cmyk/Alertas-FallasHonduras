@@ -110,15 +110,19 @@ const CONFIG = {
   // Los SMS a los clientes (Notifícame) son solo los mensajes aprobados por Claro: están en el servidor
   // (SMS_APROBADOS en servidor/Code.gs), uno por motivo de evento externo, y se mandan tal cual.
 
-  // Nota corta para pegar en la descripción del caso en Qflow, según el resultado de la consulta. Así todos
-  // documentan igual. {nodo} {numero} {motivo} {inicio} {eta} {cerrada} {contrato} se reemplazan con los datos
-  // del cliente y la falla; {inicio} y {cerrada} ya traen "las" o el día ("ayer a las 3:00 p. m.").
+  // Nota para pegar en la descripción del caso en Qflow, según el resultado de la consulta. Así todos documentan
+  // igual. Primero van los datos del cliente (CLIENTE) y luego las líneas de cada resultado. Lo que va entre llaves
+  // se reemplaza con los datos del cliente y la falla: {publicada} y {cerrada} ya traen "a las" o el día ("ayer a
+  // las 3:00 p. m."), {lleva} y {duro} son tiempos ("1 h 22 min") y {eta} completa la frase con la hora estimada
+  // o con que aún no hay. En las que no hay falla, "Soporte Realizado" y "Número de Avería" quedan en blanco para
+  // que el asesor los llene en Qflow.
   notaQflow: {
-    FALLA: 'Cliente en falla general {numero} ({motivo}), nodo {nodo}, desde {inicio}; {eta}. Se le informó al cliente.',
-    POSIBLE: 'Cliente en posible falla general, nodo {nodo}, desde {inicio}; en validación con el VOC. Se le informó al cliente.',
-    RESUELTA: 'Cliente en falla general {numero} ({motivo}), nodo {nodo}, solucionada {cerrada}. Se le indicó reiniciar el equipo.',
-    SIN_FALLA: 'Sin falla general en el nodo {nodo}. Se continúa con el soporte normal.',
-    SIN_NODO: 'Nodo virtual ({nodo}): no se puede confirmar una falla general. Se continúa con el soporte normal.'
+    CLIENTE: 'Nombre: {nombre}\nDNI: {dni}\nContrato: {contrato}\nNodo: {nodo}\nTecnología: {tecnologia}\nDepartamento: {departamento}\nMunicipio: {municipio}\nColonia: {colonia}',
+    FALLA: 'Motivo de Falla: {motivo}\nTicket de Falla: {numero}\nObservaciones: Se le informó al cliente de la falla general en su zona. Publicada {publicada}; lleva {lleva} activa{eta}.',
+    POSIBLE: 'Motivo de Falla: Posible falla general, en validación con el VOC\nTicket de Falla: {numero}\nObservaciones: Se le informó al cliente que se está validando una posible falla general en su zona. Publicada {publicada}; lleva {lleva} en validación.',
+    RESUELTA: 'Motivo de Falla: {motivo}\nTicket de Falla: {numero}\nObservaciones: La falla general ya fue solucionada {cerrada}; duró {duro}. Se le indicó al cliente reiniciar su equipo.',
+    SIN_FALLA: 'Motivo de Falla: Cliente no se encuentra en falla general.\nSoporte Realizado:\nNúmero de Avería:',
+    SIN_NODO: 'Motivo de Falla: Nodo virtual, no se puede confirmar una falla general.\nSoporte Realizado:\nNúmero de Avería:'
   }};
 
 const MOTIVO = Object.fromEntries(CONFIG.motivos.map((m) => [m.id, m]));

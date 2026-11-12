@@ -981,24 +981,31 @@ const Model = (() => {
     return n;
   }
 
-  /* Nota para la descripción del caso en Qflow (plantillas en CONFIG.notaQflow) */
+  /* Nota para la descripción del caso en Qflow (plantillas en CONFIG.notaQflow): los datos del cliente, una línea
+     por dato, y debajo lo que encontró Alertas. Con falla: el motivo, el ticket y, en Observaciones, que se le
+     informó al cliente, a qué hora se publicó y cuánto lleva activa. Sin falla: el soporte y la avería en blanco. */
   function notaQflow(v, rec, now) {
     const f = v.falla;
     const clave = v.tipo === 'FALLA' && esPosible(f) ? 'POSIBLE' : v.tipo;
     const plantilla = CONFIG.notaQflow[clave];
     if (!plantilla) return '';
-    const hora = (t) => U.hora(t).replace(/\u00a0/g, ' ');
-    // "las 3:00 p. m.", "la 1:30 p. m.", "ayer a las 9:15 a. m." o "el 30 oct a las 9:15 a. m."
-    const momento = (t) => { const h = hora(t), art = /^1:/.test(h) ? 'la ' : 'las '; return U.esHoy(t, now) ? art + h : U.diaRel(t, now) + ' a ' + art + h; };
-    const motivo = !f ? '' : f.motivo === 'OTRO' || !MOTIVO[f.motivo] ? String(f.motivoTexto || 'otro motivo').replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ])/, (c) => c.toLowerCase())
-      : MOTIVO[f.motivo].nombre.replace(/^Falla de /, '').toLowerCase();
+    const hora = (t) => U.hora(t);
+    // "a las 3:00 p. m.", "a la 1:30 p. m.", "ayer a las 9:15 a. m." o "el 30 oct a las 9:15 a. m."
+    const momento = (t) => { const h = hora(t), art = /^1:/.test(h) ? 'a la ' : 'a las '; return U.esHoy(t, now) ? art + h : U.diaRel(t, now) + ' ' + art + h; };
+    const motivo = !f ? '' : U.conMayuscula(f.motivo === 'OTRO' || !MOTIVO[f.motivo] ? String(f.motivoTexto || 'otro motivo') : MOTIVO[f.motivo].nombre.replace(/^Falla de /, ''));
+    const dato = (x) => x || 'Sin dato';
     const datos = {
-      contrato: String(rec.contrato), nodo: rec.nodo, numero: f ? U.numeroFalla(f) : '', motivo,
-      inicio: f ? momento(f.inicio) : '',
-      eta: f && f.eta && f.eta > now ? 'solución estimada ' + U.cuandoCorto(f.eta, now).replace(/\u00a0/g, ' ') : 'sin hora estimada de solución',
-      cerrada: f && f.cerradaEn ? (U.esHoy(f.cerradaEn, now) ? 'hoy a ' : '') + momento(f.cerradaEn) : ''
+      nombre: dato(U.esEmpresa(rec.nombre, rec.categoria) ? rec.nombre : U.titulo(rec.nombre)), dni: dato(U.formatoDni(rec.dni)), contrato: String(rec.contrato),
+      nodo: dato(rec.nodo), tecnologia: dato(rec.tecnologia), departamento: dato(U.lugar(rec.departamento)), municipio: dato(U.lugar(rec.municipio)), colonia: dato(U.colonia(rec.colonia)),
+      numero: f ? U.numeroFalla(f) : '', motivo,
+      publicada: f ? momento(f.publicadaEn || f.inicio) : '',
+      lleva: f ? U.dur(Math.max(0, now - f.inicio)) : '',
+      eta: f && f.eta && f.eta > now ? ', con solución estimada ' + momento(f.eta) : ' y aún no tiene hora estimada de solución',
+      cerrada: f && f.cerradaEn ? (U.esHoy(f.cerradaEn, now) ? 'hoy ' : '') + momento(f.cerradaEn) : '',
+      duro: f && f.cerradaEn ? U.dur(Math.max(0, f.cerradaEn - f.inicio)) : ''
     };
-    return plantilla.replace(/\{(\w+)\}/g, (m, k) => (k in datos ? datos[k] : m)).replace(/\.\./g, '.');
+    const llenar = (t) => t.replace(/\{(\w+)\}/g, (m, k) => (k in datos ? datos[k] : m));
+    return (llenar(CONFIG.notaQflow.CLIENTE) + '\n' + llenar(plantilla)).replace(/ /g, ' ').replace(/\.\./g, '.');
   }
 
 

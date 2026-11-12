@@ -358,9 +358,9 @@ button { cursor: pointer; }
 .dato .v small { display: block; font-weight: 500; color: var(--ink-3); font-size: 12.5px; }
 
 .guion { padding: 20px 22px 22px; position: sticky; top: 84px; }
-.guion-cab { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.guion-cab { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .guion-cab h3 { margin: 0; font-size: 16px; font-weight: 750; }
-.guion-cab .seg { margin-left: auto; }
+.guion-cab .guion-opciones { margin-left: auto; }
 .guion-texto { font-size: 15.5px; line-height: 1.62; color: var(--ink); white-space: pre-line; }
 .guion-texto mark { background: none; color: inherit; font-weight: 700; box-shadow: inset 0 -0.42em 0 color-mix(in srgb, var(--resuelta) 32%, transparent); }
 .guion-acciones { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
@@ -371,7 +371,12 @@ button { cursor: pointer; }
 .nota-qflow { margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
 .nota-qflow-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .nota-qflow-cab > span { font-size: 12px; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
-.nota-qflow p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.nota-qflow-texto { margin-top: 8px; font-size: 13.5px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; user-select: text; }
+.nota-qflow-texto b { font-weight: 650; }
+/* Guion: trato al cliente (Sr. o Srta.) junto a Llamada y Chat */
+.guion-opciones { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.seg-trato[data-falta] { box-shadow: 0 0 0 2px var(--resuelta); }
+.guion-trato-falta { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 13px; color: var(--resuelta-text); }
 
 .no-encontrado { padding: 26px; display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start; }
 .no-encontrado .ico { width: 48px; height: 48px; border-radius: 14px; background: var(--surface-3); display: grid; place-items: center; color: var(--ink-2); }

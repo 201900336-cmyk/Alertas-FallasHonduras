@@ -2108,6 +2108,41 @@ const t0 = Date.now(), ms = () => ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     ok(man && man.adjuntos === 0, 'el mantenimiento de cada hora incluye la limpieza de adjuntos', man);
   }
 
+  /* ---------- Guion: trato al cliente; nota del caso para Qflow ---------- */
+  console.log('\n20. Trato al cliente (Sr. o Srta.) y nota del caso para Qflow');
+  {
+    const sr = ['Kevin Andrés Zelaya Rivas', 'JOSE MARIA LOPEZ', 'Luis', 'CARLOS', 'Ángel David', 'josué', 'NOE', 'Joshua', 'Bautista', 'Wilmer', 'Roberto', 'JESÚS', 'Moisés', 'Gerson', 'MARIO'];
+    const srta = ['Raquel Sofía Mejía', 'MARIA JOSE LOPEZ', 'Carmen', 'ROSARIO', 'Rocío', 'Consuelo', 'Isabel', 'Ruth', 'Wendy', 'KIMBERLY', 'Karla', 'Suyapa', 'Belén', 'Génesis', 'Elizabeth'];
+    const nada = ['Guadalupe Reyes', 'ALEXIS', 'Cruz', 'Santos', 'Ariel', 'Francis', '', null, 'Li', 'GERENCIA REGIONAL', 'Grupo Los Pinos', 'Centro Médico', 'X Æ'];
+    ok(sr.every((n) => U.trato(n) === 'Sr.') && srta.every((n) => U.trato(n) === 'Srta.') && nada.every((n) => U.trato(n) === ''),
+      'el trato sale del primer nombre: Sr. Kevin, Srta. Raquel; con un nombre que no deja saberlo (Guadalupe, Alexis, Cruz) o que no es de persona, ninguno',
+      [sr.filter((n) => U.trato(n) !== 'Sr.'), srta.filter((n) => U.trato(n) !== 'Srta.'), nada.filter((n) => U.trato(n) !== '')]);
+
+    const ahora = new Date(2026, 10, 12, 11, 52, 0).getTime();
+    const cli = { nombre: 'KEVIN ANDRES ZELAYA RIVAS', dni: '0801199012345', contrato: 9000017, nodo: 'GRA21', tecnologia: 'HFC', departamento: 'CORTES', municipio: 'SAN PEDRO SULA', colonia: 'BARRIO EL CENTRO', categoria: 'RESIDENCIAL' };
+    const falla = { id: 'x', numero: 'F1254585', motivo: 'ENERGIA', motivoTexto: '', estado: 'ACTIVA', inicio: ahora - 23 * U.MIN, publicadaEn: ahora - 23 * U.MIN, eta: null, cerradaEn: null, nodos: ['GRA21'] };
+    const cabeza = 'Nombre: Kevin Andres Zelaya Rivas\nDNI: 0801-1990-12345\nContrato: 9000017\nNodo: GRA21\nTecnología: HFC\nDepartamento: Cortés\nMunicipio: San Pedro Sula\nColonia: Barrio El Centro\n';
+    let nota = Model.notaQflow({ tipo: 'FALLA', falla }, cli, ahora);
+    ok(nota === cabeza + 'Motivo de Falla: Energía comercial\nTicket de Falla: F1254585\nObservaciones: Se le informó al cliente de la falla general en su zona. Publicada a las 11:29 a. m.; lleva 23 min activa y aún no tiene hora estimada de solución.',
+      'nota de un cliente en falla: sus datos línea por línea, el motivo, el ticket y, en Observaciones, que se le informó, a qué hora se publicó y cuánto lleva', nota);
+    nota = Model.notaQflow({ tipo: 'FALLA', falla: Object.assign({}, falla, { inicio: ahora - 82 * U.MIN, publicadaEn: ahora - 80 * U.MIN, eta: ahora + 188 * U.MIN }) }, cli, ahora);
+    ok(nota.endsWith('Publicada a las 10:32 a. m.; lleva 1 h 22 min activa, con solución estimada a las 3:00 p. m.') && !/\.\.| /.test(nota), 'con hora estimada, la dice (sin puntos dobles ni espacios raros al pegar)', nota);
+    nota = Model.notaQflow({ tipo: 'FALLA', falla: Object.assign({}, falla, { inicio: ahora - 26 * U.HORA, publicadaEn: ahora - 26 * U.HORA, eta: ahora - U.HORA }) }, cli, ahora);
+    ok(/Publicada ayer a las 9:52 a\. m\.; lleva 1 día 2 h activa y aún no tiene hora estimada de solución\.$/.test(nota) || /Publicada ayer a las 9:52 a\. m\.; lleva 26 h activa y aún no tiene/.test(nota),
+      'una falla de ayer dice el día; con la hora estimada ya pasada, que aún no hay', nota.split('\n').pop());
+    nota = Model.notaQflow({ tipo: 'FALLA', falla: Object.assign({}, falla, { motivo: 'VALIDACION', numero: '' }) }, cli, ahora);
+    ok(nota.includes('\nMotivo de Falla: Posible falla general, en validación con el VOC\nTicket de Falla: ') && nota.endsWith('Se le informó al cliente que se está validando una posible falla general en su zona. Publicada a las 11:29 a. m.; lleva 23 min en validación.'),
+      'nota de una posible falla general', nota.split('\n').slice(-3));
+    nota = Model.notaQflow({ tipo: 'RESUELTA', falla: Object.assign({}, falla, { estado: 'CERRADA', inicio: ahora - 3 * U.HORA, cerradaEn: ahora - 80 * U.MIN, motivo: 'OTRO', motivoTexto: 'daño en un amplificador' }) }, cli, ahora);
+    ok(nota.endsWith('Motivo de Falla: Daño en un amplificador\nTicket de Falla: F1254585\nObservaciones: La falla general ya fue solucionada hoy a las 10:32 a. m.; duró 1 h 40 min. Se le indicó al cliente reiniciar su equipo.'),
+      'nota de una falla ya resuelta: cuándo se solucionó y cuánto duró', nota.split('\n').slice(-3));
+    nota = Model.notaQflow({ tipo: 'SIN_FALLA' }, cli, ahora);
+    ok(nota === cabeza + 'Motivo de Falla: Cliente no se encuentra en falla general.\nSoporte Realizado:\nNúmero de Avería:', 'sin falla: los datos del cliente, y el soporte y la avería en blanco para que el asesor los llene', nota);
+    nota = Model.notaQflow({ tipo: 'SIN_NODO' }, Object.assign({}, cli, { nombre: 'INVERSIONES LOS PINOS S.A.', dni: '', colonia: '', nodo: 'VIRTUAL01' }), ahora);
+    ok(nota.startsWith('Nombre: INVERSIONES LOS PINOS S.A.\nDNI: Sin dato\nContrato: 9000017\nNodo: VIRTUAL01\n') && nota.includes('\nColonia: Sin dato\nMotivo de Falla: Nodo virtual, no se puede confirmar una falla general.\nSoporte Realizado:\nNúmero de Avería:')
+      && Model.notaQflow({ tipo: 'NO_ENCONTRADO' }, cli, ahora) === '', 'una empresa va con su nombre tal cual; lo que falta dice Sin dato; si el cliente no se encontró, no hay nota', nota);
+  }
+
   console.log(`\nCuota usada: ${g.E.cuota.propsLecturas} lecturas de propiedades, ${g.E.cuota.urlFetch} llamadas a Genesys`);
   console.log(`\n${pasos - fallos} de ${pasos} pruebas pasaron (${ms()})`);
   process.exit(fallos ? 1 : 0);
